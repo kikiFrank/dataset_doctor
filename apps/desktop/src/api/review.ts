@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AnnotationView, CocoDocument, DraftReceipt, ImportOperationRef, ReviewCancelRequest, ReviewCommitRequest,
-  ReviewEditorView, ReviewOpenRequest, ReviewSaveDraftRequest, ReviewSession,
+  ReviewEditorView, ReviewOpenRequest, ReviewSaveDraftRequest, ReviewSession, ReviewTrackSelection,
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -19,6 +19,7 @@ export function openReview(workspace: OpenWorkspace, datasetId: string, annotati
 
 export function saveReviewDraft(
   workspace: OpenWorkspace, review: ReviewSession, taskId: string, previous: DraftReceipt | null, document: CocoDocument,
+  trackSelections?: ReviewTrackSelection[],
 ): Promise<DraftReceipt> {
   const request: ReviewSaveDraftRequest = {
     context: context(workspace, crypto.randomUUID()),
@@ -27,6 +28,7 @@ export function saveReviewDraft(
     expected_review_revision: review.row_revision,
     expected_draft_revision: previous?.draft_revision ?? null,
     coco_document: document,
+    ...(trackSelections === undefined ? {} : { track_selections: trackSelections }),
   };
   return invoke("review_save_draft", { request });
 }

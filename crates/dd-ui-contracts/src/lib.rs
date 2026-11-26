@@ -248,6 +248,7 @@ pub fn wire_primitives_typescript() -> String {
         annotation::AnnotationView::decl(&config),
         annotation::ReviewSession::decl(&config),
         annotation::ReviewOpenRequest::decl(&config),
+        annotation::ReviewTrackSelection::decl(&config),
         annotation::ReviewSaveDraftRequest::decl(&config),
         annotation::ReviewCancelRequest::decl(&config),
         annotation::ReviewCommitRequest::decl(&config),

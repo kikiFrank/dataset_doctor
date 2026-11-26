@@ -212,7 +212,9 @@ export type ReviewSession = { review_id: UuidText, asset_id: UuidText, status: s
 
 export type ReviewOpenRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, base_image_digest: string, base_annotation_digest: string | null, };
 
-export type ReviewSaveDraftRequest = { context: CommandContext, review_id: UuidText, source_task_id: UuidText, expected_review_revision: DecimalU64, expected_draft_revision: DecimalU64 | null, coco_document: CocoDocument, };
+export type ReviewTrackSelection = { local_annotation_id: number, track_id: UuidText, };
+
+export type ReviewSaveDraftRequest = { context: CommandContext, review_id: UuidText, source_task_id: UuidText, expected_review_revision: DecimalU64, expected_draft_revision: DecimalU64 | null, coco_document: CocoDocument, track_selections?: Array<ReviewTrackSelection>, };
 
 export type ReviewCancelRequest = { context: CommandContext, review_id: UuidText, expected_revision: DecimalU64, };
 
@@ -220,7 +222,7 @@ export type ReviewCommitRequest = { context: CommandContext, review_id: UuidText
 
 export type DraftReceipt = { review_id: UuidText, draft_revision: DecimalU64, draft_digest: string, review_revision: DecimalU64, };
 
-export type ReviewDraftView = { receipt: DraftReceipt, source_task_id: UuidText, coco_document: CocoDocument, };
+export type ReviewDraftView = { receipt: DraftReceipt, source_task_id: UuidText, coco_document: CocoDocument, track_selections?: Array<ReviewTrackSelection>, };
 
 export type ReviewEditorView = { review: ReviewSession, categories: Array<CocoCategory>, draft: ReviewDraftView | null, };
 

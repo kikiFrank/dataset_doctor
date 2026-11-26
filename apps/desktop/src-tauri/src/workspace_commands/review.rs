@@ -6,6 +6,7 @@ use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::annotation::{
     AnnotationGetRequest, CocoCategory, DraftReceipt, ReviewCancelRequest, ReviewDraftView,
     ReviewEditorView, ReviewOpenRequest, ReviewSaveDraftRequest, ReviewSession,
+    ReviewTrackSelection,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
@@ -93,6 +94,22 @@ impl Commands {
                     source_task_id: self.uuid_text(draft.source_task_id.to_string())?,
                     coco_document: serde_json::from_value(draft.coco_document)
                         .map_err(|_| self.error("INTERNAL", "审核草稿数据无效。"))?,
+                    track_selections: if draft.track_bindings.is_empty() {
+                        None
+                    } else {
+                        Some(
+                            draft
+                                .track_bindings
+                                .into_iter()
+                                .map(|binding| {
+                                    Ok(ReviewTrackSelection {
+                                        local_annotation_id: binding.local_annotation_id,
+                                        track_id: self.uuid_text(binding.track_id.to_string())?,
+                                    })
+                                })
+                                .collect::<Result<_, AppError>>()?,
+                        )
+                    },
                 })
             })
             .transpose()?;
@@ -115,21 +132,34 @@ impl Commands {
         request: ReviewSaveDraftRequest,
     ) -> Result<DraftReceipt, AppError> {
         let session = self.session(request.context)?;
-        let receipt = self
-            .drafts()?
-            .save(
-                session,
-                ReviewDraftRequest {
-                    review_id: self.parse_uuid(request.review_id)?,
-                    source_task_id: self.parse_uuid(request.source_task_id)?,
-                    expected_review_revision: request.expected_review_revision.into(),
-                    expected_draft_revision: request.expected_draft_revision.map(u64::from),
-                    coco_document: serde_json::to_vec(&request.coco_document)
-                        .map_err(|_| self.error("INVALID_ARGUMENT", "草稿坐标或标注格式无效。"))?,
-                },
-                self.now_ms()?,
-            )
-            .map_err(|error| self.draft_error(error))?;
+        let drafts = self.drafts()?;
+        let draft = ReviewDraftRequest {
+            review_id: self.parse_uuid(request.review_id)?,
+            source_task_id: self.parse_uuid(request.source_task_id)?,
+            expected_review_revision: request.expected_review_revision.into(),
+            expected_draft_revision: request.expected_draft_revision.map(u64::from),
+            coco_document: serde_json::to_vec(&request.coco_document)
+                .map_err(|_| self.error("INVALID_ARGUMENT", "草稿坐标或标注格式无效。"))?,
+        };
+        let now = self.now_ms()?;
+        let receipt = if let Some(selections) = request.track_selections {
+            if selections.len() > request.coco_document.annotations.len() {
+                return Err(self.error("INVALID_ARGUMENT", "请核对轨迹和草稿标注的关联。"));
+            }
+            let selected = selections
+                .into_iter()
+                .map(|choice| {
+                    Ok(review_draft::ReviewTrackSelection {
+                        local_annotation_id: choice.local_annotation_id,
+                        track_id: self.parse_uuid(choice.track_id)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, AppError>>()?;
+            drafts.save_with_tracks(session, draft, &selected, now)
+        } else {
+            drafts.save(session, draft, now)
+        }
+        .map_err(|error| self.draft_error(error))?;
         self.draft_receipt(receipt)
     }
 
@@ -217,6 +247,10 @@ impl Commands {
             ReviewDraftError::Validation(_) => {
                 self.error("INVALID_ARGUMENT", "请检查标注框是否越界、类别是否有效。")
             }
+            ReviewDraftError::InvalidTrackingSelection => self.error(
+                "FAILED_PRECONDITION",
+                "无法核验所选追踪候选与当前帧和类别的关联。",
+            ),
             _ => self.error("INTERNAL", "无法读取或保存审核草稿。"),
         }
     }

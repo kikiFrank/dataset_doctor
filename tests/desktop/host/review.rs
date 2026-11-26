@@ -160,6 +160,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         expected_review_revision: editor.review.row_revision.clone(),
         expected_draft_revision: None,
         coco_document,
+        track_selections: None,
     };
     assert_eq!(
         commands
@@ -225,6 +226,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
             expected_review_revision: editor.review.row_revision,
             expected_draft_revision: None,
             coco_document: empty,
+            track_selections: None,
         })
         .unwrap();
     let key = id(Uuid::new_v4());

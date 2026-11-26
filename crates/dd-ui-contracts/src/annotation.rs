@@ -102,6 +102,16 @@ pub struct ReviewSaveDraftRequest {
     pub expected_review_revision: DecimalU64,
     pub expected_draft_revision: Option<DecimalU64>,
     pub coco_document: CocoDocument,
+    #[ts(optional)]
+    pub track_selections: Option<Vec<ReviewTrackSelection>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewTrackSelection {
+    #[ts(type = "number")]
+    pub local_annotation_id: u64,
+    pub track_id: UuidText,
 }
 
 #[derive(Deserialize, TS)]
@@ -135,6 +145,9 @@ pub struct ReviewDraftView {
     pub receipt: DraftReceipt,
     pub source_task_id: UuidText,
     pub coco_document: CocoDocument,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub track_selections: Option<Vec<ReviewTrackSelection>>,
 }
 
 #[derive(Debug, Serialize, TS)]

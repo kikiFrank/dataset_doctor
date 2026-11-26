@@ -556,6 +556,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
             expected_review_revision: review.row_revision,
             expected_draft_revision: None,
             coco_document: edited,
+            track_selections: None,
         })
         .unwrap();
     let final_op = commands
@@ -915,4 +916,72 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert!(after["formal_coco"].is_null());
     assert_eq!(after["image_digest"], candidate["image_digest"]);
     fs::write(track_file, original_track).unwrap();
+
+    let asset = sampled.samples[2].asset_id.clone();
+    let checked = commands
+        .start_geometry(
+            geometry::GeometryRunner::new(
+                repo.join("target/dev/worker-venv/Scripts/python.exe"),
+                repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
+            ),
+            GeometrySubmitRequest {
+                context: context(reopened),
+                dataset_id: dataset.clone(),
+                asset_id: asset.clone(),
+            },
+        )
+        .unwrap();
+    let proof = wait(reopened, checked.task_id);
+    assert_eq!(proof.status, "SUCCEEDED");
+    let review_request = || ReviewOpenRequest {
+        context: context(reopened),
+        dataset_id: dataset.clone(),
+        asset_id: asset.clone(),
+        base_image_digest: candidate["image_digest"].as_str().unwrap().to_owned(),
+        base_annotation_digest: None,
+    };
+    let editor = commands.open_review(review_request()).unwrap();
+    let selected_track = &candidate["tracking_candidates"]["observations"][0]["track_id"];
+    let tracked_draft = serde_json::json!({
+        "context":context(reopened), "review_id":editor.review.review_id,
+        "source_task_id":proof.task_id, "expected_review_revision":editor.review.row_revision,
+        "expected_draft_revision":null,
+        "track_selections":[{"local_annotation_id":9,"track_id":selected_track}],
+        "coco_document":{
+            "images":[{"id":1,"file_name":"frame-2.png","width":34,"height":26}],
+            "categories":[{"id":1,"name":"signal"}],
+            "annotations":[{"id":9,"image_id":1,"category_id":1,"bbox":[11,9,5,5],"area":25,"iscrowd":0}]
+        }
+    });
+    let mut rejected = tracked_draft.clone();
+    rejected["track_selections"][0]["track_id"] = serde_json::json!(Uuid::new_v4());
+    assert_eq!(
+        commands
+            .save_review_draft(serde_json::from_value(rejected).unwrap())
+            .unwrap_err()
+            .code,
+        "FAILED_PRECONDITION"
+    );
+    assert!(
+        commands
+            .open_review(review_request())
+            .unwrap()
+            .draft
+            .is_none()
+    );
+    let saved = commands
+        .save_review_draft(serde_json::from_value(tracked_draft).unwrap())
+        .unwrap();
+    let restored = serde_json::to_value(commands.open_review(review_request()).unwrap()).unwrap();
+    assert_eq!(
+        restored["draft"]["track_selections"],
+        serde_json::json!([
+            {"local_annotation_id":9,"track_id":selected_track}
+        ])
+    );
+    assert_eq!(
+        restored["draft"]["receipt"]["draft_digest"],
+        saved.draft_digest
+    );
+    assert!(read_annotation(asset)["formal_coco"].is_null());
 }

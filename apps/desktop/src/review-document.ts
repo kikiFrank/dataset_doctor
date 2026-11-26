@@ -1,25 +1,59 @@
-import type { CocoBox, CocoCategory, CocoDocument, CocoImage } from "./api/generated/wire-primitives";
+import type {
+  CocoBox, CocoCategory, CocoDocument, CocoImage, ReviewTrackSelection, TrackObservationView,
+} from "./api/generated/wire-primitives";
 
 export type BoxCoordinates = CocoBox["bbox"];
 export type ImagePoint = [number, number];
-export type EditableBox = Pick<CocoBox, "id" | "bbox" | "iscrowd"> & { category_id: number | null };
+export type EditableBox = Pick<CocoBox, "id" | "bbox" | "iscrowd"> & {
+  category_id: number | null;
+  track_id?: string;
+};
 
-export function seedBoxes(source: CocoDocument | null, categories: CocoCategory[]): EditableBox[] {
+export function seedBoxes(
+  source: CocoDocument | null, categories: CocoCategory[], bindings: ReviewTrackSelection[] = [],
+): EditableBox[] {
   if (!source) return [];
   const sourceCategories = new Map<number, string | null>();
   for (const category of source.categories) {
     sourceCategories.set(category.id, sourceCategories.has(category.id) ? null : category.name);
   }
   const registered = new Map(categories.map(({ name, id }) => [name, id]));
+  const tracks = new Map(bindings.map(({ local_annotation_id, track_id }) => [local_annotation_id, track_id]));
   return source.annotations.map((box) => {
     const name = sourceCategories.get(box.category_id);
+    const category_id = box.image_id === source.images[0]?.id && name ? registered.get(name) ?? null : null;
+    const track_id = tracks.get(box.id);
     return {
       id: box.id,
-      category_id: box.image_id === source.images[0]?.id && name ? registered.get(name) ?? null : null,
+      category_id,
       bbox: [...box.bbox],
       iscrowd: box.iscrowd,
+      ...(track_id !== undefined && box.category_id === category_id ? { track_id } : {}),
     };
   });
+}
+
+export function nextBoxId(boxes: EditableBox[]): number {
+  const used = new Set(boxes.map(({ id }) => id));
+  let id = 1;
+  while (used.has(id)) id += 1;
+  return id;
+}
+
+export function adoptTrackingBox(boxes: EditableBox[], candidate: TrackObservationView, categories: CocoCategory[]) {
+  const category = categories.find(item => String(item.id) === candidate.category_id);
+  if (!category || candidate.source !== "TRACKER" || boxes.some(box => box.track_id === candidate.track_id)) {
+    return boxes;
+  }
+  const box: EditableBox = {
+    id: nextBoxId(boxes), bbox: [...candidate.bbox_xywh],
+    category_id: category.id, iscrowd: 0, track_id: candidate.track_id,
+  };
+  return [...boxes, box];
+}
+
+export function trackSelections(boxes: EditableBox[]): ReviewTrackSelection[] {
+  return boxes.flatMap(({ id, track_id }) => track_id ? [{ local_annotation_id: id, track_id }] : []);
 }
 
 export function makeDraft(image: CocoImage, categories: CocoCategory[], boxes: EditableBox[]): CocoDocument {
@@ -35,7 +69,8 @@ export function makeDraft(image: CocoImage, categories: CocoCategory[], boxes: E
         || width > image.width - x || height > image.height - y) {
       throw new Error(`第 ${index + 1} 个框超出图像范围或宽高无效。`);
     }
-    return { ...box, image_id: image.id, category_id: category, area: width * height };
+    return { id: box.id, bbox: box.bbox, iscrowd: box.iscrowd,
+      image_id: image.id, category_id: category, area: width * height };
   });
   return { images: [image], annotations, categories };
 }

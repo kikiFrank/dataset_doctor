@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  makeDraft, seedBoxes, boxFromDrag,
+  adoptTrackingBox, makeDraft, seedBoxes, boxFromDrag, trackSelections,
 } from "../../../apps/desktop/src/review-document.ts";
 
 const image = { id: 1, file_name: "image.png", width: 200, height: 100 };
 const categories = [{ id: 1, name: "helmet" }, { id: 2, name: "vest" }];
+
+test("explicit adoption creates one editable box and keeps provenance outside COCO", () => {
+  const candidate = { track_id: "track-a", source: "TRACKER", category_id: "2", bbox_xywh: [11, 9, 5, 5] };
+  const original = [{ id: 1, bbox: [0, 0, 4, 4], category_id: 1, iscrowd: 0 }];
+  const edited = adoptTrackingBox(original, candidate, categories);
+  assert.equal(original.length, 1);
+  assert.deepEqual(edited[1], { id: 2, bbox: [11, 9, 5, 5], category_id: 2, iscrowd: 0, track_id: "track-a" });
+  assert.equal(adoptTrackingBox(edited, candidate, categories), edited);
+  assert.equal(adoptTrackingBox(original, { ...candidate, source: "HUMAN_SEED" }, categories), original);
+  assert.equal(adoptTrackingBox(original, { ...candidate, category_id: "9007199254740993" }, categories), original);
+  const bindings = trackSelections(edited);
+  assert.deepEqual(bindings, [{ local_annotation_id: 2, track_id: "track-a" }]);
+  const draft = makeDraft(image, categories, edited);
+  assert.equal(draft.annotations[1].track_id, undefined);
+  assert.deepEqual(trackSelections(seedBoxes(draft, categories, bindings)), bindings);
+  assert.deepEqual(trackSelections(seedBoxes(draft, categories)), []);
+  assert.deepEqual(trackSelections(edited.slice(0, 1)), []);
+});
 
 test("maps local category by exact name and preserves the correctable original box", () => {
   const original = {

@@ -202,7 +202,7 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 |---|---|---|---|
 | annotation_get | asset_id | AnnotationView | 当前正式文件内容、当前审核状态、草稿/候选引用、image/annotation digest |
 | review_open | asset_id、base_image_digest、base_annotation_digest? | ReviewSession | 同一 Asset 仅一个活动审核；重复请求返回当前会话或明确占用 |
-| review_save_draft | review_id、expected_review_revision、expected_draft_revision、coco_document | DraftReceipt | 验证几何/类别/图像关联；只保存草稿，不覆盖正式文件 |
+| review_save_draft | review_id、expected_review_revision、expected_draft_revision、coco_document、track_selections? | DraftReceipt | 验证几何、类别、图像和已选轨迹关联，保存审核草稿 |
 | review_candidates_submit | review_id、model_profile_id、check_scope、candidate_policy | 异步 | 创建视觉审核任务；绑定基础图像与标签摘要；不保证新候选更优 |
 | review_commit | review_id、expected_review_revision、draft_digest、base_image_digest、base_annotation_digest?、confirmed_negative | 异步 | 用户批准入口；Core 提交最终 JSON；成功后清理活动 Human/AI 草稿与候选，保留报告/证据按保留策略 |
 | review_cancel | review_id、expected_revision | ReviewSession | 丢弃活动审核草稿，不改当前正式文件 |
@@ -211,6 +211,8 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 “额外手动编辑覆盖人工草稿”体现于 review_save_draft 更新同一份草稿；最终审核可以选择人工、AI 或再次手改的组合。显示/隐藏框、显示颜色、透明度属于前端视图状态，不应每次切换都改业务数据库。
 
 待接收视频帧尚无正式标注时，`annotation_get` 可返回 `tracking_candidates`。`AVAILABLE` 携带封存的追踪引用、精确显示帧号和该帧实际产生的候选框。轨迹证据损坏或失配时返回 `UNAVAILABLE`，仍返回图像摘要和当前人工审核信息。无绑定的样本省略该字段。
+
+审核中的 `track_selections` 记录明确采用的局部标注 ID 与轨迹 ID。Core 按当前待接收帧和类别核验选择。`review_open` 恢复已存草稿时返回其有效选择，前端用它恢复关联和编辑状态。
 
 #### C4.3 视频、采样与 Staging
 

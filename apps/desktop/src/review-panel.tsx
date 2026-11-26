@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { cancelReview, openReview, saveReviewDraft, submitReviewCommit } from "./api/review";
 import { getTask } from "./api/task";
-import type { AnnotationView, AssetSummary, CocoCategory, CocoImage, DisplayLocator, DraftReceipt, ReviewSession } from "./api/generated/wire-primitives";
+import type {
+  AnnotationView, AssetSummary, CocoCategory, CocoImage, DisplayLocator, DraftReceipt, ReviewSession, TrackObservationView,
+} from "./api/generated/wire-primitives";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 import type { GeometryEvidence } from "./geometry-check-panel";
 import { ReviewCanvas } from "./review-canvas";
-import { makeDraft, seedBoxes } from "./review-document";
+import { adoptTrackingBox, makeDraft, nextBoxId, seedBoxes, trackSelections } from "./review-document";
 import type { BoxCoordinates, EditableBox } from "./review-document";
 
 type Editor = {
@@ -105,7 +107,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
           width: currentEvidence.report.width, height: currentEvidence.report.height,
         } };
       if (!proof) throw new Error("请先运行标注检查，取得当前图像尺寸。");
-      const boxes = seedBoxes(source, loaded.categories);
+      const boxes = seedBoxes(source, loaded.categories, draft?.track_selections);
       setEditor({
         review: loaded.review,
         categories: loaded.categories,
@@ -133,13 +135,20 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
 
   function draw(coordinates: BoxCoordinates) {
     if (!editor || editingLocked) return;
-    const used = new Set(editor.boxes.map(({ id }) => id));
-    let id = 1;
-    while (used.has(id)) id += 1;
+    const id = nextBoxId(editor.boxes);
     const category = editor.categories.length === 1 ? editor.categories[0].id : null;
     const box: EditableBox = { id, bbox: coordinates, category_id: category, iscrowd: 0 };
     setEditor({ ...editor, boxes: [...editor.boxes, box] });
     setSelected(editor.boxes.length);
+    setNotice(null);
+  }
+
+  function adopt(candidate: TrackObservationView) {
+    if (!editor || editingLocked) return;
+    const boxes = adoptTrackingBox(editor.boxes, candidate, editor.categories);
+    if (boxes === editor.boxes) return;
+    setEditor({ ...editor, boxes });
+    setSelected(boxes.length - 1);
     setNotice(null);
   }
 
@@ -150,7 +159,10 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
     setError(null);
     try {
       const document = makeDraft(editor.image, editor.categories, editor.boxes);
-      const receipt = await saveReviewDraft(workspace, editor.review, editor.taskId, editor.receipt, document);
+      const selections = trackSelections(editor.boxes);
+      const supplied = selections.length > 0 || editor.savedBoxes.some(box => box.track_id !== undefined);
+      const receipt = await saveReviewDraft(workspace, editor.review, editor.taskId, editor.receipt,
+        document, supplied ? selections : undefined);
       setEditor({ ...editor, receipt, savedBoxes: editor.boxes,
         review: { ...editor.review, row_revision: receipt.review_revision } });
       setNegative(false);
@@ -205,12 +217,20 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
       <h5>人工审核</h5>
       {candidates?.status === "UNAVAILABLE" && <p role="status">无法核验该帧的追踪候选。</p>}
       {candidates?.status === "AVAILABLE" && <table aria-label={"帧 " + candidates.frame_index + " 的追踪候选"}>
-        <thead><tr><th scope="col">轨迹</th><th scope="col">类别 ID</th><th scope="col">框坐标 x、y、宽、高</th></tr></thead>
-        <tbody>{candidates.observations.map(item => <tr key={item.track_id}>
-          <td title={item.track_id}>{item.track_id.slice(0, 8)}</td>
-          <td>{item.category_id}</td>
-          <td>{item.bbox_xywh.join(", ")}</td>
-        </tr>)}</tbody>
+        <thead><tr><th scope="col">轨迹</th><th scope="col">类别</th><th scope="col">框坐标 x、y、宽、高</th>
+          {editor && <th scope="col">采用</th>}
+        </tr></thead>
+        <tbody>{candidates.observations.map(item => {
+          const category = editor?.categories.find(entry => String(entry.id) === item.category_id);
+          const adopted = editor?.boxes.some(box => box.track_id === item.track_id);
+          return <tr key={item.track_id}>
+            <td title={item.track_id}>{item.track_id.slice(0, 8)}</td>
+            <td>{category?.name ?? item.category_id}</td>
+            <td>{item.bbox_xywh.join(", ")}</td>
+            {editor && <td><button type="button" disabled={editingLocked || !category || adopted}
+              onClick={() => adopt(item)}>{adopted ? "已采用" : "采用此框"}</button></td>}
+          </tr>;
+        })}</tbody>
       </table>}
       {!editor && <button type="button" disabled={busy || (!currentEvidence && !annotation.active_review)} onClick={() => void begin()}>
         {annotation.active_review ? "继续审核" : "开始审核"}
@@ -236,7 +256,8 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
                 <fieldset disabled={editingLocked}>
                   <legend>第 {selected + 1} 个框 · 原图像素</legend>
                   <label>类别 <select value={box.category_id ?? ""} onChange={(event) => {
-                    update(selected, { ...box, category_id: event.target.value === "" ? null : Number(event.target.value) });
+                    const next = event.target.value === "" ? null : Number(event.target.value);
+                    update(selected, { ...box, category_id: next, track_id: next === box.category_id ? box.track_id : undefined });
                   }}>
                     <option value="">选择类别</option>
                     {editor.categories.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
@@ -252,6 +273,9 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
                       </label>
                     ))}
                   </div>
+                  {box.track_id && <button type="button" onClick={() => update(selected, { ...box, track_id: undefined })}>
+                    取消轨迹关联
+                  </button>}
                   <button type="button" onClick={() => {
                     setEditor({ ...editor, boxes: editor.boxes.filter((_, index) => index !== selected) });
                     setSelected(null);
