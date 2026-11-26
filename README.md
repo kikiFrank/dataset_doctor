@@ -40,6 +40,8 @@ $LASTEXITCODE
 
 已在 Windows 11 x64 和 Windows PowerShell 5.1 实测 CPython 3.12.12、PyInstaller 6.18.0 与 Pillow 12.1.0。打包后的 EXE 在精简 PATH 下完成管道握手，完整解出合成 PNG 的红、蓝像素后受控退出 0。截断 PNG 返回 `decode_failed`，进程退出 2。独立干净系统和正式 Worker 接口留待后续验收。
 
+依赖许可见 [Windows Worker PoC 依赖许可记录](docs/deployment/platform_delivery.md#p00-02-windows-worker-poc)。
+
 ## 已有可执行验证
 
 ```sh
