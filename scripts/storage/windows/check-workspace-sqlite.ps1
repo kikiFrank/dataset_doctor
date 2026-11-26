@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,7 +50,18 @@ if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'Wo
     $env:DD_WORKSPACE_LOCK_RUN_DIR = Join-Path $repo "target\p02-workspace\runs\$run"
     $directories += $env:DD_WORKSPACE_LOCK_RUN_DIR
 }
+if ($Suite -in @('All', 'ImportPreflight')) {
+    $env:DD_IMPORT_PREFLIGHT_RUN_DIR = Join-Path $repo "target\import-preflight\runs\$run"
+    $directories += $env:DD_IMPORT_PREFLIGHT_RUN_DIR
+}
 New-Item -ItemType Directory -Path $directories -Force | Out-Null
+if ($Suite -in @('All', 'ImportPreflight')) {
+    $escape = Join-Path $env:DD_IMPORT_PREFLIGHT_RUN_DIR 'junction-source'
+    $outside = Join-Path $env:DD_IMPORT_PREFLIGHT_RUN_DIR 'junction-target'
+    New-Item -ItemType Directory -Path $escape, $outside | Out-Null
+    New-Item -ItemType Junction -Path (Join-Path $escape 'redirected') -Target $outside | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repo 'testdata\image_io\p00-worker-rgb.png') -Destination (Join-Path $outside 'unapproved.png')
+}
 $log = Join-Path $logs "$run.log"
 $cargoArgs = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
     '--target', 'x86_64-pc-windows-msvc')
@@ -63,6 +74,7 @@ switch ($Suite) {
     'WorkspaceAccess' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_access') }
     'WorkspaceThread' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_thread') }
     'WorkspaceCreate' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_create') }
+    'ImportPreflight' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_preflight') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')

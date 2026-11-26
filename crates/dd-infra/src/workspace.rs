@@ -304,7 +304,7 @@ fn finish_open(
 }
 
 #[cfg(windows)]
-fn prevent_replacement(options: &mut OpenOptions) {
+pub(crate) fn prevent_replacement(options: &mut OpenOptions) {
     use std::os::windows::fs::OpenOptionsExt;
     use windows_sys::Win32::Storage::FileSystem::{
         FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
@@ -317,10 +317,10 @@ fn prevent_replacement(options: &mut OpenOptions) {
 }
 
 #[cfg(not(windows))]
-fn prevent_replacement(_: &mut OpenOptions) {}
+pub(crate) fn prevent_replacement(_: &mut OpenOptions) {}
 
 #[cfg(windows)]
-fn ordinary_file(metadata: &std::fs::Metadata) -> bool {
+pub(crate) fn ordinary_file(metadata: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -328,6 +328,6 @@ fn ordinary_file(metadata: &std::fs::Metadata) -> bool {
 }
 
 #[cfg(not(windows))]
-fn ordinary_file(metadata: &std::fs::Metadata) -> bool {
+pub(crate) fn ordinary_file(metadata: &std::fs::Metadata) -> bool {
     metadata.is_file()
 }
