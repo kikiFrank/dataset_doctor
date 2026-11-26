@@ -6,9 +6,13 @@ mod geometry;
 #[cfg(feature = "execution-rpc")]
 mod profile;
 #[cfg(feature = "execution-rpc")]
+mod report;
+#[cfg(feature = "execution-rpc")]
 pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
 #[cfg(feature = "execution-rpc")]
 pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
+#[cfg(feature = "execution-rpc")]
+pub use report::{WorkflowReport, WorkflowReportData, WorkflowReportRequest, WorkflowReportScope};
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -39,6 +43,7 @@ const CAPABILITY: &str = "workflow_plan_preview.v1";
 const PLANNING_NODE: &str = "plan";
 const PROFILE_NODE: &str = "dataset_profile";
 const GEOMETRY_NODE: &str = "annotation_geometry";
+const REPORT_NODE: &str = "build_report";
 const MANIFEST_LIMIT: u64 = 64 * 1024 * 1024;
 
 pub struct WorkflowDraftRequest {
@@ -64,6 +69,7 @@ pub enum WorkflowStatus {
     Ready,
     Running,
     Interrupted,
+    WaitingReview,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -85,6 +91,7 @@ pub struct WorkflowSnapshot {
     pub adjustments: Vec<AdjustmentRecord>,
     pub profile_task: Option<WorkflowTaskSnapshot>,
     pub geometry_tasks: Vec<WorkflowGeometryTask>,
+    pub report_task_id: Option<Uuid>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -226,6 +233,7 @@ struct RowData {
     #[cfg(feature = "execution-rpc")]
     node_states_json: String,
     geometry_tasks: Vec<WorkflowGeometryTask>,
+    report_task_id: Option<Uuid>,
 }
 
 impl WorkflowStore {
@@ -451,11 +459,17 @@ impl WorkflowStore {
             plan.plan_revision,
             plan.plan.is_some(),
             row.profile_task.is_some(),
+            row.report_task_id.is_some(),
         ) {
-            ("DRAFT", 0, false, false) => WorkflowStatus::Draft,
-            ("READY", revision, true, false) if revision > 0 => WorkflowStatus::Ready,
-            ("RUNNING", revision, true, true) if revision > 0 => WorkflowStatus::Running,
-            ("INTERRUPTED", revision, true, true) if revision > 0 => WorkflowStatus::Interrupted,
+            ("DRAFT", 0, false, false, false) => WorkflowStatus::Draft,
+            ("READY", revision, true, false, false) if revision > 0 => WorkflowStatus::Ready,
+            ("RUNNING", revision, true, true, false) if revision > 0 => WorkflowStatus::Running,
+            ("INTERRUPTED", revision, true, true, false) if revision > 0 => {
+                WorkflowStatus::Interrupted
+            }
+            ("WAITING_REVIEW", revision, true, true, true) if revision > 0 => {
+                WorkflowStatus::WaitingReview
+            }
             _ => return Err(WorkflowError::InvalidRecord),
         };
         let plan_ref = if status != WorkflowStatus::Draft {
@@ -475,6 +489,7 @@ impl WorkflowStore {
             adjustments: plan.adjustments,
             profile_task: row.profile_task,
             geometry_tasks: row.geometry_tasks,
+            report_task_id: row.report_task_id,
         })
     }
 
@@ -542,12 +557,14 @@ impl WorkflowStore {
         self.owner.workspace_action(session, move |owner| {
             let mut record = owner.connection.query_row(
                 "SELECT w.workflow_run_id,w.dataset_id,w.workspace_session_id,w.template_key,w.status,w.row_revision,
-                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status,w.node_states_json
+                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status,w.node_states_json,r.task_id
                  FROM workflow_runs w JOIN tasks t ON t.workflow_run_id=w.workflow_run_id AND t.node_id=?3
                     AND t.operation_kind=w.operation_kind
                  LEFT JOIN tasks p ON p.workflow_run_id=w.workflow_run_id AND p.node_id=?4
+                 LEFT JOIN tasks r ON r.workflow_run_id=w.workflow_run_id AND r.node_id=?5
+                    AND r.status='SUCCEEDED' AND r.output_manifest_path=w.result_manifest_path
                  WHERE w.workflow_run_id=?1 AND w.operation_kind=?2 AND w.plan_kind='template_instance'",
-                params![run.to_string(),OPERATION,PLANNING_NODE,PROFILE_NODE], decode_row,
+                params![run.to_string(),OPERATION,PLANNING_NODE,PROFILE_NODE,REPORT_NODE], decode_row,
             ).optional().map_err(database)?;
             if let Some(row) = &mut record && row.profile_task.is_some() {
                 let mut statement = owner.connection.prepare(
@@ -787,6 +804,11 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
         #[cfg(feature = "execution-rpc")]
         node_states_json: row.get(11)?,
         geometry_tasks: Vec::new(),
+        report_task_id: row
+            .get::<_, Option<String>>(12)?
+            .as_deref()
+            .map(|id| decode_uuid(id, 12))
+            .transpose()?,
     })
 }
 

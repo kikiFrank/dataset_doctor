@@ -172,7 +172,7 @@ fn profile_command(
     ).optional().map_err(database)
 }
 
-fn verified_replay(
+pub(super) fn verified_replay(
     existing: Option<(String, String)>,
     key: &str,
     fingerprint: &str,

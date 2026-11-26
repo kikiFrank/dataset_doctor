@@ -66,6 +66,15 @@ struct AcceptedProfile {
     fingerprint: String,
     output: PathBuf,
     result_ref: String,
+    started_at_ms: i64,
+    finished_at_ms: i64,
+}
+
+pub(crate) struct VerifiedProfileEvidence {
+    pub data: DatasetProfile,
+    pub reference: ArtifactReference,
+    pub started_at_ms: i64,
+    pub finished_at_ms: i64,
 }
 
 pub fn read_dataset_profile(
@@ -74,10 +83,20 @@ pub fn read_dataset_profile(
     dataset: Uuid,
     task: Uuid,
 ) -> Result<DatasetProfile, DatasetProfileError> {
+    read_profile_evidence(workspace, session, dataset, task).map(|evidence| evidence.data)
+}
+
+pub(crate) fn read_profile_evidence(
+    workspace: &WorkspaceThread,
+    session: Uuid,
+    dataset: Uuid,
+    task: Uuid,
+) -> Result<VerifiedProfileEvidence, DatasetProfileError> {
     let accepted = workspace.workspace_action(session, move |owner| {
         owner.connection.query_row(
             "SELECT current_attempt_id,input_manifest_path,input_fingerprint,output_manifest_path,
-                    json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
+                    json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref'),
+                    started_at_ms,finished_at_ms
              FROM tasks WHERE task_id=?1 AND dataset_id=?2 AND operation_kind=?3
                  AND capability_id=?4 AND status='SUCCEEDED'",
             params![task.to_string(), dataset.to_string(), OPERATION, CAPABILITY],
@@ -85,6 +104,7 @@ pub fn read_dataset_profile(
                 root: owner.root().to_owned(), attempt: row_uuid(row, 0)?,
                 input: PathBuf::from(row.get::<_, String>(1)?), fingerprint: row.get(2)?,
                 output: PathBuf::from(row.get::<_, String>(3)?), result_ref: row.get(4)?,
+                started_at_ms: row.get(5)?, finished_at_ms: row.get(6)?,
             }),
         ).optional().map_err(TaskStoreError::Database).map_err(WorkspaceThreadError::Task)?
          .ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
@@ -135,7 +155,21 @@ pub fn read_dataset_profile(
             return Err(invalid());
         }
     }
-    Ok(profile)
+    let reference = ArtifactReference {
+        artifact_id: receipt.artifact_id.parse().map_err(evidence)?,
+        owner: ArtifactOwner::Task(task),
+        kind: receipt.kind,
+        media_type: receipt.media_type,
+        sha256: receipt.sha256,
+        size_bytes: receipt.size_bytes.to_string(),
+        schema_id: receipt.schema_id,
+    };
+    Ok(VerifiedProfileEvidence {
+        data: profile,
+        reference,
+        started_at_ms: accepted.started_at_ms,
+        finished_at_ms: accepted.finished_at_ms,
+    })
 }
 
 fn manifest_assets(

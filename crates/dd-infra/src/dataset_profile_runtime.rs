@@ -3,6 +3,7 @@
 mod result;
 
 pub use crate::worker_runtime::WorkerRuntimeError as DatasetProfileError;
+pub(crate) use result::read_profile_evidence;
 pub use result::{DatasetProfile, ProfileFileError, ProfileResolution, read_dataset_profile};
 
 use std::path::{Path, PathBuf};

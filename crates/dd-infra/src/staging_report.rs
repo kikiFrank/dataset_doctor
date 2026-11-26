@@ -414,12 +414,10 @@ pub(crate) fn verify_image(image: &RegisteredImage) -> io::Result<bool> {
             != Some(false))
 }
 
-fn build_checks(
+pub(crate) fn build_geometry_check(
     asset: Uuid,
     evidence: BoundGeometryReport,
-    optional: &[OptionalStagingCheck],
-    aggregate_fingerprint: &str,
-) -> Result<Vec<ReportCheck>, StagingReportError> {
+) -> Result<ReportCheck, StagingReportError> {
     let completed = match evidence.report.status.as_str() {
         "COMPLETED" => true,
         "NOT_EXECUTED" => false,
@@ -482,7 +480,7 @@ fn build_checks(
     } else {
         "PASS"
     };
-    let mut checks = vec![ReportCheck {
+    Ok(ReportCheck {
         check_id: GEOMETRY.into(),
         check_contract_version: "1".into(),
         execution_status: if completed { "COMPLETED" } else { "SKIPPED" }.into(),
@@ -499,7 +497,16 @@ fn build_checks(
         total_assets: 1,
         started_at: Some(timestamp(evidence.started_at_ms)?),
         finished_at: Some(timestamp(evidence.finished_at_ms)?),
-    }];
+    })
+}
+
+fn build_checks(
+    asset: Uuid,
+    evidence: BoundGeometryReport,
+    optional: &[OptionalStagingCheck],
+    aggregate_fingerprint: &str,
+) -> Result<Vec<ReportCheck>, StagingReportError> {
+    let mut checks = vec![build_geometry_check(asset, evidence)?];
     checks.extend(optional.iter().map(|check| {
         ReportCheck {
             check_id: match check {
@@ -605,7 +612,7 @@ fn publish_report(
     })
 }
 
-fn timestamp(milliseconds: i64) -> Result<String, StagingReportError> {
+pub(crate) fn timestamp(milliseconds: i64) -> Result<String, StagingReportError> {
     time::OffsetDateTime::from_unix_timestamp_nanos(i128::from(milliseconds) * 1_000_000)
         .ok()
         .and_then(|date| {
