@@ -148,6 +148,7 @@ pub fn wire_primitives_typescript() -> String {
         dataset::DatasetListRequest::decl(&config),
         dataset::DatasetSummary::decl(&config),
         dataset::DatasetPage::decl(&config),
+        dataset::AssetKind::decl(&config),
         dataset::AssetListRequest::decl(&config),
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),

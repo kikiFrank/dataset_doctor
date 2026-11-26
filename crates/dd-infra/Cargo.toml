@@ -111,6 +111,10 @@ name = "import_plan"
 path = "../../tests/storage/import/plan.rs"
 
 [[test]]
+name = "video_browse"
+path = "../../tests/storage/dataset/video_browse.rs"
+
+[[test]]
 name = "dataset_browse"
 path = "../../tests/storage/dataset/browse.rs"
 

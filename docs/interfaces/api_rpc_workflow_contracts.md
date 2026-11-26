@@ -194,6 +194,8 @@ Finding 的 explanation 说明证据与理由；uncertainty 说明缺少什么�
 
 Dataset “导入格式”是外部适配器输入；工作文件写成本项目选定的单图 COCO 契约。原文件不是 COCO 时，是否创建相邻新 JSON、如何识别已有同名文件必须由导入预检清单解决；不能以格式转换之名无提示覆盖其他软件文件。
 
+asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace 源视频使用 kind=VIDEO 并省略 dataset_id，返回同一分页结构，视频条目的 dataset_id 为空。省略全部范围或同时指定数据集和 VIDEO 返回 INVALID_ARGUMENT。视频列表使用登记名称，选择条目后由 video_get 核验源状态。
+
 #### C4.2 标注审核与候选
 
 | 命令 | 输入 | 输出 | 规则/失败重点 |

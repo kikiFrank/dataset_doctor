@@ -354,6 +354,19 @@ impl WorkspaceThread {
         })
     }
 
+    pub fn list_videos(
+        &self,
+        session: Uuid,
+        after: Option<Uuid>,
+        size: u16,
+    ) -> Result<DatasetPage<AssetSummary>, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .list_videos(after, size)
+                .map_err(WorkspaceThreadError::Dataset)
+        })
+    }
+
     pub fn list_assets(
         &self,
         session: Uuid,

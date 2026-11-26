@@ -32,11 +32,23 @@ pub struct DatasetPage {
 #[derive(Deserialize, TS)]
 pub struct AssetListRequest {
     pub context: CommandContext,
-    pub dataset_id: UuidText,
+    #[serde(default)]
+    #[ts(optional)]
+    pub dataset_id: Option<UuidText>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub kind: Option<AssetKind>,
     #[serde(default)]
     #[ts(optional)]
     pub cursor: Option<UuidText>,
     pub page_size: u16,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AssetKind {
+    Image,
+    Video,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, TS)]
@@ -52,7 +64,7 @@ pub enum AnnotationState {
 #[derive(Debug, Serialize, TS)]
 pub struct AssetSummary {
     pub asset_id: UuidText,
-    pub dataset_id: UuidText,
+    pub dataset_id: Option<UuidText>,
     pub display_name: String,
     pub kind: String,
     pub availability: String,

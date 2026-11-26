@@ -117,6 +117,40 @@ fn desktop_video_import_returns_a_registered_asset_and_queryable_background_task
         let finished = await_task(selected.operation.task_id);
         assert_eq!(finished.status, "SUCCEEDED");
         assert!(finished.error_code.is_none());
+        let list_request = |session: Uuid| {
+            serde_json::from_value::<dd_ui_contracts::dataset::AssetListRequest>(
+                serde_json::json!({
+                    "context": {
+                        "request_id": Uuid::new_v4().to_string(),
+                        "workspace_id": workspace.workspace_id,
+                        "workspace_session_id": session.to_string()
+                    },
+                    "kind": "VIDEO", "page_size": 200
+                }),
+            )
+            .unwrap()
+        };
+        let mut ambiguous = list_request(session);
+        ambiguous.dataset_id = Some(id(Uuid::new_v4().to_string()));
+        assert_eq!(
+            commands.list_assets(ambiguous).unwrap_err().code,
+            "INVALID_ARGUMENT"
+        );
+        let mut unscoped = list_request(session);
+        unscoped.kind = None;
+        assert_eq!(
+            commands.list_assets(unscoped).unwrap_err().code,
+            "INVALID_ARGUMENT"
+        );
+        let page = commands.list_assets(list_request(session)).unwrap();
+        assert_eq!(page.items.len(), 2);
+        assert!(page.items.iter().all(|item| item.kind == "VIDEO"));
+        assert!(
+            page.items
+                .iter()
+                .any(|item| item.asset_id == selected.source_video_id)
+        );
+        assert!(serde_json::to_value(&page.items[0]).unwrap()["dataset_id"].is_null());
         let detail = commands
             .video_detail(dd_ui_contracts::video::VideoGetRequest {
                 context: context(),
@@ -136,6 +170,11 @@ fn desktop_video_import_returns_a_registered_asset_and_queryable_background_task
         let root = run.join("Desktop video Workspace");
         let directory = thread.grant_selected_directory(root).unwrap();
         let reopened = thread.open(directory.grant_id).unwrap();
+        let page = commands
+            .list_assets(list_request(reopened.workspace_session_id))
+            .unwrap();
+        assert_eq!(page.items.len(), 2);
+        assert!(commands.list_assets(list_request(old_session)).is_err());
         let mut restored_context = context();
         restored_context.workspace_session_id = id(reopened.workspace_session_id.to_string());
         let detail = commands

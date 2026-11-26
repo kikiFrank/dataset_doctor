@@ -3,8 +3,8 @@ use std::sync::Arc;
 use dd_infra::dataset_query::{AssetAnnotationState, DatasetQueryError};
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::dataset::{
-    AnnotationState, AssetListRequest, AssetPage, AssetSummary, DatasetListRequest, DatasetPage,
-    DatasetSummary,
+    AnnotationState, AssetKind, AssetListRequest, AssetPage, AssetSummary, DatasetListRequest,
+    DatasetPage, DatasetSummary,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
@@ -75,15 +75,23 @@ impl Commands {
 
     pub(super) fn list_assets(&self, request: AssetListRequest) -> Result<AssetPage, AppError> {
         let session = self.session(request.context)?;
-        let dataset = self.parse_uuid(request.dataset_id.clone())?;
         let cursor = request
             .cursor
             .map(|value| self.parse_uuid(value))
             .transpose()?;
-        let page = self
-            .thread
-            .list_assets(session, dataset, cursor, request.page_size)
-            .map_err(|failure| self.dataset_error(failure))?;
+        let page = match (&request.dataset_id, request.kind) {
+            (Some(dataset), None | Some(AssetKind::Image)) => self.thread.list_assets(
+                session,
+                self.parse_uuid(dataset.clone())?,
+                cursor,
+                request.page_size,
+            ),
+            (None, Some(AssetKind::Video)) => {
+                self.thread.list_videos(session, cursor, request.page_size)
+            }
+            _ => return Err(self.error("INVALID_ARGUMENT", "请选择数据集图片或工作区视频范围。")),
+        }
+        .map_err(|failure| self.dataset_error(failure))?;
         let items = page
             .items
             .into_iter()

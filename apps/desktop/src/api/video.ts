@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail } from "./generated/wire-primitives";
+import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail, AssetListRequest, AssetPage } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
 
@@ -32,4 +32,11 @@ export function getVideo(workspace: OpenWorkspace, sourceVideoId: string): Promi
     context: context(workspace, crypto.randomUUID()), source_video_id: sourceVideoId,
   };
   return invoke("video_get", { request });
+}
+
+export function listVideos(workspace: OpenWorkspace, cursor?: string): Promise<AssetPage> {
+  const request: AssetListRequest = {
+    context: context(workspace, crypto.randomUUID()), kind: "VIDEO", cursor, page_size: 25,
+  };
+  return invoke("asset_list", { request });
 }

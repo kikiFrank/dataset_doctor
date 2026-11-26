@@ -73,7 +73,8 @@ fn commands_page_only_current_workspace_data_and_report_invalid_arguments() {
     let dataset_id = id(registered.dataset_id);
     let assets = |cursor, page_size| AssetListRequest {
         context: context(),
-        dataset_id: dataset_id.clone(),
+        dataset_id: Some(dataset_id.clone()),
+        kind: None,
         cursor,
         page_size,
     };

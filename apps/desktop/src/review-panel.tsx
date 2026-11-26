@@ -93,6 +93,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
     setNotice(null);
     setError(null);
     try {
+      if (!asset.dataset_id) throw new Error("请选择数据集中的图片。");
       const loaded = await openReview(workspace, asset.dataset_id, annotation);
       if (loaded.review.status !== "OPEN") throw new Error("此审核当前无法编辑。");
       const draft = loaded.draft;

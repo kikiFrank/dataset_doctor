@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'BackupArtifacts', 'BackupRoundtrip', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'VideoRegistration', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'BackupArtifacts', 'BackupRoundtrip', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'VideoRegistration', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'VideoBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,7 +46,7 @@ if ($Suite -in @('All', 'Migration', 'AppMigration', 'WorkflowPlan')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
-if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore')) {
+if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'VideoBrowse', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore')) {
     $env:DD_WORKSPACE_LOCK_RUN_DIR = Join-Path $repo "target\p02-workspace\runs\$run"
     $directories += $env:DD_WORKSPACE_LOCK_RUN_DIR
 }
@@ -84,6 +84,7 @@ switch ($Suite) {
     'ImportRegistration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_registration') }
     'ImportAuthorization' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_authorization') }
     'ImportPlan' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_plan') }
+    'VideoBrowse' { $cargoArgs += @('-p', 'dd-infra', '--test', 'video_browse') }
     'DatasetBrowse' { $cargoArgs += @('-p', 'dd-infra', '--test', 'dataset_browse') }
     'InputFingerprint' { $cargoArgs += @('-p', 'dd-infra', '--test', 'input_fingerprint') }
     'ReviewValidation' { $cargoArgs += @('-p', 'dd-infra', '--test', 'review_validation') }

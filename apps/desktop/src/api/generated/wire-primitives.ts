@@ -50,11 +50,13 @@ export type DatasetSummary = { dataset_id: UuidText, name: string, asset_count: 
 
 export type DatasetPage = { items: Array<DatasetSummary>, next_cursor: UuidText | null, };
 
-export type AssetListRequest = { context: CommandContext, dataset_id: UuidText, cursor?: UuidText, page_size: number, };
+export type AssetKind = "IMAGE" | "VIDEO";
+
+export type AssetListRequest = { context: CommandContext, dataset_id?: UuidText, kind?: AssetKind, cursor?: UuidText, page_size: number, };
 
 export type AnnotationState = "UNANNOTATED" | "UNREVIEWED" | "CONFIRMED_POSITIVE" | "CONFIRMED_NEGATIVE" | "STALE";
 
-export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText, display_name: string, kind: string, availability: string, annotation_state: AnnotationState, active_review: boolean, };
+export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText | null, display_name: string, kind: string, availability: string, annotation_state: AnnotationState, active_review: boolean, };
 
 export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };
 

@@ -61,6 +61,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence }: {
     setReport(null);
     onEvidence(null);
     try {
+      if (!asset.dataset_id) throw new Error("请选择数据集中的图片。");
       const operation = await startGeometry(workspace, asset.dataset_id, asset.asset_id, key.current);
       setTaskId(operation.task_id);
     } catch (failure) {

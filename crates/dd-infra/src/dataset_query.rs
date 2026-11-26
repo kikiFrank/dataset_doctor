@@ -269,6 +269,35 @@ impl OpenedWorkspace {
         Ok(page(rows, size, |item| item.dataset_id))
     }
 
+    pub(crate) fn list_videos(
+        &self,
+        after: Option<Uuid>,
+        size: u16,
+    ) -> Result<DatasetPage<AssetSummary>, DatasetQueryError> {
+        let limit = checked_limit(size)?;
+        let mut statement = self.connection.prepare(
+            "SELECT asset_id, COALESCE(json_extract(metadata_json,'$.display_name'),original_filename),
+                    availability FROM assets
+             WHERE kind='VIDEO' AND (?1 IS NULL OR asset_id>?1)
+             ORDER BY asset_id LIMIT ?2",
+        )?;
+        let rows = statement
+            .query_map(params![after.map(|id| id.to_string()), limit], |row| {
+                Ok(AssetSummary {
+                    asset_id: row_uuid(row, 0)?,
+                    filename: row.get(1)?,
+                    kind: "VIDEO".into(),
+                    availability: row.get(2)?,
+                    has_annotation: false,
+                    final_review_id: None,
+                    annotation_state: AssetAnnotationState::Unannotated,
+                    active_review: false,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(page(rows, size, |item| item.asset_id))
+    }
+
     pub(crate) fn list_assets(
         &self,
         dataset: Uuid,
