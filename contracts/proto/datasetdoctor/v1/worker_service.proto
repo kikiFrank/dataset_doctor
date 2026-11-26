@@ -41,6 +41,25 @@ message GeometryAuditRequest {
   GeometryAuditInput parameters = 3;
 }
 
+message DatasetProfileAsset {
+  string asset_id = 1;
+  WorkerInputFile image = 2;
+  WorkerInputFile annotation = 3;
+}
+
+message DatasetProfileInput {
+  repeated DatasetProfileAsset assets = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  uint64 max_pixels = 4;
+}
+
+message DatasetProfileRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  DatasetProfileInput parameters = 3;
+}
+
 message ColorPoint {
   double x = 1;
   double y = 2;
@@ -180,6 +199,7 @@ message ExecutionSnapshot {
 }
 
 service PythonWorker {
+  rpc StartProfileDataset(DatasetProfileRequest) returns (ExecutionHandle);
   rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
   rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
   rpc StartVideoProbe(VideoProbeRequest) returns (ExecutionHandle);

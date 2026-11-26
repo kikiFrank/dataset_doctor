@@ -80,6 +80,38 @@ class GeometryAuditRequest(_message.Message):
     parameters: GeometryAuditInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[GeometryAuditInput, _Mapping]] = ...) -> None: ...
 
+class DatasetProfileAsset(_message.Message):
+    __slots__ = ("asset_id", "image", "annotation")
+    ASSET_ID_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    ANNOTATION_FIELD_NUMBER: _ClassVar[int]
+    asset_id: str
+    image: WorkerInputFile
+    annotation: WorkerInputFile
+    def __init__(self, asset_id: _Optional[str] = ..., image: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., annotation: _Optional[_Union[WorkerInputFile, _Mapping]] = ...) -> None: ...
+
+class DatasetProfileInput(_message.Message):
+    __slots__ = ("assets", "input_manifest", "output_directory", "max_pixels")
+    ASSETS_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    assets: _containers.RepeatedCompositeFieldContainer[DatasetProfileAsset]
+    input_manifest: WorkerInputFile
+    output_directory: str
+    max_pixels: int
+    def __init__(self, assets: _Optional[_Iterable[_Union[DatasetProfileAsset, _Mapping]]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., max_pixels: _Optional[int] = ...) -> None: ...
+
+class DatasetProfileRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: DatasetProfileInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[DatasetProfileInput, _Mapping]] = ...) -> None: ...
+
 class ColorPoint(_message.Message):
     __slots__ = ("x", "y")
     X_FIELD_NUMBER: _ClassVar[int]

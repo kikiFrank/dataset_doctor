@@ -3,9 +3,10 @@
 use std::path::PathBuf;
 
 use dd_protocol::v1::{
-    ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, FrameResolveRequest,
-    GeometryAuditRequest, HealthRequest, HealthSnapshot, ShutdownRequest, VideoProbeRequest,
-    VideoTrackingRequest, python_worker_client::PythonWorkerClient,
+    ColorPreviewRequest, DatasetProfileRequest, ExecutionHandle, ExecutionLookup,
+    ExecutionSnapshot, FrameResolveRequest, GeometryAuditRequest, HealthRequest, HealthSnapshot,
+    ShutdownRequest, VideoProbeRequest, VideoTrackingRequest,
+    python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
 use tonic::transport::Channel;
@@ -87,6 +88,17 @@ impl WorkerProcess {
     ) -> Result<ExecutionHandle, WorkerProcessError> {
         self.client
             .start_annotation_geometry_audit(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
+
+    pub async fn start_dataset_profile(
+        &mut self,
+        request: DatasetProfileRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_profile_dataset(self.process.request(request))
             .await
             .map(|reply| reply.into_inner())
             .map_err(WorkerProcessError::Rpc)

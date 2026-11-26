@@ -35,6 +35,11 @@ class PythonWorkerStub:
         Args:
             channel: A grpc.Channel.
         """
+        self.StartProfileDataset = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/StartProfileDataset',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+                _registered_method=True)
         self.StartAnnotationGeometryAudit = channel.unary_unary(
                 '/datasetdoctor.v1.PythonWorker/StartAnnotationGeometryAudit',
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.SerializeToString,
@@ -79,6 +84,12 @@ class PythonWorkerStub:
 
 class PythonWorkerServicer:
     """Missing associated documentation comment in .proto file."""
+
+    def StartProfileDataset(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def StartAnnotationGeometryAudit(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -131,6 +142,11 @@ class PythonWorkerServicer:
 
 def add_PythonWorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'StartProfileDataset': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartProfileDataset,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
+            ),
             'StartAnnotationGeometryAudit': grpc.unary_unary_rpc_method_handler(
                     servicer.StartAnnotationGeometryAudit,
                     request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.FromString,
@@ -181,6 +197,33 @@ def add_PythonWorkerServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class PythonWorker:
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def StartProfileDataset(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/StartProfileDataset',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.SerializeToString,
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def StartAnnotationGeometryAudit(request,

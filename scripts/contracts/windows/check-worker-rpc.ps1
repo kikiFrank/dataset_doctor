@@ -80,11 +80,12 @@ $PSNativeCommandUseErrorActionPreference = $false
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_process',
+    '--test', 'worker_dataset_profile',
     '--test', 'worker_color_preview', '--test', 'workspace_color_preview', '--test', 'workspace_color_apply',
     '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final',
     '--test', 'workspace_backup_task')
 if ($PackagedWorkerExe) {
-    $tests = @('--test', 'worker_color_preview')
+    $tests = @('--test', 'worker_color_preview', '--test', 'worker_dataset_profile')
 }
 if ($VideoFfmpegExe) {
     $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve', '--test', 'worker_tracking')

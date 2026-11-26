@@ -45,12 +45,32 @@ pub struct WorkerTask {
 }
 
 impl WorkerTask {
+    #[allow(dead_code)] // Batch tests use with_assets directly.
     pub fn new(
         case: &str,
         operation: &str,
         capability: &str,
         asset_id: Uuid,
         sha: &[u8; 32],
+        config: Value,
+    ) -> Self {
+        Self::with_assets(
+            case,
+            operation,
+            capability,
+            vec![json!({
+                "asset_id": asset_id, "media_digest": hex(sha),
+                "annotation_digest": null, "source_metadata_digest": null,
+            })],
+            config,
+        )
+    }
+
+    pub fn with_assets(
+        case: &str,
+        operation: &str,
+        capability: &str,
+        assets: Vec<Value>,
         config: Value,
     ) -> Self {
         let root = run_root().join(case);
@@ -62,7 +82,7 @@ impl WorkerTask {
         let fingerprint = [0x12; 32];
         let manifest = serde_json::to_vec(&json!({
             "dataset_id": null, "label_schema_digest": null,
-            "assets": [{"asset_id": asset_id, "media_digest": hex(sha), "annotation_digest": null, "source_metadata_digest": null}],
+            "assets": assets,
             "resolved_config": config, "capability_id": capability, "implementation_version": "0.1.0",
             "model_identity": null, "input_fingerprint": hex(&fingerprint),
         })).unwrap();

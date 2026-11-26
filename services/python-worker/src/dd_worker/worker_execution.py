@@ -71,7 +71,8 @@ class WorkerExecutions:
                 if str(UUID(identifier)) != identifier:
                     raise ValueError("identifier")
             if (
-                not inputs.HasField(source_field) or not inputs.HasField("input_manifest")
+                (source_field is not None and not inputs.HasField(source_field))
+                or not inputs.HasField("input_manifest")
                 or not inputs.max_pixels or not inputs.output_directory
                 or manifest.WhichOneof("owner") != "owner_task_id"
                 or manifest.owner_task_id != context.task_id or manifest.kind != "INPUT_MANIFEST"
@@ -180,13 +181,13 @@ class WorkerExecutions:
             item.status = "FAILED"
 
 
-def verified_manifest(request, capability):
+def verified_manifest(request, capability, *, asset_count=1):
     manifest_data = verified_bytes(request.parameters.input_manifest, JSON_LIMIT)
     manifest = strict_json(manifest_data)
     if (
         len(manifest_data) != request.input_manifest_ref.size_bytes
         or manifest["input_fingerprint"] != request.context.input_fingerprint
-        or manifest["capability_id"] != capability or len(manifest["assets"]) != 1
+        or manifest["capability_id"] != capability or len(manifest["assets"]) != asset_count
     ):
         raise ValueError("invalid input manifest")
     return manifest

@@ -733,6 +733,8 @@ Checkpoint 只适用于能力明确支持的粒度，例如一批图片中已完
 | EmbeddingAnalysisResult | input_fingerprint、encoder_profile_id、embedding_ref、similarity_findings_ref、scope_policy；scope_policy 必须排除跨视频比较 |
 | CheckResultSet | checks:CheckResult[]、report_artifact_ref、input_fingerprint；每项有独立执行/评估状态 |
 
+`StartProfileDataset` 的 `asset_count` 统计本次冻结清单内的样本，分辨率使用解码后的显示尺寸。`class_counts` 按类别名汇总有效标注，文件本地类别编号可不同。空标注、未提供标注和预期文件离线分别记录。离线或解码失败时继续统计其他可读样本，用任务产物引用列出文件问题。已授权字节的摘要不再匹配时，本次任务返回 `INPUT_CHANGED`。
+
 video_get 逐次核验已登记的源文件，source_availability 为 ONLINE、OFFLINE 或 CHANGED。离线或内容变化时仍可读取已封存的探测元数据，帧解码继续要求原摘要匹配。probe_status 显示最近一次探测状态，尚无已确认探测时流清单为空、未知值为空。
 
 VideoDetail 的 duration_ms 使用容器实际报告时长，streams 列出可选择的视频流及其实际 codec、尺寸和流时长。缺失时长保留空值。variable_frame_rate 描述所选流的实际帧时间戳节奏，并容许常帧率在粗时钟下产生的一 tick 舍入误差；样本不足或时间戳不可用时为空值。已有索引未保存这些元数据时仍保留逐帧定位能力。
