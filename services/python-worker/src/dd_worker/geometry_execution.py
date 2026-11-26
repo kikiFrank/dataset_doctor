@@ -217,6 +217,7 @@ def run_geometry(request):
     directory = verified_path(inputs.output_directory)
     result = write_json(directory, "geometry-result.json", {
         "status": checked.status,
+        "image": {"sha256": image.sha256, "width": image.width, "height": image.height},
         "findings": [
             {"code": item.code, "annotation_id": item.annotation_id} for item in checked.findings
         ],

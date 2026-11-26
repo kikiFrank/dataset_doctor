@@ -400,7 +400,7 @@ impl WorkspaceThread {
         })
     }
 
-    fn workspace_action<T: Send + 'static>(
+    pub(crate) fn workspace_action<T: Send + 'static>(
         &self,
         session: Uuid,
         execute: impl FnOnce(&mut OpenedWorkspace) -> Result<T, WorkspaceThreadError> + Send + 'static,

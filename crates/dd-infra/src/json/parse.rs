@@ -8,7 +8,7 @@ use super::ContractError;
 const MAX_NESTING: usize = 128;
 const MAX_INTEGER_DIGITS: usize = 4300;
 
-pub(super) fn strict_json(bytes: &[u8]) -> Result<Value, ContractError> {
+pub(crate) fn strict_json(bytes: &[u8]) -> Result<Value, ContractError> {
     let input = std::str::from_utf8(bytes).map_err(|_| ContractError::Parse("invalid_utf8"))?;
     let raw = serde_json::from_str::<&RawValue>(input).map_err(|_| {
         if has_nonfinite_literal(input.as_bytes()) {

@@ -1,5 +1,9 @@
 //! Run a real Worker geometry audit for an image registered in a Workspace.
 
+mod review_image;
+
+pub use review_image::{ReviewImageEvidenceError, VerifiedReviewImage, read_review_image};
+
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs;

@@ -2,6 +2,9 @@
 
 mod parse;
 
+#[cfg(feature = "execution-rpc")]
+pub(crate) use parse::strict_json;
+
 use std::error::Error;
 use std::fmt::{self, Display};
 

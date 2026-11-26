@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
-use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime};
+use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime, read_review_image};
 use dd_infra::json::{JsonContracts, JsonProfile};
 use dd_infra::workspace_thread::WorkspaceThread;
 use rusqlite::Connection;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 const PNG: &[u8] = include_bytes!("../../../testdata/image_io/p00-worker-rgb.png");
@@ -30,6 +31,7 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
     fs::create_dir(&source).unwrap();
     fs::write(source.join("registered.png"), PNG).unwrap();
     fs::write(source.join("registered.json"), LABELS).unwrap();
+    fs::write(source.join("other.png"), PNG).unwrap();
     let workspace = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
     let root_grant = workspace.grant_selected_directory(root.clone()).unwrap();
     let opened = workspace
@@ -45,18 +47,22 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
             session,
             grant.grant_id,
             "Imported sample".into(),
-            vec!["registered.png".into()],
+            vec!["registered.png".into(), "other.png".into()],
         )
         .unwrap();
     let imported = imports
         .confirm(session, plan.plan_id, plan.fingerprint, 20)
         .unwrap();
     let dataset_id = Uuid::parse_str(&imported.dataset_id).unwrap();
-    let asset_id = workspace
-        .list_assets(session, dataset_id, None, 1)
-        .unwrap()
-        .items[0]
-        .asset_id;
+    let page = workspace.list_assets(session, dataset_id, None, 2).unwrap();
+    let find_asset = |name: &str| {
+        page.items
+            .iter()
+            .find(|asset| asset.filename == name)
+            .unwrap()
+            .asset_id
+    };
+    let asset_id = find_asset("registered.png");
 
     let interpreter = PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap());
     let entrypoint = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -85,6 +91,35 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
     assert_eq!(report["findings"][0]["annotation_id"], 7);
     assert_eq!(fs::read(source.join("registered.png")).unwrap(), PNG);
     assert_eq!(fs::read(source.join("registered.json")).unwrap(), LABELS);
+
+    let review = workspace
+        .open_review(session, dataset_id, asset_id, 30)
+        .unwrap();
+    let image = read_review_image(&workspace, session, review.review_id, accepted.task_id).unwrap();
+    assert_eq!(image.file_name, "registered.png");
+    assert_eq!((image.width, image.height), (2, 1));
+    assert_eq!(image.sha256, format!("{:x}", Sha256::digest(PNG)));
+    assert!(read_review_image(&workspace, session, review.review_id, Uuid::new_v4()).is_err());
+    assert!(
+        read_review_image(
+            &workspace,
+            Uuid::new_v4(),
+            review.review_id,
+            accepted.task_id
+        )
+        .is_err()
+    );
+    let other = workspace
+        .open_review(session, dataset_id, find_asset("other.png"), 31)
+        .unwrap();
+    assert!(read_review_image(&workspace, session, other.review_id, accepted.task_id).is_err());
+    let reported_path = manifest.with_file_name("geometry-result.json");
+    let honest_report = fs::read(&reported_path).unwrap();
+    let mut edited = report;
+    edited["image"]["width"] = Value::from(9);
+    fs::write(&reported_path, serde_json::to_vec(&edited).unwrap()).unwrap();
+    assert!(read_review_image(&workspace, session, review.review_id, accepted.task_id).is_err());
+    fs::write(&reported_path, honest_report).unwrap();
 
     geometry.shutdown().await.unwrap();
     workspace.close(session).unwrap();
