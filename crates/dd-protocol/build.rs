@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../contracts/proto");
     let sources = [
         root.join("datasetdoctor/v1/common.proto"),
+        root.join("datasetdoctor/v1/core_execution.proto"),
         root.join("datasetdoctor/v1/worker_service.proto"),
     ];
     for source in &sources {

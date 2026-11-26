@@ -131,7 +131,7 @@ $env:UV_PROJECT_ENVIRONMENT = Join-Path (Get-Location).Path 'target\dev\worker-v
 powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv
 ```
 
-入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。两项集成测试启动真实 Worker，验证 loopback 鉴权、健康查询与正常退出，以及 Rust/Python 的 ArtifactRef 长整数、三种归属和可选字段往返。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。当前 Worker 报告零项已加载计算能力。
+入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。集成测试启动真实 Worker，验证 loopback 鉴权、健康查询与正常退出，以及 Rust/Python 的 ArtifactRef 长整数、三种归属和可选字段往返。另一项集成测试启动 Core 的 `ClaimGrant` loopback 服务，由独立 Python 进程领取合成 Grant，并用 Rust 验证重放返回同一句柄。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。当前 Worker 报告零项已加载计算能力。
 
 已同步 Worker 环境后，`target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/image -v` 可验收实际 PNG/JPEG 解码、EXIF 方向、源字节摘要、损坏输入和像素限制。
 

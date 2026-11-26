@@ -28,6 +28,8 @@ $generateArgs = @('-I', '-B', '-m', 'grpc_tools.protoc', "--proto_path=$protoRoo
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $env:DD_WORKER_PYTHON @generateArgs "--grpc_python_out=$staged" (Join-Path $protoRoot 'datasetdoctor\v1\worker_service.proto')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $env:DD_WORKER_PYTHON @generateArgs "--grpc_python_out=$staged" (Join-Path $protoRoot 'datasetdoctor\v1\core_execution.proto')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $stagedFiles = @(Get-ChildItem -LiteralPath $staged -Recurse -File)
 if ($Generate) {
@@ -59,4 +61,7 @@ $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test core_claim_loopback -- --nocapture 2>&1 |
+    ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log') -Append
 exit $LASTEXITCODE

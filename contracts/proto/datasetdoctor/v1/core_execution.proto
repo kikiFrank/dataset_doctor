@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package datasetdoctor.v1;
+
+message ClaimGrantRequest {
+  string grant_id = 1;
+  string workspace_session_id = 2;
+  string task_id = 3;
+  string attempt_id = 4;
+  string executor_session_id = 5;
+  string worker_execution_id = 6;
+  string input_fingerprint = 7;
+  string operation_digest = 8;
+}
+
+message ExecutionHandle {
+  string task_id = 1;
+  string attempt_id = 2;
+  string worker_execution_id = 3;
+}
+
+service CoreExecutionControl {
+  rpc ClaimGrant(ClaimGrantRequest) returns (ExecutionHandle);
+}
