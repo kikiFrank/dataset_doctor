@@ -57,6 +57,20 @@ $LASTEXITCODE
 
 查看 [InputManifest v1 Schema](contracts/json-schema/v1/input-manifest.schema.json)、[共享向量](testdata/contracts/json-schema/v1/input-manifest/cases.json) 和 [验收依赖及许可](docs/deployment/platform_delivery.md#p01-01-inputmanifest)。
 
+## Windows ArtifactRef 线格式检查（P01-02）
+
+在仓库根目录运行。需要自报 `libprotoc 29.3` 的本机编译器、同一安装的 `google/protobuf/descriptor.proto` 和已验证的 CPython 3.12.12。测试使用 Python 标准库。
+
+```powershell
+$protoc = '<protoc.exe 的绝对路径>'
+$include = '<包含 google/protobuf/descriptor.proto 的 include 目录绝对路径>'
+$py312 = '<CPython 3.12.12 的 python.exe 绝对路径>'
+powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-protobuf.ps1 -ProtocExe $protoc -GoogleProtoRoot $include -PythonExe $py312
+$LASTEXITCODE
+```
+
+入口离线编译并比对重复生成的描述符，用 [共享合成向量](testdata/contracts/proto/v1/artifact-ref/cases.json) 验证 [ArtifactRef](contracts/proto/datasetdoctor/v1/common.proto) 的字段编号、三种 owner、`uint64` 和 `schema_id` 存在性。输出和日志位于 `target/contract-check/p01-02/`。退出码 `0` 为通过，`1` 为编译或验收失败，`2` 为工具或 include 先决条件失败。生产代码生成、跨语言 RPC 和授权校验留待后续验证。
+
 ## 已有可执行验证
 
 ```sh

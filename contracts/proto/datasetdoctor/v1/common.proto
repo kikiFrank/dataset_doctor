@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package datasetdoctor.v1;
+
+message ArtifactRef {
+  string artifact_id = 1;
+  oneof owner {
+    string owner_task_id = 2;
+    string owner_asset_id = 10;
+    string owner_review_id = 11;
+  }
+  string kind = 3;
+  string media_type = 4;
+  uint64 size_bytes = 5;
+  string sha256 = 6;
+  optional string schema_id = 7;
+}

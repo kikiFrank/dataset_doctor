@@ -1,0 +1,64 @@
+{
+  "message": "datasetdoctor.v1.ArtifactRef",
+  "valid": [
+    {
+      "id": "task_input_manifest",
+      "text_format": "artifact_id: \"11111111-2222-4333-8444-555555555555\"\nowner_task_id: \"66666666-7777-4888-8999-aaaaaaaaaaaa\"\nkind: \"INPUT_MANIFEST\"\nmedia_type: \"application/json\"\nsize_bytes: 9007199254740993\nsha256: \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\nschema_id: \"datasetdoctor.input-manifest.v1\"\n",
+      "expected_fields": {
+        "artifact_id": "11111111-2222-4333-8444-555555555555",
+        "owner_task_id": "66666666-7777-4888-8999-aaaaaaaaaaaa",
+        "kind": "INPUT_MANIFEST",
+        "media_type": "application/json",
+        "size_bytes": "9007199254740993",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "schema_id": "datasetdoctor.input-manifest.v1"
+      },
+      "wire_hex": "0a2431313131313131312d323232322d343333332d383434342d353535353535353535353535122436363636363636362d373737372d343838382d383939392d6161616161616161616161611a0e494e5055545f4d414e494645535422106170706c69636174696f6e2f6a736f6e2881808080808080103240616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161613a1f64617461736574646f63746f722e696e7075742d6d616e69666573742e7631"
+    },
+    {
+      "id": "asset_without_schema_id",
+      "text_format": "artifact_id: \"11111111-2222-4333-8444-555555555555\"\nowner_asset_id: \"66666666-7777-4888-8999-bbbbbbbbbbbb\"\nkind: \"VIDEO_FRAME_INDEX\"\nsize_bytes: 18446744073709551615\n",
+      "expected_fields": {
+        "artifact_id": "11111111-2222-4333-8444-555555555555",
+        "owner_asset_id": "66666666-7777-4888-8999-bbbbbbbbbbbb",
+        "kind": "VIDEO_FRAME_INDEX",
+        "size_bytes": "18446744073709551615"
+      },
+      "wire_hex": "0a2431313131313131312d323232322d343333332d383434342d3535353535353535353535351a11564944454f5f4652414d455f494e44455828ffffffffffffffffff01522436363636363636362d373737372d343838382d383939392d626262626262626262626262"
+    },
+    {
+      "id": "review_with_empty_schema_id",
+      "text_format": "artifact_id: \"11111111-2222-4333-8444-555555555555\"\nowner_review_id: \"66666666-7777-4888-8999-cccccccccccc\"\nkind: \"REVIEW_DRAFT\"\nsize_bytes: 1\nschema_id: \"\"\n",
+      "expected_fields": {
+        "artifact_id": "11111111-2222-4333-8444-555555555555",
+        "owner_review_id": "66666666-7777-4888-8999-cccccccccccc",
+        "kind": "REVIEW_DRAFT",
+        "size_bytes": "1",
+        "schema_id": ""
+      },
+      "wire_hex": "0a2431313131313131312d323232322d343333332d383434342d3535353535353535353535351a0c5245564945575f445241465428013a005a2436363636363636362d373737372d343838382d383939392d636363636363636363636363"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "two_owner_branches",
+      "text_format": "owner_task_id: \"66666666-7777-4888-8999-aaaaaaaaaaaa\"\nowner_asset_id: \"66666666-7777-4888-8999-bbbbbbbbbbbb\"\n",
+      "expected_error": "owner_conflict"
+    },
+    {
+      "id": "unknown_field",
+      "text_format": "unknown_field: \"synthetic\"\n",
+      "expected_error": "unknown_field"
+    },
+    {
+      "id": "negative_uint64",
+      "text_format": "size_bytes: -1\n",
+      "expected_error": "negative_uint64"
+    },
+    {
+      "id": "overflow_uint64",
+      "text_format": "size_bytes: 18446744073709551616\n",
+      "expected_error": "overflow_uint64"
+    }
+  ]
+}
