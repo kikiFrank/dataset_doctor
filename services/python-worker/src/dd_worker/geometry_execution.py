@@ -7,8 +7,10 @@ import json
 from math import isfinite
 import os
 from pathlib import Path
+from random import uniform
 import tempfile
 from threading import Lock
+from time import monotonic, sleep
 from uuid import UUID, uuid4
 
 import grpc
@@ -22,6 +24,7 @@ CAPABILITY = "annotation_geometry.v1"
 OPERATION_DOMAIN = b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0"
 JSON_LIMIT = 16 * 1024 * 1024
 IMAGE_LIMIT = 256 * 1024 * 1024
+RETRYABLE_RPC_ERRORS = {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.RESOURCE_EXHAUSTED}
 
 
 @dataclass(slots=True)
@@ -41,6 +44,7 @@ class GeometryExecutions:
         self._pool = pool
         self._lock = Lock()
         self._executions = {}
+        self._pending_claims = {}
 
     def active_count(self):
         with self._lock:
@@ -79,8 +83,13 @@ class GeometryExecutions:
                 if existing.request_digest != request_digest:
                     rpc.abort(grpc.StatusCode.ALREADY_EXISTS, "attempt has a different request")
                 return existing.handle
-            try:
-                handle = self._core.ClaimGrant(core_execution_pb2.ClaimGrantRequest(
+            pending = self._pending_claims.get(key)
+            if pending is not None:
+                expected_digest, claim = pending
+                if expected_digest != request_digest:
+                    rpc.abort(grpc.StatusCode.ALREADY_EXISTS, "attempt has a different pending request")
+            else:
+                claim = core_execution_pb2.ClaimGrantRequest(
                     grant_id=context.grant_id,
                     workspace_session_id=context.workspace_session_id,
                     task_id=context.task_id,
@@ -89,9 +98,17 @@ class GeometryExecutions:
                     worker_execution_id=str(uuid4()),
                     input_fingerprint=context.input_fingerprint,
                     operation_digest=operation_digest,
-                ), metadata=self._authorization, timeout=5)
+                )
+                self._pending_claims[key] = (request_digest, claim)
+            try:
+                time_remaining = rpc.time_remaining()
+                budget = 10 if time_remaining is None else min(10, time_remaining)
+                handle = call_core(self._core.ClaimGrant, claim, self._authorization, budget)
             except grpc.RpcError as error:
+                if error.code() not in RETRYABLE_RPC_ERRORS:
+                    self._pending_claims.pop(key)
                 rpc.abort(error.code(), "Core rejected the execution claim")
+            self._pending_claims.pop(key)
             execution = Execution(request_digest, handle)
             self._executions[key] = execution
             self._pool.submit(self._run, request, execution)
@@ -167,6 +184,20 @@ def run_geometry(request):
         kind="TASK_RESULT_MANIFEST", media_type="application/json",
         sha256=result_manifest["sha256"], size_bytes=result_manifest["size_bytes"],
     )
+
+
+def call_core(method, message, metadata, budget):
+    deadline = monotonic() + budget
+    for delay in (0, 0.5, 1.0):
+        wait = min(delay * uniform(0.8, 1.2), max(0, deadline - monotonic()))
+        if wait:
+            sleep(wait)
+        timeout = min(3, max(0, deadline - monotonic()))
+        try:
+            return method(message, metadata=metadata, timeout=timeout)
+        except grpc.RpcError as error:
+            if error.code() not in RETRYABLE_RPC_ERRORS or delay == 1.0 or monotonic() >= deadline:
+                raise
 
 
 def verified_path(name):

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,6 +13,7 @@ use dd_infra::execution_rpc::CoreClaimService;
 use dd_infra::json::JsonContracts;
 use dd_infra::task_store::{ResultSubmission, TaskStoreError, TaskSubmission};
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
+use dd_protocol::v1::core_execution_control_server::CoreExecutionControl;
 use dd_protocol::v1::{
     self as wire, ArtifactRef, ExecutionLookup, ExecutionStarted, ExecutionSucceeded,
     GeometryAuditInput, GeometryAuditRequest, ReportExecutionRequest, TaskContext, WorkerInputFile,
@@ -27,7 +29,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::TcpListenerStream;
-use tonic::{Code, Request};
+use tonic::{Code, Request, Response, Status};
 use uuid::Uuid;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -126,7 +128,14 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let (stop, stopping) = oneshot::channel::<()>();
     let core_server = tokio::spawn(async move {
         tonic::transport::Server::builder()
-            .add_service(wire::core_execution_control_server::CoreExecutionControlServer::new(core))
+            .add_service(
+                wire::core_execution_control_server::CoreExecutionControlServer::new(
+                    DropFirstClaimAck {
+                        core,
+                        pending: AtomicBool::new(true),
+                    },
+                ),
+            )
             .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
                 let _ = stopping.await;
             })
@@ -465,6 +474,34 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
             done.execution_event_id.to_string()
         )
     );
+}
+
+struct DropFirstClaimAck {
+    core: CoreClaimService,
+    pending: AtomicBool,
+}
+
+#[tonic::async_trait]
+impl CoreExecutionControl for DropFirstClaimAck {
+    async fn claim_grant(
+        &self,
+        request: Request<wire::ClaimGrantRequest>,
+    ) -> Result<Response<wire::ExecutionHandle>, Status> {
+        let accepted = self.core.claim_grant(request).await?;
+        if self.pending.swap(false, Ordering::Relaxed) {
+            return Err(Status::unavailable(
+                "injected response loss after durable claim",
+            ));
+        }
+        Ok(accepted)
+    }
+
+    async fn report_execution(
+        &self,
+        request: Request<wire::ReportExecutionRequest>,
+    ) -> Result<Response<wire::ReportAck>, Status> {
+        self.core.report_execution(request).await
+    }
 }
 
 fn authorized<T>(message: T, token: Uuid) -> Request<T> {
