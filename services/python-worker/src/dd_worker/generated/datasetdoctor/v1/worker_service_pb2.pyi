@@ -184,6 +184,42 @@ class VideoProbeRequest(_message.Message):
     parameters: VideoProbeInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[VideoProbeInput, _Mapping]] = ...) -> None: ...
 
+class FrameResolveInput(_message.Message):
+    __slots__ = ("source_video", "input_manifest", "output_directory", "stream_index", "frame_index", "expected_raw_pts", "display_width", "display_height", "max_pixels", "max_frames", "timeout_ms")
+    SOURCE_VIDEO_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    STREAM_INDEX_FIELD_NUMBER: _ClassVar[int]
+    FRAME_INDEX_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_RAW_PTS_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_WIDTH_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_HEIGHT_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    MAX_FRAMES_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_MS_FIELD_NUMBER: _ClassVar[int]
+    source_video: WorkerInputFile
+    input_manifest: WorkerInputFile
+    output_directory: str
+    stream_index: int
+    frame_index: int
+    expected_raw_pts: int
+    display_width: int
+    display_height: int
+    max_pixels: int
+    max_frames: int
+    timeout_ms: int
+    def __init__(self, source_video: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., stream_index: _Optional[int] = ..., frame_index: _Optional[int] = ..., expected_raw_pts: _Optional[int] = ..., display_width: _Optional[int] = ..., display_height: _Optional[int] = ..., max_pixels: _Optional[int] = ..., max_frames: _Optional[int] = ..., timeout_ms: _Optional[int] = ...) -> None: ...
+
+class FrameResolveRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: FrameResolveInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[FrameResolveInput, _Mapping]] = ...) -> None: ...
+
 class ExecutionLookup(_message.Message):
     __slots__ = ("task_id", "attempt_id")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]

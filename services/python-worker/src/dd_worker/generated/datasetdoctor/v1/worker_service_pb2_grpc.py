@@ -50,6 +50,11 @@ class PythonWorkerStub:
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.VideoProbeRequest.SerializeToString,
                 response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
                 _registered_method=True)
+        self.StartFrameResolve = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/StartFrameResolve',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.FrameResolveRequest.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+                _registered_method=True)
         self.GetExecution = channel.unary_unary(
                 '/datasetdoctor.v1.PythonWorker/GetExecution',
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
@@ -83,6 +88,12 @@ class PythonWorkerServicer:
         raise NotImplementedError('Method not implemented!')
 
     def StartVideoProbe(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StartFrameResolve(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -122,6 +133,11 @@ def add_PythonWorkerServicer_to_server(servicer, server):
             'StartVideoProbe': grpc.unary_unary_rpc_method_handler(
                     servicer.StartVideoProbe,
                     request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.VideoProbeRequest.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
+            ),
+            'StartFrameResolve': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartFrameResolve,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.FrameResolveRequest.FromString,
                     response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
             ),
             'GetExecution': grpc.unary_unary_rpc_method_handler(
@@ -220,6 +236,33 @@ class PythonWorker:
             target,
             '/datasetdoctor.v1.PythonWorker/StartVideoProbe',
             datasetdoctor_dot_v1_dot_worker__service__pb2.VideoProbeRequest.SerializeToString,
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartFrameResolve(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/StartFrameResolve',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.FrameResolveRequest.SerializeToString,
             datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
             options,
             channel_credentials,

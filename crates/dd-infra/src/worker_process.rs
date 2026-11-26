@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use dd_protocol::v1::{
-    ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, GeometryAuditRequest,
-    HealthRequest, HealthSnapshot, ShutdownRequest, VideoProbeRequest,
+    ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, FrameResolveRequest,
+    GeometryAuditRequest, HealthRequest, HealthSnapshot, ShutdownRequest, VideoProbeRequest,
     python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
@@ -124,6 +124,16 @@ impl WorkerProcess {
             .map_err(WorkerProcessError::Rpc)
     }
 
+    pub async fn start_frame_resolve(
+        &mut self,
+        request: FrameResolveRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_frame_resolve(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
     pub async fn shutdown(mut self) -> Result<(), WorkerProcessError> {
         let receipt = self
             .client

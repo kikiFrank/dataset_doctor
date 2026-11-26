@@ -110,6 +110,26 @@ message VideoProbeRequest {
   VideoProbeInput parameters = 3;
 }
 
+message FrameResolveInput {
+  WorkerInputFile source_video = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  uint32 stream_index = 4;
+  optional uint64 frame_index = 5;
+  optional sint64 expected_raw_pts = 6;
+  uint32 display_width = 7;
+  uint32 display_height = 8;
+  uint64 max_pixels = 9;
+  uint32 max_frames = 10;
+  uint32 timeout_ms = 11;
+}
+
+message FrameResolveRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  FrameResolveInput parameters = 3;
+}
+
 message ExecutionLookup {
   string task_id = 1;
   string attempt_id = 2;
@@ -126,6 +146,7 @@ service PythonWorker {
   rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
   rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
   rpc StartVideoProbe(VideoProbeRequest) returns (ExecutionHandle);
+  rpc StartFrameResolve(FrameResolveRequest) returns (ExecutionHandle);
   rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);

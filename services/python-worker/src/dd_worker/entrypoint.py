@@ -87,7 +87,7 @@ class Worker(service.PythonWorkerServicer):
         if self._executions is not None:
             capabilities.extend([geometry_execution.CAPABILITY, color_execution.CAPABILITY])
             if self._video_tools is not None:
-                capabilities.append(video_execution.CAPABILITY)
+                capabilities.extend([video_execution.CAPABILITY, video_execution.RESOLVE_CAPABILITY])
         return protocol.HealthSnapshot(
             role="WORKER",
             executor_session_id=self._session_id,
@@ -111,6 +111,13 @@ class Worker(service.PythonWorkerServicer):
         return self._start(
             request, context, video_execution.PROBE_DOMAIN,
             partial(video_execution.compute_probe, tools=self._video_tools), "source_video",
+            available=self._video_tools is not None,
+        )
+
+    def StartFrameResolve(self, request, context):
+        return self._start(
+            request, context, video_execution.RESOLVE_DOMAIN,
+            partial(video_execution.compute_resolve, tools=self._video_tools), "source_video",
             available=self._video_tools is not None,
         )
 

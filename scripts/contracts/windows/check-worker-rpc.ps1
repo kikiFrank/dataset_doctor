@@ -85,7 +85,7 @@ if ($PackagedWorkerExe) {
     $tests = @('--test', 'worker_color_preview')
 }
 if ($VideoFfmpegExe) {
-    $tests += @('--test', 'worker_video_probe')
+    $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve')
 }
 if ($CocoReaderPythonExe) {
     $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path
