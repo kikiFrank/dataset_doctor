@@ -4,6 +4,7 @@ pub mod annotation;
 pub mod dataset;
 pub mod dataset_export;
 pub mod dataset_import;
+pub mod staging;
 pub mod video;
 pub mod workspace;
 
@@ -174,6 +175,10 @@ pub fn wire_primitives_typescript() -> String {
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),
         dataset::AssetPage::decl(&config),
+        staging::StagingState::decl(&config),
+        staging::StagingListRequest::decl(&config),
+        staging::StagingItem::decl(&config),
+        staging::StagingPage::decl(&config),
         dataset_export::DatasetExportFormat::decl(&config),
         dataset_export::DatasetExportSelection::decl(&config),
         dataset_export::ExportPolicy::decl(&config),

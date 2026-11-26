@@ -317,6 +317,31 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert_eq!(receipt.samples.len(), 1);
     assert_eq!(String::from(receipt.samples[0].frame_index), "3");
     let staged = receipt.samples[0].asset_id.clone();
+    let pending = commands
+        .list_staging(dd_ui_contracts::staging::StagingListRequest {
+            context: context(session),
+            target_dataset_id: Some(uuid(dataset_id.clone())),
+            cursor: None,
+            status: None,
+            page_size: 10,
+        })
+        .unwrap();
+    assert_eq!(pending.items.len(), 1);
+    let staged_view = &pending.items[0];
+    assert_eq!(staged_view.asset_id, staged);
+    assert!(matches!(
+        staged_view.state,
+        dd_ui_contracts::staging::StagingState::NeedsReview
+    ));
+    assert_eq!(
+        staged_view
+            .source_frame_ref
+            .as_ref()
+            .unwrap()
+            .image_ref
+            .artifact_id,
+        frame.image_ref.artifact_id
+    );
     assert_eq!(
         commands
             .start_video_sample(Some(Arc::clone(&runner)), sample_request(2, None))

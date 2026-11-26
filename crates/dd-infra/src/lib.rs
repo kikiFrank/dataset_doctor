@@ -33,6 +33,7 @@ pub mod review_final;
 pub mod review_store;
 pub mod review_validation;
 pub mod sqlite;
+pub mod staging;
 pub mod task_store;
 pub mod video_annotation_store;
 #[cfg(feature = "execution-rpc")]

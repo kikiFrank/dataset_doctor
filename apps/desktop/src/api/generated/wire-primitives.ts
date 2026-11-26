@@ -66,6 +66,14 @@ export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText | null, di
 
 export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };
 
+export type StagingState = "OFFLINE" | "CONFLICT" | "ACCEPTING" | "CHECKING" | "NEEDS_ANNOTATION" | "NEEDS_REVIEW" | "NEEDS_CHECK" | "READY_FOR_ACCEPTANCE";
+
+export type StagingListRequest = { context: CommandContext, target_dataset_id?: UuidText, cursor?: UuidText, status?: StagingState, page_size: number, };
+
+export type StagingItem = { asset_id: UuidText, target_dataset_id: UuidText | null, display_name: string, state: StagingState, review_state: string | null, current_report_ref?: ArtifactReference, source_frame_ref?: VideoFrame, blocking_reasons: Array<string>, };
+
+export type StagingPage = { items: Array<StagingItem>, next_cursor: UuidText | null, };
+
 export type DatasetExportFormat = "COCO_DETECTION";
 
 export type DatasetExportSelection = "ALL_MEMBERS";

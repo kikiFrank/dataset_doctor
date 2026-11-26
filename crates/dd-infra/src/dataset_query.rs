@@ -225,7 +225,7 @@ impl OpenedWorkspace {
         })
     }
 
-    fn registered_file(
+    pub(crate) fn registered_file(
         &self,
         location: &str,
         path: String,
@@ -411,7 +411,7 @@ fn dataset_row(row: &Row<'_>) -> rusqlite::Result<(DatasetSummary, String)> {
     Ok((summary, categories))
 }
 
-fn checked_limit(size: u16) -> Result<i64, DatasetQueryError> {
+pub(crate) fn checked_limit(size: u16) -> Result<i64, DatasetQueryError> {
     if !(1..=MAX_PAGE).contains(&size) {
         return Err(DatasetQueryError::InvalidPageSize);
     }

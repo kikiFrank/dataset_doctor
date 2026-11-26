@@ -120,7 +120,7 @@ impl Commands {
         })
     }
 
-    fn frame_view(
+    pub(super) fn frame_view(
         &self,
         task: uuid::Uuid,
         resolved: ResolvedVideoFrame,
