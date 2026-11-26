@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package datasetdoctor.v1;
+
+message HealthRequest {}
+
+message HealthSnapshot {
+  string role = 1;
+  string executor_session_id = 2;
+  uint32 protocol_major = 3;
+  string build_version = 4;
+  repeated string loaded_capability_ids = 5;
+  uint32 active_executions = 6;
+}
+
+message ShutdownRequest {}
+
+message ShutdownReceipt {
+  bool accepted = 1;
+}
+
+service PythonWorker {
+  rpc Health(HealthRequest) returns (HealthSnapshot);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);
+}

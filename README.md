@@ -104,6 +104,18 @@ $LASTEXITCODE
 
 入口离线编译并比对重复生成的描述符，用 [共享合成向量](testdata/contracts/proto/v1/artifact-ref/cases.json) 验证 [ArtifactRef](contracts/proto/datasetdoctor/v1/common.proto) 的字段编号、三种 owner、`uint64` 和 `schema_id` 存在性。输出和日志位于 `target/contract-check/p01-02/`。退出码 `0` 为通过，`1` 为编译或验收失败，`2` 为工具或 include 先决条件失败。生产代码生成、跨语言 RPC 和授权校验留待后续验证。
 
+## Windows Rust 与 Python Worker 进程契约
+
+在 x64 VS Developer PowerShell 中使用锁定的 Rust、protoc、CPython 和 uv。先按 Worker 锁文件在 `target/dev/uv-cache` 准备依赖，再运行：
+
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = Join-Path (Get-Location).Path 'target\dev\worker-venv'
+& $uv sync --locked --no-build --no-python-downloads --no-config --project .\services\python-worker --cache-dir .\target\dev\uv-cache --python $py312
+powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv
+```
+
+入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。两项集成测试启动真实 Worker，验证 loopback 鉴权、健康查询与正常退出，以及 Rust/Python 的 ArtifactRef 长整数、三种归属和可选字段往返。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。当前 Worker 报告零项已加载计算能力。
+
 ## Windows Workspace SQLite 写连接初始化（P01-03）
 
 在已初始化的 x64 VS Developer PowerShell 中，从仓库根目录运行。使用 Rust/Cargo 1.97.1 的 MSVC 工具链和 P00-03 预填的 `target/p00-03/cargo-home/`。当前进程应使用默认的 Cargo/MSVC 编译选项。以下命令清除 SQLite 链接覆盖变量并使用 bundled 源。
