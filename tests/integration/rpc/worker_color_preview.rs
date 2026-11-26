@@ -135,19 +135,29 @@ async fn real_color_preview_requires_its_grant_and_seals_pixels_without_modifyin
             .unwrap();
     });
     let python = PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap());
-    let mut worker = WorkerProcess::launch(WorkerLaunch {
-        interpreter: python.clone(),
-        entrypoint: Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../services/python-worker/src/dd_worker/entrypoint.py")
-            .canonicalize()
-            .unwrap(),
-        executor_session: executor,
-        core: Some(CoreClaimEndpoint {
-            address,
-            claim_token: core_key,
-        }),
-    })
-    .await
+    let endpoint = Some(CoreClaimEndpoint {
+        address,
+        claim_token: core_key,
+    });
+    let mut worker = match std::env::var_os("DD_PACKAGED_WORKER_EXE") {
+        Some(executable) => {
+            let executable = PathBuf::from(executable);
+            println!("Testing packaged Worker {}", executable.display());
+            WorkerProcess::launch_packaged(executable, executor, endpoint).await
+        }
+        None => {
+            WorkerProcess::launch(WorkerLaunch {
+                interpreter: python.clone(),
+                entrypoint: Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../services/python-worker/src/dd_worker/entrypoint.py")
+                    .canonicalize()
+                    .unwrap(),
+                executor_session: executor,
+                core: endpoint,
+            })
+            .await
+        }
+    }
     .unwrap();
     let request = ColorPreviewRequest {
         context: Some(TaskContext {

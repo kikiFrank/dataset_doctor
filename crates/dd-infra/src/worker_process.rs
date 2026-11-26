@@ -30,17 +30,42 @@ impl WorkerProcess {
         if !config.interpreter.is_absolute() || !config.entrypoint.is_absolute() {
             return Err(WorkerProcessError::InvalidLaunch);
         }
+        let mut command = Command::new(config.interpreter);
+        command.args(["-I", "-B"]).arg(config.entrypoint);
+        Self::start(command, config.executor_session, config.core).await
+    }
+
+    pub async fn launch_packaged(
+        executable: PathBuf,
+        executor_session: Uuid,
+        core: Option<CoreClaimEndpoint>,
+    ) -> Result<Self, WorkerProcessError> {
+        let parent = executable
+            .parent()
+            .filter(|_| executable.is_absolute())
+            .ok_or(WorkerProcessError::InvalidLaunch)?;
+        let mut command = Command::new(&executable);
+        command
+            .current_dir(parent)
+            .env_remove("PYTHONHOME")
+            .env_remove("PYTHONPATH");
+        Self::start(command, executor_session, core).await
+    }
+
+    async fn start(
+        command: Command,
+        executor_session: Uuid,
+        core: Option<CoreClaimEndpoint>,
+    ) -> Result<Self, WorkerProcessError> {
         timeout(STARTUP_DEADLINE, async {
-            let mut command = Command::new(config.interpreter);
-            command.args(["-I", "-B"]).arg(config.entrypoint);
             let (process, channel) =
-                LocalProcess::bootstrap(command, config.executor_session, config.core).await?;
+                LocalProcess::bootstrap(command, executor_session, core).await?;
             let mut worker = Self {
                 process,
                 client: PythonWorkerClient::new(channel),
             };
             let health = worker.health().await?;
-            LocalProcess::verify_identity(&health, "WORKER", config.executor_session)?;
+            LocalProcess::verify_identity(&health, "WORKER", executor_session)?;
             Ok(worker)
         })
         .await

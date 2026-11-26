@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [Parameter(Mandatory = $true)][string]$UvExe,
     [switch]$Generate,
-    [string]$CocoReaderPythonExe
+    [string]$CocoReaderPythonExe,
+    [string]$PackagedWorkerExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +25,11 @@ $cache = Join-Path $dev 'uv-cache'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $env:DD_WORKER_PYTHON = Join-Path $env:UV_PROJECT_ENVIRONMENT 'Scripts\python.exe'
 $env:DD_CORE_CLAIM_RUN_DIR = $run
+if ($PackagedWorkerExe) {
+    $env:DD_PACKAGED_WORKER_EXE = (Resolve-Path -LiteralPath $PackagedWorkerExe).Path
+} else {
+    Remove-Item Env:DD_PACKAGED_WORKER_EXE -ErrorAction SilentlyContinue
+}
 $generateArgs = @('-I', '-B', '-m', 'grpc_tools.protoc', "--proto_path=$protoRoot",
     "--python_out=$staged", "--pyi_out=$staged")
 & $env:DD_WORKER_PYTHON @generateArgs (Join-Path $protoRoot 'datasetdoctor\v1\common.proto')
@@ -66,6 +72,9 @@ $PSNativeCommandUseErrorActionPreference = $false
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_process',
     '--test', 'worker_color_preview', '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final')
+if ($PackagedWorkerExe) {
+    $tests = @('--test', 'worker_color_preview')
+}
 if ($CocoReaderPythonExe) {
     $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path
     $tests += @('--test', 'coco_export')
