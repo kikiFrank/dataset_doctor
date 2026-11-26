@@ -203,20 +203,13 @@ impl StagingReportService {
         let image = self.owner.workspace_action(session, move |workspace| {
             staged_image(workspace, dataset, asset)
         })?;
-        if !image.image.live_digest(256 * 1024 * 1024)?
-            || image
-                .annotation
-                .as_ref()
-                .map(|file| file.live_digest(16 * 1024 * 1024))
-                .transpose()?
-                == Some(false)
-        {
+        if !verify_image(&image)? {
             return Err(StagingReportError::InvalidInput);
         }
         let evidence =
             read_bound_geometry_report(&self.owner, session, request.geometry_task_id, &image)
                 .map_err(|error| StagingReportError::Evidence(Box::new(error)))?;
-        let scope = image_scope(image);
+        let scope = image_scope(&image);
         let input = freeze_input_manifest(
             &self.contracts,
             json!({
@@ -252,11 +245,8 @@ impl StagingReportService {
             &format_digest(&input.input_fingerprint),
         )?;
         self.owner.workspace_action(session, move |workspace| {
-            let current = image_scope(staged_image(workspace, dataset, asset)?);
-            if current.media_digest != scope.media_digest
-                || current.annotation_digest != scope.annotation_digest
-                || current.label_schema_digest != scope.label_schema_digest
-            {
+            let current = image_scope(&staged_image(workspace, dataset, asset)?);
+            if current != scope {
                 return Ok(Err(StagingReportError::InvalidInput));
             }
             Ok(publish_report(workspace, &submission, scope, checks, now))
@@ -265,7 +255,16 @@ impl StagingReportService {
 
     /// Return historical accepted evidence after reverifying its stored bytes.
     pub fn get(&self, session: Uuid, task: Uuid) -> Result<StagingReport, StagingReportError> {
-        let (root, stored) = self.owner.workspace_action(session, move |workspace| {
+        read_report(&self.owner, session, task)
+    }
+}
+
+pub(crate) fn read_report(
+    owner: &WorkspaceThread,
+    session: Uuid,
+    task: Uuid,
+) -> Result<StagingReport, StagingReportError> {
+    let (root, stored) = owner.workspace_action(session, move |workspace| {
                 workspace.connection.query_row(
                     "SELECT task_id,output_manifest_path,input_fingerprint,dataset_id,
                         json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
@@ -274,8 +273,7 @@ impl StagingReportService {
                     |row| Ok((workspace.root().to_owned(), StoredReport::read(row, 0)?)),
                 ).optional().map_err(database)?.ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
             })?;
-        stored.load(&root)
-    }
+    stored.load(&root)
 }
 
 pub(crate) struct StoredReport {
@@ -348,7 +346,7 @@ impl StagingReportData {
     }
 }
 
-fn staged_image(
+pub(crate) fn staged_image(
     workspace: &OpenedWorkspace,
     dataset: Uuid,
     asset: Uuid,
@@ -368,14 +366,27 @@ fn staged_image(
         .map_err(WorkspaceThreadError::Dataset)
 }
 
-fn image_scope(image: RegisteredImage) -> ReportScope {
+pub(crate) fn image_scope(image: &RegisteredImage) -> ReportScope {
     ReportScope {
         dataset_id: image.dataset_id,
         asset_id: image.asset_id,
-        media_digest: image.image.sha256,
-        annotation_digest: image.annotation.map(|annotation| annotation.sha256),
-        label_schema_digest: image.label_schema_fingerprint,
+        media_digest: image.image.sha256.clone(),
+        annotation_digest: image
+            .annotation
+            .as_ref()
+            .map(|annotation| annotation.sha256.clone()),
+        label_schema_digest: image.label_schema_fingerprint.clone(),
     }
+}
+
+pub(crate) fn verify_image(image: &RegisteredImage) -> io::Result<bool> {
+    Ok(image.image.live_digest(256 * 1024 * 1024)?
+        && image
+            .annotation
+            .as_ref()
+            .map(|file| file.live_digest(16 * 1024 * 1024))
+            .transpose()?
+            != Some(false))
 }
 
 fn build_checks(
