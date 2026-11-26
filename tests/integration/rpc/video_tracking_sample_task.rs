@@ -125,6 +125,70 @@ async fn a_tracking_receipt_supplies_only_exact_candidate_frames_to_training_sta
             assert!(candidate.is_null());
         }
     }
+    let work = VideoAnnotationService::new(Arc::clone(owner)).unwrap();
+    for sample in &samples {
+        let candidates = work
+            .staging_tracking_candidates(session, setup.dataset, sample.asset_id)
+            .unwrap();
+        if matches!(sample.frame_index, 2 | 4) {
+            let candidates = candidates.unwrap();
+            assert_eq!(candidates.reference, bundle.reference);
+            assert_eq!(candidates.frame_index, sample.frame_index);
+            let expected = bundle
+                .data
+                .observations
+                .iter()
+                .find(|item| {
+                    item.frame_index == sample.frame_index.to_string() && item.source == "TRACKER"
+                })
+                .unwrap();
+            assert_eq!(candidates.observations.len(), 1);
+            assert_eq!(candidates.observations[0].track_id, expected.track_id);
+            assert_eq!(candidates.observations[0].bbox_xywh, expected.bbox_xywh);
+        } else {
+            assert!(candidates.is_none());
+        }
+    }
+    let tracked_frame = samples[2].asset_id;
+    let original_index = samples[2].frame_index.to_string();
+    assert!(
+        work.staging_tracking_candidates(Uuid::new_v4(), setup.dataset, tracked_frame)
+            .is_err()
+    );
+    assert!(
+        work.staging_tracking_candidates(session, Uuid::new_v4(), tracked_frame)
+            .unwrap()
+            .is_none()
+    );
+    let update_frame = |frame: &str| {
+        connection.execute(
+            "UPDATE assets SET source_metadata_json=json_set(source_metadata_json,'$.frame.frame_index',?2)
+             WHERE asset_id=?1",
+            rusqlite::params![tracked_frame.to_string(), frame],
+        ).unwrap();
+    };
+    update_frame("4");
+    assert!(
+        work.staging_tracking_candidates(session, setup.dataset, tracked_frame)
+            .is_err(),
+        "another valid candidate frame must not be read for this asset"
+    );
+    update_frame(&original_index);
+    let stored_path: String = connection
+        .query_row(
+            "SELECT path FROM assets WHERE asset_id=?1",
+            [tracked_frame.to_string()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let managed = fixture.root.join(stored_path);
+    let png = fs::read(&managed).unwrap();
+    fs::write(&managed, b"changed managed frame").unwrap();
+    assert!(
+        work.staging_tracking_candidates(session, setup.dataset, tracked_frame)
+            .is_err()
+    );
+    fs::write(&managed, png).unwrap();
     assert_eq!(
         connection
             .query_row("SELECT COUNT(*) FROM dataset_assets", [], |row| row
@@ -170,6 +234,10 @@ async fn a_tracking_receipt_supplies_only_exact_candidate_frames_to_training_sta
         .with_file_name("video-tracks.json");
     let original = fs::read(&candidate).unwrap();
     fs::write(&candidate, b"changed after samples were admitted").unwrap();
+    assert!(
+        work.staging_tracking_candidates(session, setup.dataset, tracked_frame)
+            .is_err()
+    );
     sampler
         .run(
             session,
@@ -189,8 +257,12 @@ async fn a_tracking_receipt_supplies_only_exact_candidate_frames_to_training_sta
     );
     assert!(failed.receipt.is_none());
     fs::write(candidate, original).unwrap();
+    assert!(
+        work.staging_tracking_candidates(session, setup.dataset, tracked_frame)
+            .unwrap()
+            .is_some()
+    );
 
-    let work = VideoAnnotationService::new(Arc::clone(owner)).unwrap();
     work.save_segment(
         session,
         SegmentRequest {

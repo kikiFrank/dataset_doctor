@@ -42,6 +42,7 @@ pub use sampling::{
 };
 pub use segments::{SegmentReceipt, SegmentRequest};
 pub use staging::StagedVideoSample;
+pub use tracking_samples::StagingTrackCandidates;
 
 #[derive(Clone)]
 pub struct KeyframeDraftRequest {
@@ -84,7 +85,9 @@ impl Display for VideoAnnotationError {
             Self::Io(e) => Display::fmt(e, f),
             Self::InvalidInput => f.write_str("Invalid video keyframe or target context"),
             Self::RevisionConflict => f.write_str("Video work or Dataset categories changed"),
-            Self::TrackingEvidenceInvalid => f.write_str("Tracking evidence is unavailable or does not match the sampling scope"),
+            Self::TrackingEvidenceInvalid => {
+                f.write_str("Tracking evidence is unavailable or has a different scope")
+            }
             Self::Evidence(e) => Display::fmt(e, f),
         }
     }

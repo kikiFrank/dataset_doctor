@@ -383,7 +383,7 @@ struct FrameIdentity {
     pts_us: Option<String>,
 }
 
-fn parse_source(video: Uuid, json: &str) -> Option<StagingFrameSource> {
+pub(crate) fn parse_source(video: Uuid, json: &str) -> Option<StagingFrameSource> {
     let parsed: FrameSourceRecord = serde_json::from_str(json).ok()?;
     let frame = parsed.frame;
     if parsed.kind != "video_frame"
