@@ -89,7 +89,13 @@ impl Commands {
                 let artifact = self.parse_uuid(artifact)?;
                 dd_infra::frame_runtime::FrameService::new(Arc::clone(&self.thread))
                     .and_then(|frames| frames.image_locator(media, session, task, artifact, now))
-                    .map_err(|_| self.error("FAILED_PRECONDITION", "无法核验此帧产物。"))?
+                    .or_else(|_| {
+                        dd_infra::color_preview::ColorPreviewService::new(Arc::clone(&self.thread))
+                            .and_then(|colors| {
+                                colors.image_locator(media, session, task, artifact, now)
+                            })
+                    })
+                    .map_err(|_| self.error("FAILED_PRECONDITION", "无法核验此图像产物。"))?
             }
             _ => return Err(self.error("INVALID_ARGUMENT", "请选择图片或明确归属的帧产物。")),
         };

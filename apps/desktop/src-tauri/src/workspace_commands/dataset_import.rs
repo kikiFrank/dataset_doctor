@@ -190,6 +190,8 @@ impl Commands {
                     })
                     .transpose()?;
                 Ok(ImportTaskView {
+                    color_preview: None,
+                    color_apply: None,
                     staging_commit: None,
                     video_tracking: None,
                     task_id: self.uuid_text(id.to_string())?,
@@ -223,6 +225,8 @@ impl Commands {
                             Self::video_sample_task,
                             Self::video_tracking_task,
                             Self::staging_commit_task,
+                            Self::color_preview_task,
+                            Self::color_apply_task,
                         ];
                         for query in queries {
                             match query(self, session, id) {
@@ -246,6 +250,8 @@ impl Commands {
                     })
                     .transpose()?;
                 Ok(ImportTaskView {
+                    color_preview: None,
+                    color_apply: None,
                     task_id: self.uuid_text(id.to_string())?,
                     operation_kind: ImportOperationKind::DatasetImportExternal,
                     staging_commit: None,

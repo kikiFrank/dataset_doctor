@@ -6,7 +6,7 @@ pub use result::VerifiedColorPreview;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use dd_protocol::v1::{
     ColorHueGate, ColorMethod, ColorOperation, ColorPoint, ColorPolygon, ColorPreviewInput,
@@ -18,10 +18,12 @@ use serde_json::{Number, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::dataset_query::RegisteredInputFile;
 use crate::input_fingerprint::{
     FrozenInputManifest, deserialize_manifest_u32, freeze_input_manifest, manifest_u32,
 };
 use crate::json::JsonContracts;
+use crate::media_display::{MediaDisplayService, MediaLocator};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::{TaskOutcome, TaskStoreError, TaskSubmission, format_digest};
@@ -85,6 +87,12 @@ pub struct ColorPreviewSubmission {
 pub struct ColorPreviewJob {
     session: Uuid,
     worker_job: WorkerJob,
+}
+
+impl ColorPreviewJob {
+    pub fn task_id(&self) -> Uuid {
+        self.worker_job.task
+    }
 }
 
 #[derive(Debug)]
@@ -300,6 +308,38 @@ impl ColorPreviewService {
             preview,
         })
     }
+
+    pub fn image_locator(
+        &self,
+        media: &MediaDisplayService,
+        session: Uuid,
+        task: Uuid,
+        artifact: Uuid,
+        now: Instant,
+    ) -> Result<MediaLocator, ColorPreviewError> {
+        let preview = self
+            .snapshot(session, task)?
+            .preview
+            .ok_or(ColorPreviewError::InvalidBinding)?;
+        let (reference, path) = if preview.candidate_ref.artifact_id == artifact {
+            (preview.candidate_ref, preview.candidate_path)
+        } else if preview.mask_ref.artifact_id == artifact {
+            (preview.mask_ref, preview.mask_path)
+        } else {
+            return Err(ColorPreviewError::InvalidBinding);
+        };
+        let root = self.owner.storage_root(session)?;
+        media
+            .issue_verified_image(
+                session,
+                RegisteredInputFile {
+                    path: root.join(path),
+                    sha256: reference.sha256,
+                },
+                now,
+            )
+            .map_err(|error| ColorPreviewError::TaskEvidence(Box::new(error)))
+    }
 }
 
 struct StoredPreview {
@@ -320,6 +360,15 @@ pub struct ColorPreviewRuntime {
 }
 
 impl ColorPreviewRuntime {
+    pub fn record_unavailable(
+        owner: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        startup_failed: bool,
+    ) -> Result<(), ColorPreviewError> {
+        WorkerRuntime::record_unavailable(owner, session, task, CAPABILITY, startup_failed)
+    }
+
     pub async fn launch(
         owner: Arc<WorkspaceThread>,
         session: Uuid,
@@ -343,6 +392,9 @@ impl ColorPreviewRuntime {
 
     pub async fn shutdown(self) -> Result<(), ColorPreviewError> {
         self.runtime.shutdown().await
+    }
+    pub async fn terminate(self) -> Result<(), ColorPreviewError> {
+        self.runtime.terminate().await
     }
 }
 

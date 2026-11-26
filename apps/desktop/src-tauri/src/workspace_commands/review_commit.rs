@@ -88,6 +88,8 @@ impl Commands {
             .map_err(|error| self.final_error(error))?
             .ok_or_else(|| self.error("NOT_FOUND", "当前工作区中没有此任务。"))?;
         Ok(ImportTaskView {
+            color_preview: None,
+            color_apply: None,
             staging_commit: None,
             video_tracking: None,
             task_id: self.uuid_text(task_id.to_string())?,

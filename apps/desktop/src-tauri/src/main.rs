@@ -183,6 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(media)
         .manage(imports)
         .manage(workspace_commands::geometry::GeometryRunner::configured())
+        .manage(workspace_commands::color::ColorRunner::configured())
         .manage(workspace_commands::video::VideoRunner::configured())
         .manage(RuntimeMode {
             smoke_root,
@@ -223,6 +224,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset_import::dataset_import_external,
             workspace_commands::dataset_import::task_get,
             workspace_commands::geometry::annotation_geometry_submit,
+            workspace_commands::color::repair_color_preview,
+            workspace_commands::color::repair_color_apply,
             workspace_commands::video::video_import,
             workspace_commands::video::video_get,
             workspace_commands::video_frames::video_resolve_frame,

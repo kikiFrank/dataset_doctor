@@ -210,6 +210,8 @@ impl Commands {
             None
         };
         Ok(ImportTaskView {
+            color_preview: None,
+            color_apply: None,
             staging_commit: None,
             video_tracking: None,
             task_id: self.uuid_text(task.to_string())?,

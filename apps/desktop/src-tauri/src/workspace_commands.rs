@@ -21,18 +21,19 @@ use crate::RuntimeMode;
 
 pub(crate) mod annotation;
 pub(crate) mod backup;
+pub(crate) mod color;
 pub(crate) mod dataset;
 pub(crate) mod dataset_export;
 pub(crate) mod dataset_import;
 pub(crate) mod geometry;
 pub(crate) mod review;
 pub(crate) mod review_commit;
+pub(crate) mod staging;
 pub(crate) mod video;
 pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
 pub(crate) mod video_sampling;
 pub(crate) mod video_tracking;
-pub(crate) mod staging;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
     if let (Some(python), Some(entrypoint)) = (
@@ -87,13 +88,12 @@ mod import_tests;
 #[path = "../../../../tests/desktop/host/geometry.rs"]
 mod geometry_tests;
 
-#[cfg(test)]
-#[path = "../../../../tests/desktop/host/video_import.rs"]
-mod video_import_tests;
 #[cfg(all(test, feature = "video-acceptance"))]
 #[path = "../../../../tests/desktop/host/video_frame.rs"]
 mod video_frame_tests;
-
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/video_import.rs"]
+mod video_import_tests;
 
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/video_resume.rs"]
@@ -112,8 +112,14 @@ pub async fn path_select(
 ) -> Result<Option<PathGrant>, AppError> {
     let selected_fixture = match (&request.purpose, &request.kind) {
         (PathPurpose::Workspace, PathKind::Directory) => runtime.smoke_workspace.clone(),
-        (PathPurpose::Import, PathKind::Directory) => runtime.smoke_business_directories.as_ref().map(|paths| paths.0.clone()),
-        (PathPurpose::Export, PathKind::Directory) => runtime.smoke_business_directories.as_ref().map(|paths| paths.1.clone()),
+        (PathPurpose::Import, PathKind::Directory) => runtime
+            .smoke_business_directories
+            .as_ref()
+            .map(|paths| paths.0.clone()),
+        (PathPurpose::Export, PathKind::Directory) => runtime
+            .smoke_business_directories
+            .as_ref()
+            .map(|paths| paths.1.clone()),
         _ => None,
     };
     run(thread, request.request_id, move |commands| {
@@ -213,6 +219,7 @@ pub async fn workspace_open(
             .open(grant)
             .map_err(|failure| commands.map_error(failure))?;
         commands.resume_pending_finals(opened.workspace_session_id);
+        commands.resume_pending_colors(opened.workspace_session_id);
         if let Some(video) = video
             && let Err(error) =
                 commands.resume_pending_video_probes(video, opened.workspace_session_id)

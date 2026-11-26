@@ -412,5 +412,119 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
             .unwrap(),
         package
     );
+    let image_path = formal_path.with_extension("png");
+    let before = commands
+        .annotation(AnnotationGetRequest {
+            context: context(reopened),
+            asset_id: id(asset_id),
+        })
+        .unwrap();
+    let before_bytes = fs::read(&image_path).unwrap();
+    let formal_bytes = fs::read(&formal_path).unwrap();
+    let color_context = || {
+        let mut value = context(reopened);
+        value.idempotency_key = Some(id(Uuid::new_v4()));
+        value
+    };
+    let preview_request = |image_digest: &str| {
+        serde_json::from_value::<dd_ui_contracts::color::ColorPreviewSubmitRequest>(serde_json::json!({
+        "context":color_context(),"asset_id":asset_id,"dataset_id":dataset_id,
+        "base_image_digest":image_digest,"region":{"kind":"RECT","bbox_xywh":[0,0,1,1]},
+        "operation":{"method":"SOLID_FILL","target_rgb":[17,30,90],"strength":1,"feather_px":0}
+    })).unwrap()
+    };
+    let runner = super::color::ColorRunner::new(
+        repo.join("target/dev/worker-venv/Scripts/python.exe"),
+        repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
+    );
+    let submitted = commands
+        .start_color_preview(Some(runner), preview_request(&before.image_digest))
+        .unwrap();
+    let wait_color = |task_id: UuidText| {
+        let deadline = Instant::now() + Duration::from_secs(25);
+        loop {
+            let reply = commands
+                .import_task(
+                    &imports,
+                    TaskGetRequest {
+                        context: context(reopened),
+                        task_id: task_id.clone(),
+                    },
+                )
+                .unwrap();
+            if !matches!(reply.status.as_str(), "QUEUED" | "DISPATCHING" | "RUNNING") {
+                break reply;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    };
+    let done = wait_color(submitted.task_id.clone());
+    assert_eq!(done.status, "SUCCEEDED");
+    let preview = done.color_preview.unwrap();
+    assert_eq!(preview.changed_pixels, 1u64.into());
+    assert_eq!(fs::read(&image_path).unwrap(), before_bytes);
+    let display =
+        dd_infra::media_display::MediaDisplayService::new(Arc::clone(&thread), GRANT_LIFETIME);
+    let read_artifact = |artifact_id: UuidText| {
+        let request = dd_ui_contracts::annotation::MediaGetLocatorRequest {
+            context: context(reopened),
+            asset_id: None,
+            artifact_id: Some(artifact_id),
+            owner_task_id: Some(submitted.task_id.clone()),
+            purpose: dd_ui_contracts::annotation::MediaPurpose::Display,
+        };
+        let location = commands.media_locator(&display, request).unwrap();
+        let response = super::annotation::media_response(
+            &display,
+            tauri::http::Request::builder()
+                .uri(location.locator)
+                .body(Vec::new())
+                .unwrap(),
+        );
+        assert_eq!(response.status(), 200);
+        response.into_body()
+    };
+    let rendered = read_artifact(preview.candidate_ref.artifact_id.clone());
+    let mask = read_artifact(preview.mask_ref.artifact_id.clone());
+    assert_ne!(rendered, before_bytes);
+    assert_ne!(mask, rendered);
+    let approval = |reference: &dd_ui_contracts::ArtifactReference| {
+        serde_json::from_value::<dd_ui_contracts::color::ColorApplySubmitRequest>(serde_json::json!({
+        "context":color_context(),"asset_id":asset_id,"dataset_id":dataset_id,
+        "base_image_digest":before.image_digest,"expected_asset_revision":preview.asset_revision,
+        "candidate_ref":reference
+    })).unwrap()
+    };
+    assert!(
+        commands
+            .start_color_apply(approval(&preview.mask_ref))
+            .is_err()
+    );
+    let apply = commands
+        .start_color_apply(approval(&preview.candidate_ref))
+        .unwrap();
+    let applied = wait_color(apply.task_id);
+    assert_eq!(applied.status, "SUCCEEDED");
+    assert_eq!(
+        applied.color_apply.unwrap().image_digest,
+        preview.candidate_ref.sha256
+    );
+    assert_eq!(fs::read(&image_path).unwrap(), rendered);
+    assert_eq!(fs::read(&formal_path).unwrap(), formal_bytes);
+    let current = commands
+        .annotation(AnnotationGetRequest {
+            context: context(reopened),
+            asset_id: id(asset_id),
+        })
+        .unwrap();
+    assert!(matches!(current.annotation_state, AnnotationState::Stale));
+    let unavailable = commands
+        .start_color_preview(None, preview_request(&current.image_digest))
+        .unwrap();
+    assert_eq!(
+        wait_color(unavailable.task_id).error_code.as_deref(),
+        Some("WORKER_START_FAILED")
+    );
     thread.close(reopened).unwrap();
 }

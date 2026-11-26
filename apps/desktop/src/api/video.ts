@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail, AssetListRequest, AssetPage } from "./generated/wire-primitives";
-import type { DisplayLocator, FrameResolution, MediaGetLocatorRequest, VideoFrame, VideoFrameTarget, VideoResolveFrameRequest, VideoSeekPolicy } from "./generated/wire-primitives";
+import type { DisplayLocator, FrameResolution, VideoFrame, VideoFrameTarget, VideoResolveFrameRequest, VideoSeekPolicy } from "./generated/wire-primitives";
 import type {
   ArtifactReference, CocoDocument, ImportOperationRef, KeyframeDraftReceipt, SegmentReceipt,
   VideoGetKeyframeDraftRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
@@ -8,6 +8,7 @@ import type {
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
+import { getTaskImageLocator } from "./dataset";
 
 export function getKeyframeDraft(workspace: OpenWorkspace, video: string, annotation: ArtifactReference): Promise<CocoDocument> {
   const request: VideoGetKeyframeDraftRequest = {
@@ -92,10 +93,5 @@ export function resolveVideoFrame(
 }
 
 export function getFrameImageLocator(workspace: OpenWorkspace, frame: VideoFrame): Promise<DisplayLocator> {
-  if (frame.image_ref.owner.kind !== "TASK") throw new Error("帧产物归属无效。");
-  const request: MediaGetLocatorRequest = {
-    context: context(workspace, crypto.randomUUID()), purpose: "DISPLAY",
-    artifact_id: frame.image_ref.artifact_id, owner_task_id: frame.image_ref.owner.id,
-  };
-  return invoke("media_get_locator", { request });
+  return getTaskImageLocator(workspace, frame.image_ref);
 }

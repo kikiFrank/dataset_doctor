@@ -103,6 +103,8 @@ impl Commands {
             .and_then(|service| service.snapshot(session, task))
             .map_err(|error| self.frame_error(error))?;
         Ok(ImportTaskView {
+            color_preview: None,
+            color_apply: None,
             staging_commit: None,
             video_tracking: None,
             task_id: self.uuid_text(task.to_string())?,

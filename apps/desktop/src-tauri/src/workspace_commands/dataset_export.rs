@@ -111,6 +111,8 @@ impl Commands {
             excluded_count: (receipt.exclusions.len() as u64).into(),
         });
         Ok(ImportTaskView {
+            color_preview: None,
+            color_apply: None,
             staging_commit: None,
             video_tracking: None,
             task_id: self.uuid_text(task_id.to_string())?,

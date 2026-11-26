@@ -51,6 +51,11 @@ pub struct ColorApplyOperation {
     pub operation_id: Uuid,
     pub task_id: Uuid,
     pub state: ColorApplyState,
+    pub asset_id: Uuid,
+    pub accepted_at_ms: i64,
+    pub task_status: String,
+    pub error_code: Option<String>,
+    pub image_digest: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -89,11 +94,16 @@ struct StoredOperation {
     path: String,
     sha256: String,
     fingerprint: String,
+    accepted_at: i64,
+    task_status: String,
+    error_code: Option<String>,
+    image_digest: Option<String>,
 }
 
 const SELECT_OPERATION: &str =
-    "SELECT operation_id,task_id,status,dataset_id,asset_id,manifest_path,manifest_digest,request_fingerprint
-     FROM file_operations WHERE operation_kind=?1";
+    "SELECT f.operation_id,f.task_id,f.status,f.dataset_id,f.asset_id,f.manifest_path,f.manifest_digest,
+        f.request_fingerprint,t.created_at_ms,t.status,t.error_code,json_extract(f.result_json,'$.image_digest')
+     FROM file_operations f JOIN tasks t USING(task_id) WHERE f.operation_kind=?1";
 
 pub struct ColorApplyService {
     owner: Arc<WorkspaceThread>,
@@ -142,7 +152,7 @@ impl ColorApplyService {
             workspace
                 .connection
                 .query_row(
-                    &format!("{SELECT_OPERATION} AND idempotency_key=?2"),
+                    &format!("{SELECT_OPERATION} AND f.idempotency_key=?2"),
                     params![KIND, key],
                     StoredOperation::read,
                 )
@@ -255,6 +265,11 @@ impl ColorApplyService {
             operation_id,
             task_id,
             state: ColorApplyState::Prepared,
+            asset_id: asset,
+            accepted_at_ms: now,
+            task_status: "QUEUED".into(),
+            error_code: None,
+            image_digest: None,
         })
     }
 
@@ -268,7 +283,7 @@ impl ColorApplyService {
                 workspace
                     .connection
                     .query_row(
-                        &format!("{SELECT_OPERATION} AND task_id=?2"),
+                        &format!("{SELECT_OPERATION} AND f.task_id=?2"),
                         params![KIND, task.to_string()],
                         StoredOperation::read,
                     )
@@ -277,6 +292,55 @@ impl ColorApplyService {
                     .ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
             })?
             .receipt()
+    }
+
+    pub fn pending_operations(&self, session: Uuid) -> Result<Vec<Uuid>, ColorApplyError> {
+        Ok(self.owner.workspace_action(session, |workspace| {
+            let mut query = workspace.connection.prepare(
+                "SELECT operation_id FROM file_operations WHERE operation_kind=?1 AND status='PREPARED'
+                 ORDER BY created_at_ms,operation_id",
+            ).map_err(database)?;
+            let rows = query.query_map([KIND], |row|row_uuid(row,0)).map_err(database)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(database)
+        })?)
+    }
+
+    pub fn queue_resume(
+        &self,
+        session: Uuid,
+        operation: Uuid,
+        now: i64,
+    ) -> Result<(), ColorApplyError> {
+        self.owner.workspace_action(session,move |workspace| {
+            workspace.connection.execute(
+                "UPDATE tasks SET status='QUEUED',error_code=NULL,finished_at_ms=NULL,updated_at_ms=?3,row_revision=row_revision+1
+                 WHERE task_id=(SELECT task_id FROM file_operations WHERE operation_id=?1
+                     AND operation_kind=?2 AND status='PREPARED') AND status='INTERRUPTED'",
+                params![operation.to_string(),KIND,now],
+            ).map_err(database)?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    pub fn mark_resume_required(
+        &self,
+        session: Uuid,
+        operation: Uuid,
+        now: i64,
+    ) -> Result<(), ColorApplyError> {
+        let _guard = self.owner.lock_final_operations()?;
+        self.owner.workspace_action(session,move |workspace| {
+            workspace.connection.execute(
+                "UPDATE tasks SET status='INTERRUPTED',error_code='COLOR_APPLY_RESUME_REQUIRED',
+                    finished_at_ms=?3,updated_at_ms=?3,row_revision=row_revision+1
+                 WHERE task_id=(SELECT task_id FROM file_operations WHERE operation_id=?1
+                     AND operation_kind=?2 AND status='PREPARED') AND status IN ('QUEUED','RUNNING')",
+                params![operation.to_string(),KIND,now],
+            ).map_err(database)?;
+            Ok(())
+        })?;
+        Ok(())
     }
 
     pub fn resume(
@@ -291,7 +355,7 @@ impl ColorApplyService {
             workspace
                 .connection
                 .query_row(
-                    &format!("{SELECT_OPERATION} AND operation_id=?2"),
+                    &format!("{SELECT_OPERATION} AND f.operation_id=?2"),
                     params![KIND, operation.to_string()],
                     StoredOperation::read,
                 )
@@ -353,14 +417,7 @@ impl ColorApplyService {
                 MAX_IMAGE_BYTES,
             )?;
         self.record(session, record, manifest, committed, now)?;
-        Ok(ColorApplyOperation {
-            state: if committed {
-                ColorApplyState::Committed
-            } else {
-                ColorApplyState::Conflict
-            },
-            ..receipt
-        })
+        self.snapshot(session, task)
     }
 
     fn target(
@@ -441,6 +498,10 @@ impl StoredOperation {
             path: row.get(5)?,
             sha256: row.get(6)?,
             fingerprint: row.get(7)?,
+            accepted_at: row.get(8)?,
+            task_status: row.get(9)?,
+            error_code: row.get(10)?,
+            image_digest: row.get(11)?,
         })
     }
 
@@ -451,10 +512,24 @@ impl StoredOperation {
             "CONFLICT" => ColorApplyState::Conflict,
             _ => return Err(ColorApplyError::ResultUnconfirmed),
         };
+        if state == ColorApplyState::Committed
+            && self
+                .image_digest
+                .as_deref()
+                .and_then(crate::task_store::parse_digest)
+                .is_none()
+        {
+            return Err(ColorApplyError::ResultUnconfirmed);
+        }
         Ok(ColorApplyOperation {
             operation_id: self.id,
             task_id: self.task,
             state,
+            asset_id: self.asset,
+            accepted_at_ms: self.accepted_at,
+            task_status: self.task_status.clone(),
+            error_code: self.error_code.clone(),
+            image_digest: self.image_digest.clone(),
         })
     }
 }

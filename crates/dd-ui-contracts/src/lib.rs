@@ -1,6 +1,7 @@
 //! Tauri message contracts shared with the desktop frontend.
 
 pub mod annotation;
+pub mod color;
 pub mod dataset;
 pub mod dataset_export;
 pub mod dataset_import;
@@ -203,6 +204,14 @@ pub fn wire_primitives_typescript() -> String {
         dataset_import::ImportFilePreview::decl(&config),
         dataset_import::DatasetImportPreview::decl(&config),
         dataset_import::DatasetImportRegistration::decl(&config),
+        color::ColorMethod::decl(&config),
+        color::ColorRegion::decl(&config),
+        color::ColorHueGate::decl(&config),
+        color::ColorOptions::decl(&config),
+        color::ColorPreviewSubmitRequest::decl(&config),
+        color::ColorApplySubmitRequest::decl(&config),
+        color::ColorPreviewView::decl(&config),
+        color::ColorApplyView::decl(&config),
         dataset_import::ImportTaskView::decl(&config),
         dataset_import::GeometrySubmitRequest::decl(&config),
         video::VideoImportRequest::decl(&config),

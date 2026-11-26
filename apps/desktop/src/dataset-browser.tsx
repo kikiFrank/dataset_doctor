@@ -4,6 +4,7 @@ import { DatasetExportPanel } from "./dataset-export-panel";
 import { GeometryCheckPanel } from "./geometry-check-panel";
 import type { GeometryEvidence } from "./geometry-check-panel";
 import { ReviewPanel } from "./review-panel";
+import { ColorRepairPanel } from "./color-repair-panel";
 import { StagingPanel } from "./staging-panel";
 import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary, DisplayLocator } from "./api/generated/wire-primitives";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
@@ -163,6 +164,12 @@ function AnnotationDetails({ workspace, asset, reviewBlocked, onReviewBlocked, o
   const [view, setView] = useState<AnnotationView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshAnnotation = useCallback(() => { setRefresh((value) => value + 1); onChanged(); }, [onChanged]);
+  const [reviewEditing, setReviewEditing] = useState(false);
+  const [colorApplying, setColorApplying] = useState(false);
+  useEffect(() => {
+    onReviewBlocked(reviewEditing || colorApplying);
+    return () => onReviewBlocked(false);
+  }, [reviewEditing, colorApplying, onReviewBlocked]);
   useEffect(() => {
     let current = true;
     setMedia(null);
@@ -202,10 +209,13 @@ function AnnotationDetails({ workspace, asset, reviewBlocked, onReviewBlocked, o
       {!view && !error && <p role="status">正在读取标注…</p>}
       {view && <p>{annotationLabels[view.annotation_state]}{view.active_review ? " · 审核进行中" : ""}</p>}
       {view && !document && <p>此样本没有标注文件。</p>}
-      <GeometryCheckPanel workspace={workspace} asset={asset} onEvidence={setEvidence} />
+      <GeometryCheckPanel workspace={workspace} asset={asset} onEvidence={setEvidence} disabled={colorApplying} />
       {view && <ReviewPanel workspace={workspace} asset={asset} annotation={view} media={imageError ? null : media}
-        evidence={evidence} onBlocked={onReviewBlocked} onImageError={markImageError}
+        evidence={evidence} onBlocked={setReviewEditing} onImageError={markImageError} externalBlocked={colorApplying}
         onChanged={refreshAnnotation} />}
+      {view && <ColorRepairPanel workspace={workspace} asset={asset} annotation={view} media={imageError ? null : media}
+        evidence={evidence} editing={reviewEditing} onBusy={setColorApplying}
+        onChanged={refreshAnnotation} onImageError={markImageError} />}
       {document && (
         <>
           <p>标注尺寸 {document.images[0].width} × {document.images[0].height} 像素</p>

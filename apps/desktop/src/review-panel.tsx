@@ -23,7 +23,7 @@ type Editor = {
 
 const coordinateNames = ["X", "Y", "宽", "高"];
 
-export function ReviewPanel({ workspace, asset, annotation, media, evidence, onBlocked, onChanged, onImageError }: {
+export function ReviewPanel({ workspace, asset, annotation, media, evidence, onBlocked, onChanged, onImageError, externalBlocked }: {
   workspace: OpenWorkspace;
   asset: AssetSummary;
   annotation: AnnotationView;
@@ -32,6 +32,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   onBlocked: (blocked: boolean) => void;
   onChanged: () => void;
   onImageError: () => void;
+  externalBlocked: boolean;
 }) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -45,7 +46,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   const [queryRetry, setQueryRetry] = useState(0);
   const dirty = editor !== null && editor.boxes !== editor.savedBoxes;
   const blocked = dirty || busy || commitTask !== null;
-  const editingLocked = busy || approval !== null;
+  const editingLocked = busy || approval !== null || externalBlocked;
 
   useEffect(() => {
     onBlocked(blocked);
@@ -92,6 +93,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   const candidates = annotation.tracking_candidates;
 
   async function begin() {
+    if (externalBlocked) return;
     setBusy(true);
     setNotice(null);
     setError(null);
@@ -175,7 +177,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   }
 
   async function commit() {
-    if (!editor?.receipt || dirty || busy || commitTask) return;
+    if (!editor?.receipt || dirty || busy || commitTask || externalBlocked) return;
     const empty = editor.boxes.length === 0;
     if (empty && !negative && !approval) return;
     const decision = approval ?? { key: crypto.randomUUID(), negative: empty && negative };
@@ -232,7 +234,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
           </tr>;
         })}</tbody>
       </table>}
-      {!editor && <button type="button" disabled={busy || (!currentEvidence && !annotation.active_review)} onClick={() => void begin()}>
+      {!editor && <button type="button" disabled={externalBlocked || busy || (!currentEvidence && !annotation.active_review)} onClick={() => void begin()}>
         {annotation.active_review ? "继续审核" : "开始审核"}
       </button>}
       {!editor && !currentEvidence && !annotation.active_review && <p>先运行标注检查，再审核或编辑标注。</p>}
@@ -297,7 +299,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
                 onChange={(event) => setNegative(event.target.checked)} /> 确认这张图是负样本</label>
             )}
             {editor.receipt && !dirty && <button type="button"
-              disabled={busy || commitTask !== null || (!approval && editor.boxes.length === 0 && !negative)}
+              disabled={externalBlocked || busy || commitTask !== null || (!approval && editor.boxes.length === 0 && !negative)}
               onClick={() => void commit()}>{approval && !commitTask ? "重试提交" : "确认并写入 Final"}</button>}
           </div>
           {dirty && <p role="status">有未保存的修改。请保存草稿或放弃修改后切换样本或关闭工作区。</p>}
@@ -306,7 +308,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
       {canCancel && !confirmCancel && <button type="button" disabled={editingLocked} onClick={() => setConfirmCancel(true)}>取消审核</button>}
       {confirmCancel && <div className="review-actions">
         <p>取消审核会丢弃当前草稿，保留正式标注。</p>
-        <button type="button" disabled={busy} onClick={() => void cancel()}>丢弃审核草稿</button>
+        <button type="button" disabled={externalBlocked || busy} onClick={() => void cancel()}>丢弃审核草稿</button>
         <button type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>继续审核</button>
       </div>}
       {error && <p role="alert">{error}</p>}

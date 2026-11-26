@@ -111,6 +111,8 @@ impl Commands {
             .map(|bundle| self.video_tracking_view(bundle))
             .transpose()?;
         Ok(ImportTaskView {
+            color_preview: None,
+            color_apply: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::VideoTrack,
             status: snapshot.status,

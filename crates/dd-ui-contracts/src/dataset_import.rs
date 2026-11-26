@@ -48,6 +48,8 @@ pub enum ImportOperationKind {
     VideoSample,
     VideoTrack,
     StagingCommit,
+    ColorPreview,
+    ColorApply,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -109,6 +111,12 @@ pub struct ImportTaskView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub staging_commit: Option<crate::staging::StagingCommitView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color_preview: Option<crate::color::ColorPreviewView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color_apply: Option<crate::color::ColorApplyView>,
 }
 
 #[derive(Deserialize, TS)]

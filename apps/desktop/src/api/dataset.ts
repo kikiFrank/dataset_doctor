@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DatasetDetail, DatasetGetRequest } from "./generated/wire-primitives";
 
-import type { AnnotationGetRequest, AnnotationView, AssetListRequest, AssetPage, DatasetListRequest, DatasetPage, DisplayLocator, MediaGetLocatorRequest } from "./generated/wire-primitives";
+import type { AnnotationGetRequest, AnnotationView, ArtifactReference, AssetListRequest, AssetPage, DatasetListRequest, DatasetPage, DisplayLocator, MediaGetLocatorRequest } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
 
@@ -34,6 +34,17 @@ export function getAnnotation(workspace: OpenWorkspace, assetId: string): Promis
 export function getDisplayLocator(workspace: OpenWorkspace, assetId: string): Promise<DisplayLocator> {
   const request: MediaGetLocatorRequest = {
     context: context(workspace, crypto.randomUUID()), asset_id: assetId, purpose: "DISPLAY",
+  };
+  return invoke("media_get_locator", { request });
+}
+
+export function getTaskImageLocator(
+  workspace: OpenWorkspace, reference: ArtifactReference,
+): Promise<DisplayLocator> {
+  if (reference.owner.kind !== "TASK") throw new Error("图像产物归属无效。");
+  const request: MediaGetLocatorRequest = {
+    context: context(workspace, crypto.randomUUID()), purpose: "DISPLAY",
+    artifact_id: reference.artifact_id, owner_task_id: reference.owner.id,
   };
   return invoke("media_get_locator", { request });
 }

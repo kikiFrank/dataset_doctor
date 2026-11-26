@@ -12,10 +12,11 @@ const errorMessages: Record<string, string> = {
 
 export type GeometryEvidence = { taskId: string; report: GeometryReportView };
 
-export function GeometryCheckPanel({ workspace, asset, onEvidence }: {
+export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = false }: {
   workspace: OpenWorkspace;
   asset: AssetSummary;
   onEvidence: (evidence: GeometryEvidence | null) => void;
+  disabled?: boolean;
 }) {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [report, setReport] = useState<GeometryReportView | null>(null);
@@ -54,7 +55,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence }: {
   }, [workspace, taskId, retryQuery, onEvidence]);
 
   async function submit() {
-    if (submitting || taskId) return;
+    if (disabled || submitting || taskId) return;
     key.current ??= crypto.randomUUID();
     setSubmitting(true);
     setError(null);
@@ -73,7 +74,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence }: {
 
   return (
     <section aria-label="标注几何检查">
-      <button type="button" disabled={submitting || taskId !== null || asset.availability === "OFFLINE"} onClick={() => void submit()}>
+      <button type="button" disabled={disabled || submitting || taskId !== null || asset.availability === "OFFLINE"} onClick={() => void submit()}>
         运行标注检查
       </button>
       {(submitting || taskId) && !error && <p role="status">正在检查图像和标注…</p>}

@@ -112,7 +112,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE" | "VIDEO_TRACK" | "STAGING_COMMIT";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE" | "VIDEO_TRACK" | "STAGING_COMMIT" | "COLOR_PREVIEW" | "COLOR_APPLY";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -122,7 +122,23 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, video_tracking?: VideoTrackingView, staging_commit?: StagingCommitView, };
+export type ColorMethod = "HUE_REMAP" | "SOLID_FILL";
+
+export type ColorRegion = { "kind": "RECT", bbox_xywh: [number, number, number, number], } | { "kind": "POLYGON", points_xy: Array<[number, number]>, };
+
+export type ColorHueGate = { hue_min_deg: number, hue_max_deg: number, wraps_zero: boolean, };
+
+export type ColorOptions = { method: ColorMethod, target_rgb: [number, number, number], strength?: number, feather_px?: number, source_color_gate?: ColorHueGate, };
+
+export type ColorPreviewSubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, base_image_digest: string, region: ColorRegion, operation: ColorOptions, };
+
+export type ColorApplySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, base_image_digest: string, expected_asset_revision: DecimalU64, candidate_ref: ArtifactReference, };
+
+export type ColorPreviewView = { dataset_id: UuidText, asset_id: UuidText, asset_revision: DecimalU64, base_image_digest: string, candidate_ref: ArtifactReference, mask_ref: ArtifactReference, changed_pixels: DecimalU64, lossy_reencode: boolean, region: ColorRegion, operation: ColorOptions, };
+
+export type ColorApplyView = { operation_id: UuidText, asset_id: UuidText, image_digest: string, };
+
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, video_tracking?: VideoTrackingView, staging_commit?: StagingCommitView, color_preview?: ColorPreviewView, color_apply?: ColorApplyView, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 

@@ -260,8 +260,10 @@ FrameRef 结构见视频章节。video_resolve_frame 响应是明确的判别联
 | task_get / task_list | task_id / filters、cursor | TaskSnapshot / Page | 包含当前 attempt、错误、结果引用、恢复能力 |
 | task_cancel | task_id、reason? | CancellationReceipt | 返回 requested=true 不等于已经停止 |
 | task_retry | task_id、expected_task_revision、mode=RETRY/RESUME_IF_AVAILABLE | OperationRef | 仅安全失败/中断任务；相同输入重试换 attempt；输入变更须新任务 |
-| repair_color_preview | asset_id、region、color_operation、parameters、base_image_digest | 异步 | 输出候选图片和操作掩膜；不改正式图像 |
-| repair_color_apply | candidate_artifact_id、asset_id、base_image_digest、expected_asset_revision | 异步 | 用户批准后 Core 应用；图像摘要变化触发相关检查/审核过期 |
+| repair_color_preview | dataset_id、asset_id、region、operation、base_image_digest | 异步 | 输出候选图片、操作掩膜和冻结参数 |
+| repair_color_apply | candidate_ref、dataset_id、asset_id、base_image_digest、expected_asset_revision | 异步 | 用户批准后 Core 应用，图像摘要变化使相关检查与审核过期 |
+
+可从 `task_get.color_preview` 读取候选、掩膜、修订和实际改动像素数，以归属 Task 的 Artifact ID 获取临时图像显示定位符。`task_get.color_apply` 返回成功应用后的图像摘要；未完成的已批准发布在重开 Workspace 时恢复。
 | report_get | report_id 或 workflow_run_id/task_id | ReportSummary + ArtifactRef | 展示未执行项、范围、模型/规则来源、问题与修复后的复检 |
 | report_export_submit | report_ref、format=JSON/MARKDOWN、destination_grant_id | 异步 | 导出完整报告与必要引用；不导出密钥、临时授权 |
 | dataset_export_submit | dataset_id、format=COCO_DETECTION、destination_grant_id、selection、export_policy | 异步 | 仅正式成员与当前可导出 Final；聚合 COCO 并重建整数 ID；未确认条目默认阻止或由明确选择排除 |
