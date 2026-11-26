@@ -13,11 +13,11 @@ $python = (Resolve-Path -LiteralPath $PythonExe).Path
 $run = New-Item -ItemType Directory -Force (Join-Path $repo ('target/p08/video-decoder/' + [guid]::NewGuid().ToString('N')))
 $env:DD_TEST_VIDEO_RUN = $run.FullName
 $log = Join-Path $run.FullName 'check.log'
-$fixture = Join-Path $repo 'tests/worker/video/test_video_decoder.py'
+$fixtures = Join-Path $repo 'tests/worker/video'
 Write-Host "Windows video decoder evidence: $log"
 
 $ErrorActionPreference = 'Continue'
-& $python -I -B $fixture *> $log
+& $python -I -B -m unittest discover -s $fixtures -p 'test_video_*.py' -v *> $log
 $code = $LASTEXITCODE
 Get-Content -LiteralPath $log
 Add-Content -LiteralPath $log -Value "exit_code=$code"
