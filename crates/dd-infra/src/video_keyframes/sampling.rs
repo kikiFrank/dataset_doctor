@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use dd_domain::video::{FrameRange, FrameRef, SamplePurpose, SamplingMode};
+use dd_domain::video::{FrameRange, FrameRef, SamplePurpose, SamplingMode, SourceStream};
 use uuid::Uuid;
 
 use super::{VideoAnnotationError, VideoAnnotationService};
@@ -41,6 +41,7 @@ pub struct ResolvedVideoSampling {
     pub request: VideoSamplingRequest,
     pub segment_revision: u64,
     pub range: FrameRange,
+    pub source: SourceStream,
     pub label_schema_digest: String,
     pub video_annotation_manifest_ref: VideoArtifactReference,
     pub frames: Vec<FrameRef>,
@@ -154,6 +155,7 @@ impl VideoAnnotationService {
             request,
             segment_revision,
             range,
+            source: index.source(),
             label_schema_digest,
             video_annotation_manifest_ref: reference,
             frames,

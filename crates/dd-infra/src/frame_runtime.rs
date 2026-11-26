@@ -63,6 +63,7 @@ impl FrameResolveJob {
 
 pub struct FrameTaskSnapshot {
     pub task_id: Uuid,
+    pub attempt_id: Option<Uuid>,
     pub accepted_at_ms: i64,
     pub status: String,
     pub error_code: Option<String>,
@@ -222,6 +223,7 @@ impl FrameService {
         Ok((
             FrameTaskSnapshot {
                 task_id: task.task_id,
+                attempt_id: None,
                 accepted_at_ms: task.created_at_ms,
                 status: task.status,
                 error_code: None,
@@ -319,6 +321,7 @@ impl FrameService {
         };
         Ok(FrameTaskSnapshot {
             task_id: task,
+            attempt_id: loaded.attempt,
             accepted_at_ms: loaded.created_at_ms,
             status: loaded.status,
             error_code: loaded.error_code,

@@ -162,6 +162,10 @@ impl FrameIndex {
         Ok(Self { source, frames })
     }
 
+    pub fn source(&self) -> SourceStream {
+        self.source
+    }
+
     pub fn resolve_index(
         &self,
         current_digest: [u8; 32],

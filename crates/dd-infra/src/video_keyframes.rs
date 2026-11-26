@@ -30,10 +30,12 @@ use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 mod sampling;
 mod segments;
+mod staging;
 pub use sampling::{
     ResolvedVideoSampling, VideoSamplingMode, VideoSamplingPurpose, VideoSamplingRequest,
 };
 pub use segments::{SegmentReceipt, SegmentRequest};
+pub use staging::StagedVideoSample;
 
 #[derive(Clone)]
 pub struct KeyframeDraftRequest {
