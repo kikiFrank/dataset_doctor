@@ -33,6 +33,7 @@ pub mod sqlite;
 pub mod task_store;
 #[cfg(feature = "execution-rpc")]
 pub mod video_index;
+pub mod video_registration;
 #[cfg(feature = "execution-rpc")]
 pub mod worker_process;
 pub mod workflow_store;

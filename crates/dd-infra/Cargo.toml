@@ -75,6 +75,10 @@ name = "video_file_grants"
 path = "../../tests/storage/workspace/video_file_grants.rs"
 
 [[test]]
+name = "video_registration"
+path = "../../tests/storage/workspace/video_registration.rs"
+
+[[test]]
 name = "workspace_thread"
 path = "../../tests/storage/workspace/thread.rs"
 

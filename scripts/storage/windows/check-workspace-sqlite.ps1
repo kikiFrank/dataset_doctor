@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'VideoRegistration', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,6 +75,7 @@ switch ($Suite) {
     'WorkspaceOpen' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_open') }
     'WorkspaceAccess' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_access') }
     'VideoFileGrants' { $cargoArgs += @('-p', 'dd-infra', '--test', 'video_file_grants') }
+    'VideoRegistration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'video_registration') }
     'WorkspaceThread' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_thread') }
     'WorkspaceCreate' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_create') }
     'ImportPreflight' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_preflight') }
