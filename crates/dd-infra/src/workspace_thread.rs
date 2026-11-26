@@ -377,7 +377,6 @@ impl WorkspaceThread {
         self.task(session, move |workspace| workspace.task_outcome(task))
     }
 
-    #[cfg(feature = "execution-rpc")]
     pub(crate) fn storage_root(&self, session: Uuid) -> Result<PathBuf, WorkspaceThreadError> {
         self.workspace_action(session, |workspace| Ok(workspace.root().to_owned()))
     }

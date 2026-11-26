@@ -106,3 +106,10 @@ button:disabled { opacity: 0.58; cursor: wait; }
 }
 .annotation-details { margin-top: 22px; border-top: 1px solid #d5dee9; }
 .sample-image { display: block; max-width: 100%; max-height: 440px; object-fit: contain; margin-top: 14px; }
+.dataset-import { padding: 14px; margin-bottom: 16px; border: 1px solid #d5dee9; border-radius: 8px; background: #fff; }
+.dataset-import h3 { margin: 0 0 12px; }
+.dataset-import input { margin: 0 8px; padding: 8px; border: 1px solid #d5dee9; border-radius: 6px; }
+.dataset-import button { margin-right: 8px; }
+.import-path { overflow-wrap: anywhere; }
+.import-preview { max-height: 240px; overflow: auto; padding-left: 20px; }
+.import-preview small { margin-left: 12px; opacity: 0.8; }

@@ -2,6 +2,7 @@
 
 pub mod annotation;
 pub mod dataset;
+pub mod dataset_import;
 pub mod workspace;
 
 use std::fmt::Display;
@@ -140,6 +141,16 @@ pub fn wire_primitives_typescript() -> String {
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),
         dataset::AssetPage::decl(&config),
+        dataset_import::ImportFormat::decl(&config),
+        dataset_import::DatasetImportInspectRequest::decl(&config),
+        dataset_import::DatasetImportExternalRequest::decl(&config),
+        dataset_import::TaskGetRequest::decl(&config),
+        dataset_import::ImportOperationKind::decl(&config),
+        dataset_import::ImportOperationRef::decl(&config),
+        dataset_import::ImportFilePreview::decl(&config),
+        dataset_import::DatasetImportPreview::decl(&config),
+        dataset_import::DatasetImportRegistration::decl(&config),
+        dataset_import::ImportTaskView::decl(&config),
         annotation::CocoImage::decl(&config),
         annotation::CocoBox::decl(&config),
         annotation::CocoCategory::decl(&config),

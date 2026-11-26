@@ -64,6 +64,7 @@
 | P02/P05 Dataset 与 Asset 桌面命令和列表 | `41803e4`。Windows 宿主命令 2 项通过，覆盖分页、会话范围和参数错误。列表读取确认的正负样本并复核实际内容摘要，外部编辑后显示 STALE。红测 `target/desktop-commands/runs/5c1c462fcf0242d0970f526301e073d2/check.log`，绿测 `target/desktop-commands/runs/ffadebf9a28c44ae913f179f8edf4a66/check.log`。Rust/TS 生成漂移及 2+22 项测试在 `target/contract-check/ui-wire/93e8c20e81284f5497a373f7ee35a8f4/check.log` 通过。累计存储 `target/p01-04/logs/5cf0c8ae1f98481c8ba14463167c26a7.log`、COCO 与跨进程 11 项 `target/contract-check/worker-rpc/b1350f910a3346d194fbf665d2004e04/check.log` 通过。锁定离线桌面构建 `target/dev/logs/desktop-browse-build.log` 通过。GUI 未启动，实际页面交互留待桌面可用时验证。 |
 | P02 目录导入发现 | `9f7b48f`。`-Suite ImportPlan` 4 项通过，覆盖嵌套 JPEG/PNG 排序、单次目录授权、空目录和超过 1000 张图片、真实 Windows junction 拒绝。沿用原预检和确认接口，发现文件不登记 Dataset。红测 `target/p01-04/logs/2c2d916e6e5847768ab710239c92a2fc.log`，累计绿测 `target/p01-04/logs/668941ef20874b95a4b432c3447f7c7b.log`，跨进程和 COCO 11 项 `target/contract-check/worker-rpc/d5335dcc96ce4054a038543d11a9f261/check.log`。发现过程增加 100000 个目录项的资源上限。 |
 | P02/P05 样本标注读取与图像显示授权 | `da95412`。新增 `-Suite AnnotationView` 和 `-Suite MediaDisplay`。合成 SQLite 验证无 JSON 不生成正文、空 JSON 未审核、正负 Final、当前审核、图片或 JSON 外部变更、坏 JSON、旧会话拒绝；授权验证精确字节、到期、未知定位符和重开失效。红测 `target/p01-04/logs/9a334b0f538f4ddf821669d81b8fe609.log`、`target/p01-04/logs/defce4ef60444b189c7fea9c20cd775d.log`，累计绿测 `target/p01-04/logs/e31c4d6b8e414b36b86fdc0b020cd608.log`。宿主命令经真实 SQLite 和图像字节验证 Tauri 协议响应、关闭后拒绝，红测 `target/desktop-commands/runs/8ff67ff504f6401a88eb3074e9debaef/check.log`，绿测 `target/desktop-commands/runs/df70c1669fd34a3e888acc4d0ea46fd1/check.log`。Rust/TS 漂移和 2+22 项 `target/contract-check/ui-wire/aebc6b5fa8e344b9a951a425acce3052/check.log`、跨进程和 COCO 11 项 `target/contract-check/worker-rpc/ed6fa3b100f04e3e98ddd4a05f0a8a7e/check.log` 通过。离线构建 `target/dev/logs/desktop-sample-build.log` 通过。新增页面和 dd-media 协议在 WebView2 内的真实加载尚未执行。 |
+| P02/P05 持久化导入与桌面入口 | 本页所在提交。Windows 预检与确认通过后台 Task 受理，可按 ID 查询，响应丢失后同键返回原回执。Dataset、Asset 与 Task 成功同事务提交，故障触发器验证回滚，源变化拒绝旧授权，重开停用旧预览和未完成任务。核心红测 `target/p01-04/logs/11eb821b58af4cdeab0854a498e18e7c.log` 和 `target/p01-04/logs/c9e2099361a54a818ac7e23dbcd1cfed.log`，专项 8 项和累计存储 `target/p01-04/logs/ee02e46c39c24d438b888fd2e8d24186.log` 通过。桌面宿主红绿证据 `target/desktop-commands/runs/7e4b7f8b1625405b85ea19db37ebcda3/check.log`、`target/desktop-commands/runs/5d3eea33d3924d8ebfe660233da23d9c/check.log`，实际后台导入和累计 3 项通过。Rust/TypeScript 2+22 项 `target/contract-check/ui-wire/3f1b0f26d15041229c22e90c96ea7395/check.log`、跨进程与 COCO 11 项 `target/contract-check/worker-rpc/bef5c1e5f7e94156936b7ea5658522ba/check.log` 和离线构建 `target/dev/logs/desktop-import-build.log` 通过。桌面支持新 Dataset 的 JPEG/PNG 和逐图 COCO bbox 原地引用。实际 WebView2 导入交互仍待验证。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -72,15 +73,13 @@
 
 - Windows 桌面壳已本机启动。最终生产依赖、随包 Worker 和干净系统安装验收仍待 P04/P10。Windows 以外的产品还没有本轮实测。
 - P01 还需首切片命令 DTO、专用 StartX 和 Core 执行契约、三语言完整 G-CONTRACT 及统一开发入口。旧发布库升级验收等待实际发布基线。
-- P06 已在命令行跑通合成业务链和目标读取器。Dataset/Asset 分页及只读样本图像和标注入口已接通。下一步补持久化异步导入操作和 Tauri 预览确认，再接实际检查、审核画布与导出操作。完整 Windows 桌面闭环仍待验收。
+- P06 已在命令行跑通合成业务链和目标读取器。Dataset/Asset 分页、只读样本和持久化异步导入已接到 Tauri。下一步接实际检查、审核画布与导出操作。完整 Windows 桌面闭环仍待验收。
 - 用户正在使用桌面。已关闭验收窗口，暂不启动新的桌面窗口，继续命令行开发及验收。
 
 累计存储测试曾因并发执行同一 target 下的测试和重链接而报 Windows LNK1104，日志 target/p01-04/logs/255c8d03e4c1499ba334c424ade93f94.log。等待原测试进程退出后重跑通过。后续对同一 Cargo target 的测试编译与执行按轮顺序运行。
 
 ## 本轮接续检查点
 
-- 最后通过代码提交为 `da95412`，当前分支 `dot/mvp1-foundation`。本轮未运行新增页面的 WebView2 测试，用户正在使用桌面。
-- 当前 exe 为 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`。构建命令仍为 README 的离线 `build-desktop.ps1`，最近日志 `target/dev/logs/desktop-sample-build.log`。
-- 下一条可执行任务是为异步导入写红测。先验证同一幂等键仅登记一个 Task 和 Dataset，源变更拒绝旧计划，提交后响应丢失及重开能查询原回执。当前 `DatasetImportCoordinator` 的确认和回执仍在会话内存，需复用既有 `tasks` 和 `WorkspaceThread`，让 Dataset 登记与 Task 成功状态在同一 SQLite 事务完成。
-- 随后接入 Tauri 导入预览确认、真实检查与任务查询、审核画布和导出。桌面释放后，从真实入口补图像协议、坐标与完整链路验收。P07–P10 继续按原依赖和批准范围推进。
-- 本轮因上下文预算保存检查点。没有遗留运行中的测试或未提交工作，完整 MVP 未完成。
+- 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
+- 目录预检和导入确认已接入真实 Tauri 命令。前端可轮询任务并刷新数据集列表。下一项先为图像检查的异步入队写红测，在 Worker 启动前可查询任务，复用已验收的 Core 授权和独立 Python 进程。
+- 随后接实际 Worker 检查、审核画布与导出页面。桌面释放后，验证新页面的图像协议、坐标与完整链路。P07–P10 仍待按原依赖完成。

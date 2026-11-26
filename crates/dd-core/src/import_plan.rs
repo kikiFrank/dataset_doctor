@@ -55,6 +55,26 @@ impl<P, R> Default for ImportApprovalBook<P, R> {
 }
 
 impl<P: Clone, R: Clone> ImportApprovalBook<P, R> {
+    pub fn preview(
+        &self,
+        session: Uuid,
+        plan_id: Uuid,
+        fingerprint: [u8; 32],
+    ) -> Result<P, ImportApprovalError> {
+        let plan = self
+            .plans
+            .get(&plan_id)
+            .filter(|plan| plan.session == session)
+            .ok_or(ImportApprovalError::UnknownPlan)?;
+        if plan.fingerprint != fingerprint {
+            return Err(ImportApprovalError::FingerprintMismatch);
+        }
+        match &plan.state {
+            State::Previewed(preview) => Ok(preview.clone()),
+            State::Applying | State::Completed(_) => Err(ImportApprovalError::Busy),
+        }
+    }
+
     pub fn remember(&mut self, session: Uuid, fingerprint: [u8; 32], preview: P) -> Uuid {
         self.plans.retain(|_, plan| plan.session == session);
         let plan_id = Uuid::new_v4();

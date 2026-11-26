@@ -1,6 +1,5 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind};
-#[cfg(feature = "execution-rpc")]
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -64,7 +63,6 @@ pub(crate) fn open_registered_file(path: &Path) -> io::Result<File> {
     open_scoped_file(parent, Path::new(name))
 }
 
-#[cfg(feature = "execution-rpc")]
 pub(crate) fn scoped_directory(root: &Path, relative: &Path) -> io::Result<PathBuf> {
     if !is_portable_relative_file(relative) {
         return Err(io::Error::new(
@@ -90,7 +88,6 @@ pub(crate) fn scoped_directory(root: &Path, relative: &Path) -> io::Result<PathB
     Ok(directory)
 }
 
-#[cfg(feature = "execution-rpc")]
 pub(crate) fn publish_immutable(root: &Path, relative: &Path, bytes: &[u8]) -> io::Result<()> {
     if !is_portable_relative_file(relative) {
         return Err(io::Error::new(

@@ -6,9 +6,9 @@ use dd_infra::workspace::WorkspaceOpenError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::UuidText;
 use dd_ui_contracts::workspace::{
-    AppError, CloseReceipt, CloseState, CommandContext, PathGrant, PathSelectRequest,
-    WorkspaceCloseRequest, WorkspaceCreateRequest, WorkspaceGetRequest, WorkspaceOpenRequest,
-    WorkspaceSnapshot,
+    AppError, CloseReceipt, CloseState, CommandContext, PathAccess, PathGrant, PathPurpose,
+    PathSelectRequest, WorkspaceCloseRequest, WorkspaceCreateRequest, WorkspaceGetRequest,
+    WorkspaceOpenRequest, WorkspaceSnapshot,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -19,6 +19,7 @@ use crate::RuntimeMode;
 
 pub(crate) mod annotation;
 pub(crate) mod dataset;
+pub(crate) mod dataset_import;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
@@ -30,6 +31,10 @@ mod create_tests;
 #[path = "../../../../tests/desktop/host/dataset_browse.rs"]
 mod dataset_tests;
 
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/dataset_import.rs"]
+mod import_tests;
+
 #[tauri::command]
 pub async fn path_select(
     request: PathSelectRequest,
@@ -37,8 +42,23 @@ pub async fn path_select(
     thread: State<'_, Arc<WorkspaceThread>>,
     runtime: State<'_, RuntimeMode>,
 ) -> Result<Option<PathGrant>, AppError> {
-    let selected_fixture = runtime.smoke_workspace.clone();
+    let selected_fixture = if matches!(request.purpose, PathPurpose::Workspace) {
+        runtime.smoke_workspace.clone()
+    } else {
+        None
+    };
     run(thread, request.request_id, move |commands| {
+        match (&request.purpose, &request.access, &request.context) {
+            (PathPurpose::Workspace, PathAccess::ReadWrite, _) => {}
+            (PathPurpose::Import, PathAccess::Read, Some(context)) => {
+                commands.session(context.clone())?;
+            }
+            _ => {
+                return Err(
+                    commands.error("INVALID_ARGUMENT", "目录用途、访问级别或工作区会话无效。")
+                );
+            }
+        }
         let selection = if let Some(path) = selected_fixture {
             path
         } else {
@@ -48,6 +68,12 @@ pub async fn path_select(
             path.into_path()
                 .map_err(|_| commands.error("INVALID_ARGUMENT", "请选择本机目录。"))?
         };
+        if let PathPurpose::Import = request.purpose {
+            let context = request
+                .context
+                .ok_or_else(|| commands.error("INVALID_ARGUMENT", "请选择当前工作区。"))?;
+            return commands.import_directory(context, selection).map(Some);
+        }
         let root = selection
             .canonicalize()
             .map_err(|_| commands.error("PERMISSION_DENIED", "无法读取所选目录。"))?;

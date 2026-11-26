@@ -7,6 +7,7 @@ use crate::{DecimalU64, UuidText};
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PathPurpose {
     Workspace,
+    Import,
 }
 
 #[derive(Deserialize, TS)]
@@ -18,6 +19,7 @@ pub enum PathKind {
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PathAccess {
+    Read,
     ReadWrite,
 }
 
@@ -27,6 +29,9 @@ pub struct PathSelectRequest {
     pub purpose: PathPurpose,
     pub kind: PathKind,
     pub access: PathAccess,
+    #[serde(default)]
+    #[ts(optional)]
+    pub context: Option<CommandContext>,
 }
 
 #[derive(Serialize, TS)]
@@ -50,7 +55,7 @@ pub struct WorkspaceCreateRequest {
     pub display_name: String,
 }
 
-#[derive(Deserialize, TS)]
+#[derive(Clone, Deserialize, TS)]
 pub struct CommandContext {
     pub request_id: UuidText,
     pub workspace_id: UuidText,

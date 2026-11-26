@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::media_display::MediaDisplayService;
 use dd_infra::workspace_thread::WorkspaceThread;
 use serde::{Deserialize, Serialize};
@@ -107,6 +108,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         250,
         workspace_commands::GRANT_LIFETIME,
     )?);
+    let imports = Arc::new(
+        DatasetImportCoordinator::new(Arc::clone(&workspace))
+            .map_err(|error| std::io::Error::other(error.to_string()))?,
+    );
     let media = Arc::new(MediaDisplayService::new(
         Arc::clone(&workspace),
         workspace_commands::GRANT_LIFETIME,
@@ -119,6 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .plugin(tauri_plugin_dialog::init())
         .manage(workspace)
         .manage(media)
+        .manage(imports)
         .manage(RuntimeMode {
             smoke_root,
             smoke_workspace,
@@ -149,6 +155,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset::asset_list,
             workspace_commands::annotation::annotation_get,
             workspace_commands::annotation::media_get_locator,
+            workspace_commands::dataset_import::dataset_import_inspect,
+            workspace_commands::dataset_import::dataset_import_external,
+            workspace_commands::dataset_import::task_get,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

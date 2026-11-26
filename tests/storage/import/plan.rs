@@ -7,12 +7,289 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_core::import_plan::ImportApprovalError;
-use dd_infra::dataset_import::{DatasetImportCoordinator, DatasetImportError};
+use dd_infra::dataset_import::{
+    DatasetImportCoordinator, DatasetImportError, ImportConfirmation, ImportInspection,
+};
 use dd_infra::import_registration::ImportRegistrationError;
 use dd_infra::workspace_thread::WorkspaceThread;
 use rusqlite::{Connection, OpenFlags};
 
 const IMAGE: &[u8] = include_bytes!("../../../testdata/image_io/p00-worker-rgb.png");
+
+#[test]
+fn preflight_task_uses_one_grant_and_reports_a_read_only_preview_after_restart() {
+    use uuid::Uuid;
+    let root = support::workspace_root("import preflight task Workspace");
+    let source = support::workspace_root("import preflight task inputs");
+    let file = source.join("example.png");
+    fs::write(&file, IMAGE).unwrap();
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner
+        .create(grant.grant_id, "Inspection".into(), 1)
+        .unwrap()
+        .workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    let grant = owner.grant_import_directory(session, source).unwrap();
+    let request = ImportInspection {
+        directory_grant_id: grant.grant_id,
+        dataset_name: "Proposed dataset".into(),
+        request_id: Uuid::new_v4(),
+        idempotency_key: Uuid::new_v4(),
+    };
+    let queued = imports
+        .submit_inspection(session, request.clone(), 2)
+        .unwrap();
+    assert_eq!(queued.status, "QUEUED");
+    assert!(queued.preview.is_none());
+    let completed = imports.run_inspection(session, request.clone(), 3).unwrap();
+    assert_eq!(completed.task_id, queued.task_id);
+    assert_eq!(completed.status, "SUCCEEDED");
+    let preview = completed.preview.as_ref().unwrap();
+    assert_eq!(preview.files.len(), 1);
+    assert_eq!(preview.files[0].image_path, "example.png");
+    assert_eq!(preview.files[0].annotation_state, "MISSING");
+    assert!(preview.can_confirm);
+    assert_eq!(
+        imports.run_inspection(session, request.clone(), 4).unwrap(),
+        completed
+    );
+    let mut conflict = request;
+    conflict.dataset_name = "Different".into();
+    assert!(imports.submit_inspection(session, conflict, 5).is_err());
+    assert!(
+        owner
+            .list_datasets(session, None, 10)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    assert_eq!(fs::read(&file).unwrap(), IMAGE);
+    owner.close(session).unwrap();
+    let grant = owner.grant_selected_directory(root).unwrap();
+    let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    let after = imports
+        .inspection_task(reopened, queued.task_id, 6)
+        .unwrap();
+    assert_eq!(after.status, "SUCCEEDED");
+    assert!(!after.preview.unwrap().can_confirm);
+    assert!(
+        owner
+            .list_datasets(reopened, None, 10)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    owner.close(reopened).unwrap();
+}
+
+#[test]
+fn import_task_is_deduplicated_and_its_committed_receipt_survives_reopen() {
+    use uuid::Uuid;
+    let root = support::workspace_root("durable import Workspace");
+    let source = support::workspace_root("durable import inputs");
+    fs::write(source.join("test.png"), IMAGE).unwrap();
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner
+        .create(grant.grant_id, "Durable import".into(), 1)
+        .unwrap()
+        .workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    let grant = owner
+        .grant_import_directory(session, source.clone())
+        .unwrap();
+    let plan = imports
+        .inspect_directory(session, grant.grant_id, "Inputs".into())
+        .unwrap();
+    let mut request = ImportConfirmation {
+        plan_id: plan.plan_id,
+        plan_fingerprint: plan.fingerprint,
+        request_id: Uuid::new_v4(),
+        idempotency_key: Uuid::new_v4(),
+    };
+    let queued = imports.submit_confirmation(session, request, 2).unwrap();
+    assert_eq!(queued.status, "QUEUED");
+    assert!(queued.registration.is_none());
+    assert!(
+        owner
+            .list_datasets(session, None, 10)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    request.request_id = Uuid::new_v4();
+    assert_eq!(
+        imports.submit_confirmation(session, request, 3).unwrap(),
+        queued
+    );
+    let mut other_key = request;
+    other_key.idempotency_key = Uuid::new_v4();
+    assert!(imports.submit_confirmation(session, other_key, 3).is_err());
+    let completed = imports.run_confirmation(session, request, 4).unwrap();
+    assert_eq!(completed.task_id, queued.task_id);
+    assert_eq!(completed.status, "SUCCEEDED");
+    assert_eq!(completed.registration.as_ref().unwrap().asset_count, 1);
+    // Simulate losing the response and recreating the application.
+    owner.close(session).unwrap();
+    drop(imports);
+    drop(owner);
+
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    assert!(
+        imports
+            .confirmation_task(session, queued.task_id, 5)
+            .is_err()
+    );
+    assert_eq!(
+        imports
+            .confirmation_task(reopened, queued.task_id, 5)
+            .unwrap(),
+        completed
+    );
+    request.request_id = Uuid::new_v4();
+    assert_eq!(
+        imports.run_confirmation(reopened, request, 6).unwrap(),
+        completed
+    );
+    request.plan_fingerprint = [0; 32];
+    assert!(imports.submit_confirmation(reopened, request, 7).is_err());
+    assert_eq!(
+        owner.list_datasets(reopened, None, 10).unwrap().items.len(),
+        1
+    );
+    owner.close(reopened).unwrap();
+    let db = Connection::open(root.join("workspace.db")).unwrap();
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE operation_kind='DATASET_IMPORT_EXTERNAL'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn failed_task_completion_rolls_back_dataset_and_asset_registration() {
+    use uuid::Uuid;
+    let root = support::workspace_root("rollback import Workspace");
+    let source = support::workspace_root("rollback import inputs");
+    fs::write(source.join("rollback.png"), IMAGE).unwrap();
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let opened = owner.create(grant.grant_id, "Rollback".into(), 1).unwrap();
+    owner.close(opened.workspace_session_id).unwrap();
+    {
+        let db = Connection::open(root.join("workspace.db")).unwrap();
+        db.execute_batch("CREATE TRIGGER reject_import_success BEFORE UPDATE OF status ON tasks
+          WHEN NEW.status='SUCCEEDED' BEGIN SELECT RAISE(ABORT, 'synthetic final update failure'); END;").unwrap();
+    }
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    let grant = owner.grant_import_directory(session, source).unwrap();
+    let plan = imports
+        .inspect_directory(session, grant.grant_id, "Rollback inputs".into())
+        .unwrap();
+    let request = ImportConfirmation {
+        plan_id: plan.plan_id,
+        plan_fingerprint: plan.fingerprint,
+        request_id: Uuid::new_v4(),
+        idempotency_key: Uuid::new_v4(),
+    };
+    let failed = imports.run_confirmation(session, request, 2).unwrap();
+    assert_eq!(failed.status, "FAILED");
+    assert_eq!(failed.error_code.as_deref(), Some("IMPORT_FAILED"));
+    assert!(failed.registration.is_none());
+    assert!(
+        owner
+            .list_datasets(session, None, 10)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    owner.close(session).unwrap();
+    let db = Connection::open(root.join("workspace.db")).unwrap();
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM assets", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT dataset_id FROM tasks WHERE task_id=?1",
+            [failed.task_id.to_string()],
+            |r| r.get::<_, Option<String>>(0)
+        )
+        .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn changed_sources_and_abandoned_pending_imports_cannot_register_a_dataset() {
+    use uuid::Uuid;
+    let root = support::workspace_root("interrupted import Workspace");
+    let source = support::workspace_root("interrupted import inputs");
+    let image = source.join("pending.png");
+    fs::write(&image, IMAGE).unwrap();
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner
+        .create(grant.grant_id, "Interrupted import".into(), 1)
+        .unwrap()
+        .workspace_session_id;
+    let imports = DatasetImportCoordinator::new(Arc::clone(&owner)).unwrap();
+    let preview = |name: &str| {
+        let grant = owner
+            .grant_import_directory(session, source.clone())
+            .unwrap();
+        let plan = imports
+            .inspect_directory(session, grant.grant_id, name.into())
+            .unwrap();
+        ImportConfirmation {
+            plan_id: plan.plan_id,
+            plan_fingerprint: plan.fingerprint,
+            request_id: Uuid::new_v4(),
+            idempotency_key: Uuid::new_v4(),
+        }
+    };
+    let changed = preview("Changed");
+    imports.submit_confirmation(session, changed, 2).unwrap();
+    fs::write(&image, b"changed bytes").unwrap();
+    let failure = imports.run_confirmation(session, changed, 3).unwrap();
+    assert_eq!(failure.status, "FAILED");
+    assert_eq!(failure.error_code.as_deref(), Some("INPUT_CHANGED"));
+    assert!(failure.registration.is_none());
+    fs::write(&image, IMAGE).unwrap();
+    let abandoned = preview("Abandoned");
+    let queued = imports.submit_confirmation(session, abandoned, 4).unwrap();
+    owner.close(session).unwrap();
+    let grant = owner.grant_selected_directory(root).unwrap();
+    let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let snapshot = imports
+        .confirmation_task(reopened, queued.task_id, 5)
+        .unwrap();
+    assert_eq!(snapshot.status, "INTERRUPTED");
+    assert_eq!(
+        imports.run_confirmation(reopened, abandoned, 6).unwrap(),
+        snapshot
+    );
+    assert!(
+        owner
+            .list_datasets(reopened, None, 10)
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    owner.close(reopened).unwrap();
+}
 
 #[test]
 fn discovery_rejects_empty_and_oversized_selections_without_registering_a_dataset() {

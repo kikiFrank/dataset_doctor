@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 use rusqlite::{Transaction, TransactionBehavior, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::import_preflight::{Annotation, ImportInput, ImportPreview, inspect_single_image_coco};
@@ -48,7 +48,7 @@ impl Error for ImportRegistrationError {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ImportRegistration {
     pub dataset_id: String,
     pub asset_count: usize,
@@ -151,28 +151,39 @@ impl OpenedWorkspace {
         prepared: PreparedImport,
         now_ms: i64,
     ) -> Result<ImportRegistration, ImportRegistrationError> {
-        let dataset_id = Uuid::new_v4().to_string();
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(ImportRegistrationError::Database)?;
-        transaction.execute(
-            "INSERT INTO datasets (dataset_id, name, categories_json, created_at_ms, updated_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![dataset_id, prepared.name, prepared.categories_json, now_ms],
-        ).map_err(ImportRegistrationError::Database)?;
-        let asset_count = prepared.assets.len();
-        for asset in prepared.assets {
-            register_asset(&transaction, &dataset_id, asset, now_ms)?;
-        }
+        let receipt = register_import(&transaction, prepared, now_ms)?;
         transaction
             .commit()
             .map_err(ImportRegistrationError::Database)?;
-        Ok(ImportRegistration {
-            dataset_id,
-            asset_count,
-        })
+        Ok(receipt)
     }
+}
+
+pub(crate) fn register_import(
+    transaction: &Transaction<'_>,
+    prepared: PreparedImport,
+    now_ms: i64,
+) -> Result<ImportRegistration, ImportRegistrationError> {
+    let dataset_id = Uuid::new_v4().to_string();
+    transaction
+        .execute(
+            "INSERT INTO datasets (dataset_id, name, categories_json, created_at_ms, updated_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![dataset_id, prepared.name, prepared.categories_json, now_ms],
+        )
+        .map_err(ImportRegistrationError::Database)?;
+    let asset_count = prepared.assets.len();
+    for asset in prepared.assets {
+        register_asset(transaction, &dataset_id, asset, now_ms)?;
+    }
+    Ok(ImportRegistration {
+        dataset_id,
+        asset_count,
+    })
 }
 
 fn prepare_asset(

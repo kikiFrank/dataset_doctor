@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { DatasetImportPanel } from "./dataset-import-panel";
 import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary } from "./api/generated/wire-primitives";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
 import { workspaceCommandError } from "./api/workspace";
@@ -17,6 +18,8 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
   const [selected, setSelected] = useState<DatasetSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const refreshDatasets = useCallback(() => setRefresh((value) => value + 1), []);
 
   useEffect(() => {
     let current = true;
@@ -26,7 +29,7 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
       if (current) setError(workspaceCommandError(failure));
     });
     return () => { current = false; };
-  }, [workspace]);
+  }, [workspace, refresh]);
 
   async function more() {
     if (!page?.next_cursor) return;
@@ -45,6 +48,7 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
   return (
     <section className="dataset-browser" aria-labelledby="dataset-heading">
       <h2 id="dataset-heading">数据集</h2>
+      <DatasetImportPanel workspace={workspace} onImported={refreshDatasets} />
       {error && <p role="alert">{error}</p>}
       {!page && !error && <p role="status">正在读取数据集…</p>}
       {page?.items.length === 0 && <p>此工作区还没有数据集。</p>}

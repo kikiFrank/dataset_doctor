@@ -1,5 +1,12 @@
 //! Connect the read-only COCO preview to the Core approval and SQLite commit.
 
+mod confirmation;
+mod inspection;
+pub use confirmation::{ImportConfirmation, ImportTaskSnapshot};
+pub use inspection::{
+    ImportInspection, ImportInspectionSnapshot, ImportPreviewFile, ImportPreviewResult,
+};
+
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io;

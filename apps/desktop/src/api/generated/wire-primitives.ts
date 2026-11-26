@@ -8,13 +8,13 @@ export type UuidText = string;
 
 export type ArtifactOwner = { "kind": "TASK", "id": UuidText } | { "kind": "ASSET", "id": UuidText } | { "kind": "REVIEW", "id": UuidText };
 
-export type PathPurpose = "WORKSPACE";
+export type PathPurpose = "WORKSPACE" | "IMPORT";
 
 export type PathKind = "DIRECTORY";
 
-export type PathAccess = "READ_WRITE";
+export type PathAccess = "READ" | "READ_WRITE";
 
-export type PathSelectRequest = { request_id: UuidText, purpose: PathPurpose, kind: PathKind, access: PathAccess, };
+export type PathSelectRequest = { request_id: UuidText, purpose: PathPurpose, kind: PathKind, access: PathAccess, context?: CommandContext, };
 
 export type PathGrant = { grant_id: UuidText, display_path: string, allowed_operations: Array<string>, expires_at: string, };
 
@@ -51,6 +51,26 @@ export type AnnotationState = "UNANNOTATED" | "UNREVIEWED" | "CONFIRMED_POSITIVE
 export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText, display_name: string, kind: string, availability: string, annotation_state: AnnotationState, active_review: boolean, };
 
 export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };
+
+export type ImportFormat = "COCO_IMAGE_BBOX";
+
+export type DatasetImportInspectRequest = { context: CommandContext, root_grant_id: UuidText, dataset_name: string, format: ImportFormat, };
+
+export type DatasetImportExternalRequest = { context: CommandContext, import_plan_ref: UuidText, plan_fingerprint: string, };
+
+export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
+
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL";
+
+export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
+
+export type ImportFilePreview = { image_path: string, media_sha256: string | null, annotation_state: string, annotation_path: string | null, annotation_sha256: string | null, issue_code: string | null, };
+
+export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string, dataset_name: string, category_names: Array<string>, files: Array<ImportFilePreview>, can_confirm: boolean, };
+
+export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
+
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, };
 
 export type CocoImage = { id: number, file_name: string, width: number, height: number, };
 
