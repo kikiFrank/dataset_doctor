@@ -42,6 +42,10 @@ name = "app_migration"
 path = "../../tests/storage/sqlite/migration/app_migration.rs"
 
 [[test]]
+name = "workspace_backup"
+path = "../../tests/storage/sqlite/backup/workspace_backup.rs"
+
+[[test]]
 name = "json_contracts"
 path = "../../tests/contracts/rust/json_contracts.rs"
 

@@ -1,6 +1,7 @@
 //! SQLite connection setup and schema migrations for Core.
 
 mod app_migration;
+mod backup;
 mod connection;
 mod migration;
 
@@ -8,6 +9,7 @@ use rusqlite::{Row, types::Type};
 use uuid::Uuid;
 
 pub use app_migration::{AppMigrationError, migrate_app_database};
+pub use backup::{WorkspaceBackupError, backup_workspace_database};
 pub use connection::{
     WorkspaceConnectionError, WorkspaceConnectionStage, initialize_workspace_write_connection,
 };

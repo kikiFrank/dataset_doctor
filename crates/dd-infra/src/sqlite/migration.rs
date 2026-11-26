@@ -184,7 +184,7 @@ fn schema_is_empty(
     Ok(false)
 }
 
-fn check_schema(connection: &Connection) -> Result<(), WorkspaceMigrationError> {
+pub(super) fn check_schema(connection: &Connection) -> Result<(), WorkspaceMigrationError> {
     use WorkspaceMigrationStage::{ForeignKeyCheck, IntegrityCheck};
 
     let report: String = sqlite(
