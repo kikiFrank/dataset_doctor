@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
+from functools import partial
 import hmac
 import json
 from pathlib import Path
@@ -19,6 +20,7 @@ from datasetdoctor.v1 import worker_service_pb2 as protocol
 from datasetdoctor.v1 import worker_service_pb2_grpc as service
 import color_execution
 import geometry_execution
+import video_execution
 from worker_execution import WorkerExecutions
 
 PROTOCOL_MAJOR = 1
@@ -64,6 +66,7 @@ class Worker(service.PythonWorkerServicer):
         self._session_id = session_id
         self._stop = stop
         self._executions = executions
+        self._video_tools = video_execution.configured_tools()
 
     def _authorize(self, context):
         values = [
@@ -80,29 +83,42 @@ class Worker(service.PythonWorkerServicer):
 
     def Health(self, request, context):
         self._authorize(context)
+        capabilities = []
+        if self._executions is not None:
+            capabilities.extend([geometry_execution.CAPABILITY, color_execution.CAPABILITY])
+            if self._video_tools is not None:
+                capabilities.append(video_execution.CAPABILITY)
         return protocol.HealthSnapshot(
             role="WORKER",
             executor_session_id=self._session_id,
             protocol_major=PROTOCOL_MAJOR,
             build_version=BUILD_VERSION,
-            loaded_capability_ids=(
-                [geometry_execution.CAPABILITY, color_execution.CAPABILITY]
-                if self._executions is not None else []
-            ),
+            loaded_capability_ids=capabilities,
             active_executions=self._executions.active_count() if self._executions is not None else 0,
         )
 
     def StartAnnotationGeometryAudit(self, request, context):
-        return self._start(request, context, geometry_execution)
+        return self._start(
+            request, context, geometry_execution.OPERATION_DOMAIN, geometry_execution.compute_result,
+        )
 
     def StartColorPreview(self, request, context):
-        return self._start(request, context, color_execution)
+        return self._start(
+            request, context, color_execution.OPERATION_DOMAIN, color_execution.compute_result,
+        )
 
-    def _start(self, request, context, capability):
+    def StartVideoProbe(self, request, context):
+        return self._start(
+            request, context, video_execution.PROBE_DOMAIN,
+            partial(video_execution.compute_probe, tools=self._video_tools), "source_video",
+            available=self._video_tools is not None,
+        )
+
+    def _start(self, request, context, operation_domain, compute, source_field="image", *, available=True):
         self._authorize(context)
-        if self._executions is None or self._stop.is_set():
+        if not available or self._executions is None or self._stop.is_set():
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Worker cannot admit executions")
-        return self._executions.start(request, context, capability.OPERATION_DOMAIN, capability.compute_result)
+        return self._executions.start(request, context, operation_domain, compute, source_field)
 
     def GetExecution(self, request, context):
         self._authorize(context)

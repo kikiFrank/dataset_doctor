@@ -94,6 +94,22 @@ message ColorPreviewRequest {
   ColorPreviewInput parameters = 3;
 }
 
+message VideoProbeInput {
+  WorkerInputFile source_video = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  optional uint32 stream_index = 4;
+  uint64 max_pixels = 5;
+  uint32 max_frames = 6;
+  uint32 timeout_ms = 7;
+}
+
+message VideoProbeRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  VideoProbeInput parameters = 3;
+}
+
 message ExecutionLookup {
   string task_id = 1;
   string attempt_id = 2;
@@ -109,6 +125,7 @@ message ExecutionSnapshot {
 service PythonWorker {
   rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
   rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
+  rpc StartVideoProbe(VideoProbeRequest) returns (ExecutionHandle);
   rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);

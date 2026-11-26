@@ -2,7 +2,7 @@
 
 Local-first desktop application for computer-vision dataset quality governance. Rust Core + Rust Agent Service (Rig) + Python algorithm Worker; Tauri 2 / React / TypeScript frontend. Windows, Linux and macOS are target platforms.
 
-L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线构建与启动，首条桌面业务闭环正在实现。Rig SDK 独立 PoC 有三平台验证记录。
+L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线构建与启动，命令宿主已通过导入、检查、Final 和 COCO 读取验收。完整 WebView2 业务闭环和桌面安装器仍待验收。Rig SDK 独立 PoC 有三平台验证记录。
 
 - [项目文档入口](docs/README.md)
 - [开发工作守则](docs/development/coding_guidelines.md)（AI Coding 自动阅读入口：[AGENTS.md](AGENTS.md)）
@@ -142,6 +142,22 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 已同步 Worker 环境后，`target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/image -v` 可验收实际 PNG/JPEG 解码、EXIF 方向、源字节摘要、损坏输入和像素限制。
 
 Rust/TypeScript 公共整数和归属类型的验收使用 `scripts/contracts/windows/check-ui-wire.ps1 -RustBin $rustBin -NodeExe (Get-Command node.exe).Source`。脚本重新生成 TypeScript 声明，检查文件漂移，再用同一组向量运行 Serde 和 Node TypeScript 解析。显式传入 `-Generate` 更新受版本控制的声明。
+
+### Windows 生产 Worker 与视频适配验收
+
+使用现有的 `target/dev/uv-cache` 和 `dist/p00-worker-smoke/uv-cache`，从锁文件离线构建实际 Worker 入口。构建输出会打印 `$workerExe` 对应的绝对路径，所在运行目录包含两份锁文件和 EXE 的摘要记录。
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File .\scripts\packaging\windows\build-worker-product.ps1 -PythonExe $py312 -UvExe $uv
+powershell.exe -NoProfile -NonInteractive -File .\tests\packaging\windows\worker-product\verify-worker-product.ps1 -WorkerExe $workerExe -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv
+```
+
+为 `$ffmpeg` 和 `$ffprobe` 提供已核验的 Windows x64 本机工具绝对路径。通过下列命令生成合成视频并分别验收像素解码及 Core 授权的帧索引。运行包内 Worker 的验证命令也接受同一对视频工具参数。正式桌面安装验收仍待完成。 [FFmpeg Windows 验收包](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-11-24-12-41)
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-video-decoder.ps1 -FfmpegExe $ffmpeg -FfprobeExe $ffprobe -PythonExe .\target\dev\worker-venv\Scripts\python.exe
+powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv -VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe
+```
 
 ## Windows Workspace SQLite 写连接初始化（P01-03）
 

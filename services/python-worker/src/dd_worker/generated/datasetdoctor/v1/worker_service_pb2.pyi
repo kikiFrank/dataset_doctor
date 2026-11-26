@@ -156,6 +156,34 @@ class ColorPreviewRequest(_message.Message):
     parameters: ColorPreviewInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[ColorPreviewInput, _Mapping]] = ...) -> None: ...
 
+class VideoProbeInput(_message.Message):
+    __slots__ = ("source_video", "input_manifest", "output_directory", "stream_index", "max_pixels", "max_frames", "timeout_ms")
+    SOURCE_VIDEO_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    STREAM_INDEX_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    MAX_FRAMES_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_MS_FIELD_NUMBER: _ClassVar[int]
+    source_video: WorkerInputFile
+    input_manifest: WorkerInputFile
+    output_directory: str
+    stream_index: int
+    max_pixels: int
+    max_frames: int
+    timeout_ms: int
+    def __init__(self, source_video: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., stream_index: _Optional[int] = ..., max_pixels: _Optional[int] = ..., max_frames: _Optional[int] = ..., timeout_ms: _Optional[int] = ...) -> None: ...
+
+class VideoProbeRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: VideoProbeInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[VideoProbeInput, _Mapping]] = ...) -> None: ...
+
 class ExecutionLookup(_message.Message):
     __slots__ = ("task_id", "attempt_id")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]

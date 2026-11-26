@@ -8,7 +8,10 @@ from pathlib import Path
 import subprocess
 from threading import Event, Timer
 
-from dd_worker.image_inspection import ImageInspectionError, inspect_image
+if __package__:
+    from .image_inspection import ImageInspectionError, inspect_image
+else:
+    from image_inspection import ImageInspectionError, inspect_image
 
 
 INPUT_OPTIONS = (

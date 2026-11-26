@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use dd_protocol::v1::{
     ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, GeometryAuditRequest,
-    HealthRequest, HealthSnapshot, ShutdownRequest, python_worker_client::PythonWorkerClient,
+    HealthRequest, HealthSnapshot, ShutdownRequest, VideoProbeRequest,
+    python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
 use tonic::transport::Channel;
@@ -102,6 +103,16 @@ impl WorkerProcess {
             .map_err(WorkerProcessError::Rpc)
     }
 
+    pub async fn start_video_probe(
+        &mut self,
+        request: VideoProbeRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_video_probe(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
     pub async fn execution(
         &mut self,
         lookup: ExecutionLookup,

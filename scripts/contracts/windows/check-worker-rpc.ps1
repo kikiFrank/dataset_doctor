@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory = $true)][string]$UvExe,
     [switch]$Generate,
     [string]$CocoReaderPythonExe,
-    [string]$PackagedWorkerExe
+    [string]$PackagedWorkerExe,
+    [string]$VideoFfmpegExe,
+    [string]$VideoFfprobeExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +31,13 @@ if ($PackagedWorkerExe) {
     $env:DD_PACKAGED_WORKER_EXE = (Resolve-Path -LiteralPath $PackagedWorkerExe).Path
 } else {
     Remove-Item Env:DD_PACKAGED_WORKER_EXE -ErrorAction SilentlyContinue
+}
+if ([bool]$VideoFfmpegExe -ne [bool]$VideoFfprobeExe) { throw 'Pass both video tool executables.' }
+if ($VideoFfmpegExe) {
+    $env:DD_WORKER_VIDEO_FFMPEG = (Resolve-Path -LiteralPath $VideoFfmpegExe).Path
+    $env:DD_WORKER_VIDEO_FFPROBE = (Resolve-Path -LiteralPath $VideoFfprobeExe).Path
+} else {
+    Remove-Item Env:DD_WORKER_VIDEO_FFMPEG, Env:DD_WORKER_VIDEO_FFPROBE -ErrorAction SilentlyContinue
 }
 $generateArgs = @('-I', '-B', '-m', 'grpc_tools.protoc', "--proto_path=$protoRoot",
     "--python_out=$staged", "--pyi_out=$staged")
@@ -74,6 +83,9 @@ $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test
     '--test', 'worker_color_preview', '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final')
 if ($PackagedWorkerExe) {
     $tests = @('--test', 'worker_color_preview')
+}
+if ($VideoFfmpegExe) {
+    $tests += @('--test', 'worker_video_probe')
 }
 if ($CocoReaderPythonExe) {
     $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path

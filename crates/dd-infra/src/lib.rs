@@ -32,6 +32,8 @@ pub mod review_validation;
 pub mod sqlite;
 pub mod task_store;
 #[cfg(feature = "execution-rpc")]
+pub mod video_index;
+#[cfg(feature = "execution-rpc")]
 pub mod worker_process;
 pub mod workflow_store;
 pub mod workspace;

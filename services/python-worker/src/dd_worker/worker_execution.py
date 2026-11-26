@@ -59,7 +59,7 @@ class WorkerExecutions:
         with self._lock:
             return sum(item.status in {"QUEUED", "RUNNING"} for item in self._executions.values())
 
-    def start(self, request, rpc, operation_domain, compute):
+    def start(self, request, rpc, operation_domain, compute, source_field):
         context = request.context
         inputs = request.parameters
         manifest = request.input_manifest_ref
@@ -71,7 +71,7 @@ class WorkerExecutions:
                 if str(UUID(identifier)) != identifier:
                     raise ValueError("identifier")
             if (
-                not inputs.HasField("image") or not inputs.HasField("input_manifest")
+                not inputs.HasField(source_field) or not inputs.HasField("input_manifest")
                 or not inputs.max_pixels or not inputs.output_directory
                 or manifest.WhichOneof("owner") != "owner_task_id"
                 or manifest.owner_task_id != context.task_id or manifest.kind != "INPUT_MANIFEST"

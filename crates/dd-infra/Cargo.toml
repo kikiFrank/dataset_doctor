@@ -10,6 +10,7 @@ execution-rpc = ["dep:dd-protocol", "dep:prost", "dep:subtle", "dep:time", "dep:
 
 [dependencies]
 dd-core = { path = "../dd-core" }
+dd-domain = { path = "../dd-domain" }
 dd-protocol = { path = "../dd-protocol", optional = true }
 rusqlite.workspace = true
 jsonschema = { version = "=0.63.1", default-features = false, features = ["arbitrary-precision"] }
@@ -135,6 +136,11 @@ required-features = ["execution-rpc"]
 [[test]]
 name = "worker_process"
 path = "../../tests/integration/rpc/worker_process.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
+name = "worker_video_probe"
+path = "../../tests/integration/rpc/worker_video_probe.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
