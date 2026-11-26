@@ -204,6 +204,24 @@ impl OpenedWorkspace {
         )
     }
 
+    /// Reconcile an abandoned session after the process supervisor has
+    /// confirmed that the previous executors are stopped. Recovery never runs a task.
+    pub fn recover_abandoned_session(
+        &mut self,
+        abandoned_session: Uuid,
+        now_ms: i64,
+    ) -> Result<usize, TaskStoreError> {
+        self.connection.execute(
+            "UPDATE tasks
+             SET status='INTERRUPTED', finished_at_ms=?2, updated_at_ms=?2,
+                 row_revision=row_revision+1, error_code='INTERRUPTED',
+                 error_message='Execution was interrupted before a terminal result was accepted',
+                 execution_metadata_json=json_set(execution_metadata_json, '$.grant_state', 'REVOKED')
+             WHERE workspace_session_id=?1 AND status IN ('DISPATCHING', 'RUNNING', 'CANCELLING')",
+            params![abandoned_session.to_string(), now_ms],
+        ).map_err(TaskStoreError::Database)
+    }
+
     fn record_attempt_event(
         &mut self,
         workspace_session: Uuid,
