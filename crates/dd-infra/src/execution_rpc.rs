@@ -1,9 +1,10 @@
 //! Private gRPC adapter for a supervised executor's Core grant requests.
 
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dd_core::execution_grant::{ClaimContext, GrantBook, GrantError};
+use dd_core::workspace::WorkspaceAccessError;
 use dd_protocol::v1::{
     ClaimGrantRequest, ExecutionHandle, core_execution_control_server::CoreExecutionControl,
 };
@@ -11,18 +12,28 @@ use subtle::ConstantTimeEq;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
+use crate::task_store::TaskStoreError;
+use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
+
 pub struct CoreClaimService {
     executor: Uuid,
     authorization: String,
     grants: Arc<Mutex<GrantBook>>,
+    workspace: Arc<WorkspaceThread>,
 }
 
 impl CoreClaimService {
-    pub fn new(executor: Uuid, credential: Uuid, grants: Arc<Mutex<GrantBook>>) -> Self {
+    pub fn new(
+        executor: Uuid,
+        credential: Uuid,
+        grants: Arc<Mutex<GrantBook>>,
+        workspace: Arc<WorkspaceThread>,
+    ) -> Self {
         Self {
             executor,
             authorization: format!("Bearer {}", credential.simple()),
             grants,
+            workspace,
         }
     }
 
@@ -64,17 +75,32 @@ impl CoreExecutionControl for CoreClaimService {
             input_fingerprint: parse_digest(&request.input_fingerprint)?,
             operation_digest: parse_digest(&request.operation_digest)?,
         };
-        let receipt = self
-            .grants
-            .lock()
-            .map_err(|_| Status::internal("Core grant state unavailable"))?
-            .claim(
-                parse_uuid(&request.grant_id)?,
-                self.executor,
-                &claim,
-                Instant::now(),
-            )
-            .map_err(claim_status)?;
+        let grant = parse_uuid(&request.grant_id)?;
+        let grants = Arc::clone(&self.grants);
+        let workspace = Arc::clone(&self.workspace);
+        let executor = self.executor;
+        let receipt = tokio::task::spawn_blocking(move || {
+            let mut grants = grants
+                .lock()
+                .map_err(|_| Status::internal("Core grant state unavailable"))?;
+            let now = Instant::now();
+            let receipt = grants
+                .validate_claim(grant, executor, &claim, now)
+                .map_err(claim_status)?;
+            let epoch = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| Status::internal("Core clock unavailable"))?;
+            let now_ms = i64::try_from(epoch.as_millis())
+                .map_err(|_| Status::internal("Core clock unavailable"))?;
+            workspace
+                .record_claimed(claim.workspace_session, grant, receipt, now_ms)
+                .map_err(storage_status)?;
+            grants
+                .claim(grant, executor, &claim, now)
+                .map_err(claim_status)
+        })
+        .await
+        .map_err(|_| Status::internal("Core claim did not complete"))??;
         Ok(Response::new(ExecutionHandle {
             task_id: receipt.task.to_string(),
             attempt_id: receipt.attempt.to_string(),
@@ -121,5 +147,18 @@ fn claim_status(error: GrantError) -> Status {
         GrantError::ScopeMismatch => Status::permission_denied("Execution scope does not match"),
         GrantError::AlreadyClaimed => Status::already_exists("Grant is already claimed"),
         other => Status::failed_precondition(other.to_string()),
+    }
+}
+
+fn storage_status(error: WorkspaceThreadError) -> Status {
+    match error {
+        WorkspaceThreadError::Access(
+            WorkspaceAccessError::StaleSession | WorkspaceAccessError::Closed,
+        )
+        | WorkspaceThreadError::Task(TaskStoreError::AttemptConflict) => {
+            Status::failed_precondition("Task attempt is no longer current")
+        }
+        WorkspaceThreadError::Busy => Status::resource_exhausted("Core task queue is busy"),
+        _ => Status::internal("Core could not persist this claim"),
     }
 }

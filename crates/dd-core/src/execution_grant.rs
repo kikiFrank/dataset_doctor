@@ -132,7 +132,23 @@ impl GrantBook {
         claim: &ClaimContext,
         now: Instant,
     ) -> Result<ClaimReceipt, GrantError> {
-        let grant = self.grants.get_mut(&id).ok_or(GrantError::UnknownGrant)?;
+        let receipt = self.validate_claim(id, authenticated_executor, claim, now)?;
+        self.grants
+            .get_mut(&id)
+            .ok_or(GrantError::UnknownGrant)?
+            .receipt = Some(receipt);
+        Ok(receipt)
+    }
+
+    /// Validate an execution receipt before writing it to the authoritative Task row.
+    pub fn validate_claim(
+        &self,
+        id: Uuid,
+        authenticated_executor: Uuid,
+        claim: &ClaimContext,
+        now: Instant,
+    ) -> Result<ClaimReceipt, GrantError> {
+        let grant = self.grants.get(&id).ok_or(GrantError::UnknownGrant)?;
         grant.verify(authenticated_executor, claim)?;
         if let Some(receipt) = grant.receipt {
             return if receipt.execution == claim.execution {
@@ -144,13 +160,11 @@ impl GrantBook {
         if now >= grant.expires_at {
             return Err(GrantError::Expired);
         }
-        let receipt = ClaimReceipt {
+        Ok(ClaimReceipt {
             task: claim.task,
             attempt: claim.attempt,
             execution: claim.execution,
-        };
-        grant.receipt = Some(receipt);
-        Ok(receipt)
+        })
     }
 
     pub fn expire_unclaimed(&mut self, id: Uuid, now: Instant) -> Option<Uuid> {

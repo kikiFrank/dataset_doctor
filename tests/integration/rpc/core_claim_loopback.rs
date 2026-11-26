@@ -1,13 +1,16 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dd_core::execution_grant::{GrantBook, GrantScope};
 use dd_infra::execution_rpc::CoreClaimService;
+use dd_infra::task_store::TaskSubmission;
+use dd_infra::workspace_thread::WorkspaceThread;
 use dd_protocol::v1::ClaimGrantRequest;
 use dd_protocol::v1::core_execution_control_client::CoreExecutionControlClient;
 use dd_protocol::v1::core_execution_control_server::CoreExecutionControlServer;
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
@@ -33,12 +36,42 @@ fn request(claim: ClaimGrantRequest, token: Option<Uuid>) -> Request<ClaimGrantR
 
 #[tokio::test]
 async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_handle() {
-    let workspace = Uuid::new_v4();
+    let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
+        .canonicalize()
+        .unwrap();
+    let runs = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/contract-check/worker-rpc")
+        .canonicalize()
+        .unwrap();
+    assert_eq!(run.parent(), Some(runs.as_path()));
+    let root = run.join("Core Claim Workspace");
+    std::fs::create_dir(&root).unwrap();
+    let thread = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let directory = thread.grant_selected_directory(root.clone()).unwrap();
+    let workspace = thread
+        .create(directory.grant_id, "Core Claim".into(), 100)
+        .unwrap()
+        .workspace_session_id;
+    let task = thread
+        .enqueue_task(
+            TaskSubmission {
+                workspace_session: workspace,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                operation_kind: "ANNOTATION_AUDIT".into(),
+                capability_id: "annotation_geometry.v1".into(),
+                input_manifest_path: "artifacts/tasks/input.json".into(),
+                request_fingerprint: [0x98; 32],
+                input_fingerprint: [0x12; 32],
+            },
+            200,
+        )
+        .unwrap();
     let executor = Uuid::new_v4();
     let mut grants = GrantBook::new(workspace);
     let scope = GrantScope {
         workspace_session: workspace,
-        task: Uuid::new_v4(),
+        task: task.task_id,
         attempt: Uuid::new_v4(),
         executor_session: executor,
         input_fingerprint: [0x12; 32],
@@ -49,7 +82,12 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
         .install(scope.clone(), Instant::now() + Duration::from_secs(30))
         .unwrap();
     let credential = Uuid::new_v4();
-    let service = CoreClaimService::new(executor, credential, Arc::new(Mutex::new(grants)));
+    let service = CoreClaimService::new(
+        executor,
+        credential,
+        Arc::new(Mutex::new(grants)),
+        Arc::clone(&thread),
+    );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let (stop, stopping) = oneshot::channel::<()>();
@@ -115,6 +153,18 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
         Code::InvalidArgument
     );
     claim.input_fingerprint = "12".repeat(32);
+    assert_eq!(
+        client
+            .claim_grant(request(claim.clone(), Some(credential)))
+            .await
+            .unwrap_err()
+            .code(),
+        Code::FailedPrecondition
+    );
+    claim.worker_execution_id = Uuid::new_v4().to_string();
+    thread
+        .record_dispatch(scope, grant, [0x56; 32], 300)
+        .unwrap();
     let first = python_claim(address.to_string(), credential, &claim).await;
     let replay = client
         .claim_grant(request(claim.clone(), Some(credential)))
@@ -138,11 +188,17 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
     claim.worker_execution_id = Uuid::new_v4().to_string();
     assert_eq!(
         client
-            .claim_grant(request(claim, Some(credential)))
+            .claim_grant(request(claim.clone(), Some(credential)))
             .await
             .unwrap_err()
             .code(),
         Code::AlreadyExists
+    );
+    thread.close(workspace).unwrap();
+    claim.worker_execution_id = replay.worker_execution_id.clone();
+    assert_eq!(
+        client.claim_grant(request(claim, Some(credential))).await.unwrap_err().code(),
+        Code::FailedPrecondition,
     );
 
     drop(client);
@@ -151,6 +207,15 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
         .await
         .unwrap()
         .unwrap();
+    let connection = Connection::open(root.join("workspace.db")).unwrap();
+    let (status, execution, revision): (String, String, i64) = connection.query_row(
+        "SELECT status, json_extract(execution_metadata_json,'$.claimed_execution_id'), row_revision FROM tasks WHERE task_id=?1",
+        [task.task_id.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).unwrap();
+    assert_eq!(
+        (status.as_str(), execution, revision),
+        ("DISPATCHING", replay.worker_execution_id, 2)
+    );
 }
 
 async fn python_claim(address: String, credential: Uuid, claim: &ClaimGrantRequest) -> Value {

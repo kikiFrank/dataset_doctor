@@ -94,7 +94,7 @@ struct PendingGrant {
 
 struct ActiveWorkspace<H> {
     session: WorkspaceSession,
-    _handle: H,
+    handle: H,
 }
 
 pub struct WorkspaceAccess<S: WorkspaceStore> {
@@ -195,13 +195,24 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         };
         self.active = Some(ActiveWorkspace {
             session: session.clone(),
-            _handle: handle,
+            handle,
         });
         session
     }
 
     pub fn current(&self) -> Option<&WorkspaceSession> {
         self.active.as_ref().map(|active| &active.session)
+    }
+
+    pub fn active_handle(
+        &mut self,
+        session: Uuid,
+    ) -> Result<&mut S::Handle, WorkspaceAccessError<S::Error>> {
+        let active = self.active.as_mut().ok_or(WorkspaceAccessError::Closed)?;
+        if active.session.workspace_session_id != session {
+            return Err(WorkspaceAccessError::StaleSession);
+        }
+        Ok(&mut active.handle)
     }
 
     pub fn close(

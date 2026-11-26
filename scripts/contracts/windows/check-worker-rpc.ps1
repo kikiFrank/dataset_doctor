@@ -22,6 +22,7 @@ $cache = Join-Path $dev 'uv-cache'
 & $UvExe sync --locked --offline --no-build --no-python-downloads --no-config --project $worker --cache-dir $cache --python $PythonExe
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $env:DD_WORKER_PYTHON = Join-Path $env:UV_PROJECT_ENVIRONMENT 'Scripts\python.exe'
+$env:DD_CORE_CLAIM_RUN_DIR = $run
 $generateArgs = @('-I', '-B', '-m', 'grpc_tools.protoc', "--proto_path=$protoRoot",
     "--python_out=$staged", "--pyi_out=$staged")
 & $env:DD_WORKER_PYTHON @generateArgs (Join-Path $protoRoot 'datasetdoctor\v1\common.proto')
