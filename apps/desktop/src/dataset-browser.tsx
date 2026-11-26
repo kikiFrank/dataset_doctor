@@ -120,7 +120,12 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
     <div className="dataset-assets">
       <h3>{dataset.name}</h3>
       <DatasetExportPanel workspace={workspace} datasetId={dataset.dataset_id} />
-      <StagingPanel workspace={workspace} datasetId={dataset.dataset_id} />
+      <StagingPanel workspace={workspace} datasetId={dataset.dataset_id} refreshKey={refresh} selectionBlocked={reviewBlocked}
+        onSelect={item => setSelected({
+          asset_id: item.asset_id, dataset_id: item.target_dataset_id, display_name: item.display_name,
+          kind: "IMAGE", availability: "ONLINE", annotation_state: "UNREVIEWED",
+          active_review: item.review_state === "OPEN" || item.review_state === "COMMITTING" || item.review_state === "CONFLICT",
+        })} />
       {error && <p role="alert">{error}</p>}
       {!page && !error && <p role="status">正在读取资源…</p>}
       {page?.items.length === 0 && <p>此数据集没有资源。</p>}

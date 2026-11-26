@@ -294,7 +294,10 @@ fn commit_rows(
     ).map_err(database)?)?;
     transaction.execute(
         "UPDATE review_sessions SET status='STALE', row_revision=row_revision+1, updated_at_ms=?1
-         WHERE review_id=(SELECT final_review_id FROM dataset_assets WHERE dataset_id=?2 AND asset_id=?3)
+         WHERE review_id=COALESCE(
+             (SELECT final_review_id FROM dataset_assets WHERE dataset_id=?2 AND asset_id=?3),
+             (SELECT review_id FROM staging_items WHERE target_dataset_id=?2 AND asset_id=?3)
+         )
            AND status='CONFIRMED' AND (confirmed_media_digest IS NOT ?4
              OR confirmed_annotation_digest IS NOT ?5 OR confirmed_label_schema_digest IS NOT ?6)",
         params![now_ms, manifest.dataset_id, manifest.asset_id, manifest.old_image_digest,
@@ -308,14 +311,21 @@ fn commit_rows(
         params![manifest.old_image_digest, manifest.new_annotation_digest, manifest.label_schema_digest,
             now_ms, manifest.review_id, manifest.review_revision],
     ).map_err(database)?)?;
-    expect_one(
-        transaction
-            .execute(
-                "UPDATE dataset_assets SET final_review_id=?1 WHERE dataset_id=?2 AND asset_id=?3",
-                params![manifest.review_id, manifest.dataset_id, manifest.asset_id],
-            )
-            .map_err(database)?,
-    )
+    let member = transaction
+        .execute(
+            "UPDATE dataset_assets SET final_review_id=?1 WHERE dataset_id=?2 AND asset_id=?3",
+            params![manifest.review_id, manifest.dataset_id, manifest.asset_id],
+        )
+        .map_err(database)?;
+    let staged = transaction
+        .execute(
+            "UPDATE staging_items SET review_id=?1, check_task_id=NULL,
+             check_acceptance_digest=NULL, check_accepted_at_ms=NULL
+         WHERE target_dataset_id=?2 AND asset_id=?3",
+            params![manifest.review_id, manifest.dataset_id, manifest.asset_id],
+        )
+        .map_err(database)?;
+    expect_one(member + staged)
 }
 
 fn expect_one(changed: usize) -> Result<(), WorkspaceThreadError> {

@@ -65,10 +65,7 @@ impl AnnotationReader {
     pub fn read(&self, session: Uuid, asset: Uuid) -> Result<AnnotationView, AnnotationReadError> {
         let (binding, active, confirmed) = self.owner.workspace_action(session, move |owner| {
             let asset_id = asset.to_string();
-            let dataset: String = owner.connection.query_row(
-                "SELECT dataset_id FROM dataset_assets WHERE asset_id=?1", [&asset_id], |row| row.get(0),
-            ).optional().map_err(database)?.ok_or(WorkspaceThreadError::Dataset(DatasetQueryError::UnknownAsset))?;
-            let dataset = Uuid::parse_str(&dataset).map_err(|_| WorkspaceThreadError::Dataset(DatasetQueryError::InvalidImageBinding))?;
+            let dataset = owner.image_dataset(asset).map_err(WorkspaceThreadError::Dataset)?;
             let binding = owner.registered_image(dataset, asset).map_err(WorkspaceThreadError::Dataset)?;
             let active: Option<String> = owner.connection.query_row(
                 "SELECT review_id FROM review_sessions WHERE asset_id=?1 AND status IN ('OPEN','COMMITTING','CONFLICT')",
@@ -76,8 +73,11 @@ impl AnnotationReader {
             ).optional().map_err(database)?;
             let confirmed: Option<(String, String, String, String)> = owner.connection.query_row(
                 "SELECT r.status, r.confirmed_media_digest, r.confirmed_annotation_digest, r.confirmed_label_schema_digest
-                 FROM dataset_assets m JOIN review_sessions r ON r.review_id=m.final_review_id WHERE m.asset_id=?1",
-                [&asset_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                 FROM review_sessions r WHERE r.asset_id=?1 AND r.dataset_id=?2 AND r.review_id=COALESCE(
+                     (SELECT final_review_id FROM dataset_assets WHERE asset_id=?1 AND dataset_id=?2),
+                     (SELECT review_id FROM staging_items WHERE asset_id=?1 AND target_dataset_id=?2)
+                 )",
+                rusqlite::params![asset_id,dataset.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             ).optional().map_err(database)?;
             Ok((binding, active, confirmed))
         }).map_err(AnnotationReadError::Storage)?;

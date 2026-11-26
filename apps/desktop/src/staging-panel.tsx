@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StagingPage, StagingState } from "./api/generated/wire-primitives";
+import type { StagingItem, StagingPage, StagingState } from "./api/generated/wire-primitives";
 import { listStaging } from "./api/staging";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 
@@ -14,7 +14,13 @@ const labels: Record<StagingState, string> = {
   READY_FOR_ACCEPTANCE: "可接收",
 };
 
-export function StagingPanel({ workspace, datasetId }: { workspace: OpenWorkspace; datasetId: string }) {
+export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocked, onSelect }: {
+  workspace: OpenWorkspace;
+  datasetId: string;
+  refreshKey: number;
+  selectionBlocked: boolean;
+  onSelect: (item: StagingItem) => void;
+}) {
   const [status, setStatus] = useState<StagingState | undefined>();
   const [page, setPage] = useState<StagingPage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +41,7 @@ export function StagingPanel({ workspace, datasetId }: { workspace: OpenWorkspac
       if (generation.current === generationId) setBusy(false);
     });
     return () => { generation.current += 1; };
-  }, [workspace, datasetId, status, revision]);
+  }, [workspace, datasetId, status, revision, refreshKey]);
 
   async function more() {
     if (busy || !page?.next_cursor) return;
@@ -67,7 +73,10 @@ export function StagingPanel({ workspace, datasetId }: { workspace: OpenWorkspac
     {page && page.items.length > 0 && <table>
       <thead><tr><th scope="col">文件名</th><th scope="col">状态</th><th scope="col">来源帧</th></tr></thead>
       <tbody>{page.items.map(item => <tr key={item.asset_id}>
-        <td>{item.display_name}</td><td>{labels[item.state]}</td>
+        <td><button type="button" className="asset-link"
+          disabled={selectionBlocked || item.state === "OFFLINE" || item.target_dataset_id !== datasetId}
+          onClick={() => onSelect(item)}>{item.display_name}</button></td>
+        <td>{labels[item.state]}</td>
         <td>{item.source_frame_ref
           ? "帧 " + item.source_frame_ref.frame_index + (item.source_frame_ref.pts_us === null ? "" : " · " + item.source_frame_ref.pts_us + " µs")
           : "—"}</td>

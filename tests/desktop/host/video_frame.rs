@@ -329,6 +329,20 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert_eq!(pending.items.len(), 1);
     let staged_view = &pending.items[0];
     assert_eq!(staged_view.asset_id, staged);
+    let annotation = commands
+        .annotation(dd_ui_contracts::annotation::AnnotationGetRequest {
+            context: context(session),
+            asset_id: staged.clone(),
+        })
+        .unwrap();
+    assert!(matches!(
+        annotation.annotation_state,
+        dd_ui_contracts::dataset::AnnotationState::Unreviewed
+    ));
+    assert_eq!(
+        annotation.formal_coco.unwrap().images[0].file_name,
+        "frame-3.png"
+    );
     assert!(matches!(
         staged_view.state,
         dd_ui_contracts::staging::StagingState::NeedsReview

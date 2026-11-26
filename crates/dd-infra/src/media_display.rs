@@ -9,11 +9,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rusqlite::OptionalExtension;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::dataset_query::{DatasetQueryError, RegisteredInputFile};
+use crate::dataset_query::RegisteredInputFile;
 use crate::paths::open_registered_file;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -89,21 +88,9 @@ impl MediaDisplayService {
         let image = self
             .owner
             .workspace_action(session, move |owner| {
-                let dataset: String = owner
-                    .connection
-                    .query_row(
-                        "SELECT dataset_id FROM dataset_assets WHERE asset_id=?1",
-                        [asset.to_string()],
-                        |row| row.get(0),
-                    )
-                    .optional()
-                    .map_err(database)?
-                    .ok_or(WorkspaceThreadError::Dataset(
-                        DatasetQueryError::UnknownAsset,
-                    ))?;
-                let dataset = Uuid::parse_str(&dataset).map_err(|_| {
-                    WorkspaceThreadError::Dataset(DatasetQueryError::InvalidImageBinding)
-                })?;
+                let dataset = owner
+                    .image_dataset(asset)
+                    .map_err(WorkspaceThreadError::Dataset)?;
                 owner
                     .registered_image(dataset, asset)
                     .map(|binding| binding.image)
@@ -189,8 +176,4 @@ impl MediaDisplayService {
             .ok_or(MediaDisplayError::UnknownGrant)
             .map(|_| ())
     }
-}
-
-fn database(error: rusqlite::Error) -> WorkspaceThreadError {
-    WorkspaceThreadError::Dataset(DatasetQueryError::Database(error))
 }

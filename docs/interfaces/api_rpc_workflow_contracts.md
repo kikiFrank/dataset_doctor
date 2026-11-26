@@ -861,6 +861,8 @@ Staging 没有独立 state 列。每次查询由 Asset、Review、任务与报�
 | NEEDS_CHECK | 当前输入没有匹配的检查报告，或报告已失效 |
 | READY_FOR_ACCEPTANCE | 当前 Final 有效且报告可供用户作出明确接收决定 |
 
+待接收样本使用目标 Dataset 的类别，通过已有 annotation_get、media_get_locator、几何检查和人工审核入口处理。确认 Final 后更新 staging_items.review_id，使原检查报告的接收依据失效。样本继续处于 Staging，待新报告与明确接收。
+
 注入成功后删除 staging_items 记录并建立 dataset_assets 关系，查询结果不再把该资源作为 Staging；完成结果放在任务回执中，不新增 ACCEPTED 行。
 
 质量门槛分为两种：不可读取媒体、无效 COCO 结构、悬空类别/图像引用及不合法 Final 不允许强制注入；模糊、可疑语义等质量意见可以由用户明确接受并记录理由。可选检查因缺模型未执行时，报告保留覆盖缺口，不能显示 PASS。staging_commit 增加可选的 acknowledged_incomplete_checks:[{check_id,reason}]，用于显式接受这种已知缺口；不能用它绕过必需结构校验。acknowledged_findings 使用 issue_id 和可选 reason，不接收模型代替用户填写的批准。

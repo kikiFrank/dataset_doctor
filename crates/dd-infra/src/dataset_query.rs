@@ -172,18 +172,39 @@ struct ImageRow {
 }
 
 impl OpenedWorkspace {
+    pub(crate) fn image_dataset(&self, asset: Uuid) -> Result<Uuid, DatasetQueryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT dataset_id FROM dataset_assets WHERE asset_id=?1
+             UNION ALL
+             SELECT target_dataset_id FROM staging_items WHERE asset_id=?1 AND target_dataset_id IS NOT NULL",
+        )?;
+        let mut rows = statement.query([asset.to_string()])?;
+        let dataset = rows
+            .next()?
+            .map(|row| row_uuid(row, 0))
+            .transpose()?
+            .ok_or(DatasetQueryError::UnknownAsset)?;
+        if rows.next()?.is_some() {
+            return Err(DatasetQueryError::InvalidImageBinding);
+        }
+        Ok(dataset)
+    }
+
     pub(crate) fn registered_image(
         &self,
         dataset_id: Uuid,
         asset_id: Uuid,
     ) -> Result<RegisteredImage, DatasetQueryError> {
+        if self.image_dataset(asset_id)? != dataset_id {
+            return Err(DatasetQueryError::UnknownAsset);
+        }
         let row = self
             .connection
             .query_row(
                 "SELECT a.kind, a.availability, a.location_kind, a.path, a.media_digest,
                     a.annotation_path, a.annotation_format, a.annotation_digest, d.categories_json
-             FROM dataset_assets m JOIN assets a USING (asset_id) JOIN datasets d USING (dataset_id)
-             WHERE m.dataset_id=?1 AND m.asset_id=?2",
+             FROM assets a JOIN datasets d ON d.dataset_id=?1
+             WHERE a.asset_id=?2",
                 params![dataset_id.to_string(), asset_id.to_string()],
                 |row| {
                     Ok(ImageRow {

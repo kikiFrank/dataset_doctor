@@ -240,3 +240,8 @@ required-features = ["execution-rpc"]
 [[test]]
 name = "staging_list"
 path = "../../tests/storage/staging/list.rs"
+
+[[test]]
+name = "staging_review"
+path = "../../tests/integration/rpc/staging_review.rs"
+required-features = ["execution-rpc"]
