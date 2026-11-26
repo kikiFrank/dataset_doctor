@@ -11,10 +11,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use dd_core::execution_grant::{GrantBook, GrantError, GrantScope};
 use dd_core::workspace::WorkspaceSession;
 use dd_protocol::v1::{
-    ArtifactRef, ExecutionHandle, ExecutionLookup, FrameResolveInput, FrameResolveRequest,
-    GeometryAuditInput, GeometryAuditRequest, TaskContext, VideoProbeInput, VideoProbeRequest,
-    VideoTrackingInput, VideoTrackingRequest, artifact_ref::Owner,
-    core_execution_control_server::CoreExecutionControlServer,
+    ArtifactRef, ColorPreviewInput, ColorPreviewRequest, ExecutionHandle, ExecutionLookup,
+    FrameResolveInput, FrameResolveRequest, GeometryAuditInput, GeometryAuditRequest, TaskContext,
+    VideoProbeInput, VideoProbeRequest, VideoTrackingInput, VideoTrackingRequest,
+    artifact_ref::Owner, core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
 use rusqlite::params;
@@ -121,6 +121,7 @@ pub(crate) struct WorkerJob {
 
 pub(crate) enum WorkerOperation {
     Geometry(GeometryAuditInput),
+    ColorPreview(ColorPreviewInput),
     VideoProbe(VideoProbeInput),
     FrameResolve(FrameResolveInput),
     VideoTracking(VideoTrackingInput),
@@ -130,6 +131,7 @@ impl WorkerOperation {
     fn capability(&self) -> &'static str {
         match self {
             Self::Geometry(_) => crate::geometry_runtime::CAPABILITY,
+            Self::ColorPreview(_) => crate::color_preview::CAPABILITY,
             Self::VideoProbe(_) => crate::video_registration::CAPABILITY,
             Self::FrameResolve(_) => crate::frame_runtime::CAPABILITY,
             Self::VideoTracking(_) => crate::video_tracking_runtime::CAPABILITY,
@@ -142,6 +144,11 @@ impl WorkerOperation {
             Self::Geometry(input) => {
                 input.output_directory = output;
                 domain = b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0";
+                input.encode_to_vec()
+            }
+            Self::ColorPreview(input) => {
+                input.output_directory = output;
+                domain = b"datasetdoctor.v1.PythonWorker.StartColorPreview\0";
                 input.encode_to_vec()
             }
             Self::FrameResolve(input) => {
@@ -176,6 +183,15 @@ impl WorkerOperation {
             Self::Geometry(parameters) => {
                 worker
                     .start_geometry(GeometryAuditRequest {
+                        context: Some(context),
+                        input_manifest_ref: Some(manifest),
+                        parameters: Some(parameters),
+                    })
+                    .await
+            }
+            Self::ColorPreview(parameters) => {
+                worker
+                    .start_color_preview(ColorPreviewRequest {
                         context: Some(context),
                         input_manifest_ref: Some(manifest),
                         parameters: Some(parameters),
