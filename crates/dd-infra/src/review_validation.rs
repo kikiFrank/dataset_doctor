@@ -84,11 +84,19 @@ impl ReviewDocument {
     }
 
     pub fn confirm(self, confirmed_negative: bool) -> Result<Value, ReviewValidationError> {
-        match (self.has_boxes, confirmed_negative) {
-            (false, false) => Err(ReviewValidationError::NegativeConfirmationRequired),
-            (true, true) => Err(ReviewValidationError::NegativeHasBoxes),
-            _ => Ok(self.coco),
-        }
+        confirm_negative(self.has_boxes, confirmed_negative)?;
+        Ok(self.coco)
+    }
+}
+
+pub(crate) fn confirm_negative(
+    has_boxes: bool,
+    confirmed_negative: bool,
+) -> Result<(), ReviewValidationError> {
+    match (has_boxes, confirmed_negative) {
+        (false, false) => Err(ReviewValidationError::NegativeConfirmationRequired),
+        (true, true) => Err(ReviewValidationError::NegativeHasBoxes),
+        _ => Ok(()),
     }
 }
 

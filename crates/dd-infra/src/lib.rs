@@ -16,6 +16,8 @@ pub mod json;
 mod paths;
 #[cfg(feature = "execution-rpc")]
 pub mod review_draft;
+#[cfg(feature = "execution-rpc")]
+pub mod review_final;
 pub mod review_store;
 pub mod review_validation;
 pub mod sqlite;

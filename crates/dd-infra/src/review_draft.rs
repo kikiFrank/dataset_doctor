@@ -292,7 +292,7 @@ impl ReviewDraftService {
     }
 }
 
-fn draft_path(review: Uuid, digest: &str) -> String {
+pub(crate) fn draft_path(review: Uuid, digest: &str) -> String {
     format!("artifacts/reviews/{review}/{digest}.json")
 }
 

@@ -63,6 +63,6 @@ $PSNativeCommandUseErrorActionPreference = $false
 & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test core_claim_loopback --test worker_geometry --test worker_process --test workspace_geometry --test review_draft -- --nocapture 2>&1 |
+& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test core_claim_loopback --test worker_geometry --test worker_process --test workspace_geometry --test review_draft --test review_final -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log') -Append
 exit $LASTEXITCODE

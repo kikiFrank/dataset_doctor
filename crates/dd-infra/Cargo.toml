@@ -123,5 +123,10 @@ path = "../../tests/integration/rpc/review_draft.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "review_final"
+path = "../../tests/integration/rpc/review_final.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "task_store"
 path = "../../tests/storage/tasks/task_store.rs"
