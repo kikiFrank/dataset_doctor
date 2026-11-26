@@ -1,12 +1,22 @@
 from datasetdoctor.v1 import common_pb2 as _common_pb2
 from datasetdoctor.v1 import core_execution_pb2 as _core_execution_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class ColorMethod(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    COLOR_METHOD_UNSPECIFIED: _ClassVar[ColorMethod]
+    COLOR_METHOD_HUE_REMAP: _ClassVar[ColorMethod]
+    COLOR_METHOD_SOLID_FILL: _ClassVar[ColorMethod]
+COLOR_METHOD_UNSPECIFIED: ColorMethod
+COLOR_METHOD_HUE_REMAP: ColorMethod
+COLOR_METHOD_SOLID_FILL: ColorMethod
 
 class HealthRequest(_message.Message):
     __slots__ = ()
@@ -69,6 +79,82 @@ class GeometryAuditRequest(_message.Message):
     input_manifest_ref: _common_pb2.ArtifactRef
     parameters: GeometryAuditInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[GeometryAuditInput, _Mapping]] = ...) -> None: ...
+
+class ColorPoint(_message.Message):
+    __slots__ = ("x", "y")
+    X_FIELD_NUMBER: _ClassVar[int]
+    Y_FIELD_NUMBER: _ClassVar[int]
+    x: float
+    y: float
+    def __init__(self, x: _Optional[float] = ..., y: _Optional[float] = ...) -> None: ...
+
+class ColorRectangle(_message.Message):
+    __slots__ = ("origin", "width", "height")
+    ORIGIN_FIELD_NUMBER: _ClassVar[int]
+    WIDTH_FIELD_NUMBER: _ClassVar[int]
+    HEIGHT_FIELD_NUMBER: _ClassVar[int]
+    origin: ColorPoint
+    width: float
+    height: float
+    def __init__(self, origin: _Optional[_Union[ColorPoint, _Mapping]] = ..., width: _Optional[float] = ..., height: _Optional[float] = ...) -> None: ...
+
+class ColorPolygon(_message.Message):
+    __slots__ = ("points",)
+    POINTS_FIELD_NUMBER: _ClassVar[int]
+    points: _containers.RepeatedCompositeFieldContainer[ColorPoint]
+    def __init__(self, points: _Optional[_Iterable[_Union[ColorPoint, _Mapping]]] = ...) -> None: ...
+
+class ColorHueGate(_message.Message):
+    __slots__ = ("hue_min_deg", "hue_max_deg", "wraps_zero")
+    HUE_MIN_DEG_FIELD_NUMBER: _ClassVar[int]
+    HUE_MAX_DEG_FIELD_NUMBER: _ClassVar[int]
+    WRAPS_ZERO_FIELD_NUMBER: _ClassVar[int]
+    hue_min_deg: float
+    hue_max_deg: float
+    wraps_zero: bool
+    def __init__(self, hue_min_deg: _Optional[float] = ..., hue_max_deg: _Optional[float] = ..., wraps_zero: _Optional[bool] = ...) -> None: ...
+
+class ColorOperation(_message.Message):
+    __slots__ = ("method", "target_rgb", "strength", "feather_px", "source_color_gate")
+    METHOD_FIELD_NUMBER: _ClassVar[int]
+    TARGET_RGB_FIELD_NUMBER: _ClassVar[int]
+    STRENGTH_FIELD_NUMBER: _ClassVar[int]
+    FEATHER_PX_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_COLOR_GATE_FIELD_NUMBER: _ClassVar[int]
+    method: ColorMethod
+    target_rgb: _containers.RepeatedScalarFieldContainer[int]
+    strength: float
+    feather_px: float
+    source_color_gate: ColorHueGate
+    def __init__(self, method: _Optional[_Union[ColorMethod, str]] = ..., target_rgb: _Optional[_Iterable[int]] = ..., strength: _Optional[float] = ..., feather_px: _Optional[float] = ..., source_color_gate: _Optional[_Union[ColorHueGate, _Mapping]] = ...) -> None: ...
+
+class ColorPreviewInput(_message.Message):
+    __slots__ = ("image", "input_manifest", "output_directory", "max_pixels", "rectangle", "polygon", "operation")
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    RECTANGLE_FIELD_NUMBER: _ClassVar[int]
+    POLYGON_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    image: WorkerInputFile
+    input_manifest: WorkerInputFile
+    output_directory: str
+    max_pixels: int
+    rectangle: ColorRectangle
+    polygon: ColorPolygon
+    operation: ColorOperation
+    def __init__(self, image: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., max_pixels: _Optional[int] = ..., rectangle: _Optional[_Union[ColorRectangle, _Mapping]] = ..., polygon: _Optional[_Union[ColorPolygon, _Mapping]] = ..., operation: _Optional[_Union[ColorOperation, _Mapping]] = ...) -> None: ...
+
+class ColorPreviewRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: ColorPreviewInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[ColorPreviewInput, _Mapping]] = ...) -> None: ...
 
 class ExecutionLookup(_message.Message):
     __slots__ = ("task_id", "attempt_id")

@@ -26,13 +26,15 @@ from datasetdoctor.v1 import common_pb2 as datasetdoctor_dot_v1_dot_common__pb2
 from datasetdoctor.v1 import core_execution_pb2 as datasetdoctor_dot_v1_dot_core__execution__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/worker_service.proto\x12\x10\x64\x61tasetdoctor.v1\x1a\x1d\x64\x61tasetdoctor/v1/common.proto\x1a%datasetdoctor/v1/core_execution.proto\"\x0f\n\rHealthRequest\"\xa4\x01\n\x0eHealthSnapshot\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x02 \x01(\t\x12\x16\n\x0eprotocol_major\x18\x03 \x01(\r\x12\x15\n\rbuild_version\x18\x04 \x01(\t\x12\x1d\n\x15loaded_capability_ids\x18\x05 \x03(\t\x12\x19\n\x11\x61\x63tive_executions\x18\x06 \x01(\r\"\x11\n\x0fShutdownRequest\"#\n\x0fShutdownReceipt\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\"/\n\x0fWorkerInputFile\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x0e\n\x06sha256\x18\x02 \x01(\t\"\xe6\x01\n\x12GeometryAuditInput\x12\x30\n\x05image\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x35\n\nannotation\x18\x02 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x39\n\x0einput_manifest\x18\x03 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x18\n\x10output_directory\x18\x04 \x01(\t\x12\x12\n\nmax_pixels\x18\x05 \x01(\x04\"\xbb\x01\n\x14GeometryAuditRequest\x12.\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1d.datasetdoctor.v1.TaskContext\x12\x39\n\x12input_manifest_ref\x18\x02 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x38\n\nparameters\x18\x03 \x01(\x0b\x32$.datasetdoctor.v1.GeometryAuditInput\"6\n\x0f\x45xecutionLookup\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x12\n\nattempt_id\x18\x02 \x01(\t\"\xa6\x01\n\x11\x45xecutionSnapshot\x12\x31\n\x06handle\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.ExecutionHandle\x12\x0e\n\x06status\x18\x02 \x01(\t\x12:\n\x13result_manifest_ref\x18\x03 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x12\n\nerror_code\x18\x04 \x01(\t2\xf0\x02\n\x0cPythonWorker\x12i\n\x1cStartAnnotationGeometryAudit\x12&.datasetdoctor.v1.GeometryAuditRequest\x1a!.datasetdoctor.v1.ExecutionHandle\x12V\n\x0cGetExecution\x12!.datasetdoctor.v1.ExecutionLookup\x1a#.datasetdoctor.v1.ExecutionSnapshot\x12K\n\x06Health\x12\x1f.datasetdoctor.v1.HealthRequest\x1a .datasetdoctor.v1.HealthSnapshot\x12P\n\x08Shutdown\x12!.datasetdoctor.v1.ShutdownRequest\x1a!.datasetdoctor.v1.ShutdownReceiptb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/worker_service.proto\x12\x10\x64\x61tasetdoctor.v1\x1a\x1d\x64\x61tasetdoctor/v1/common.proto\x1a%datasetdoctor/v1/core_execution.proto\"\x0f\n\rHealthRequest\"\xa4\x01\n\x0eHealthSnapshot\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x02 \x01(\t\x12\x16\n\x0eprotocol_major\x18\x03 \x01(\r\x12\x15\n\rbuild_version\x18\x04 \x01(\t\x12\x1d\n\x15loaded_capability_ids\x18\x05 \x03(\t\x12\x19\n\x11\x61\x63tive_executions\x18\x06 \x01(\r\"\x11\n\x0fShutdownRequest\"#\n\x0fShutdownReceipt\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\"/\n\x0fWorkerInputFile\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x0e\n\x06sha256\x18\x02 \x01(\t\"\xe6\x01\n\x12GeometryAuditInput\x12\x30\n\x05image\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x35\n\nannotation\x18\x02 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x39\n\x0einput_manifest\x18\x03 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x18\n\x10output_directory\x18\x04 \x01(\t\x12\x12\n\nmax_pixels\x18\x05 \x01(\x04\"\xbb\x01\n\x14GeometryAuditRequest\x12.\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1d.datasetdoctor.v1.TaskContext\x12\x39\n\x12input_manifest_ref\x18\x02 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x38\n\nparameters\x18\x03 \x01(\x0b\x32$.datasetdoctor.v1.GeometryAuditInput\"\"\n\nColorPoint\x12\t\n\x01x\x18\x01 \x01(\x01\x12\t\n\x01y\x18\x02 \x01(\x01\"]\n\x0e\x43olorRectangle\x12,\n\x06origin\x18\x01 \x01(\x0b\x32\x1c.datasetdoctor.v1.ColorPoint\x12\r\n\x05width\x18\x02 \x01(\x01\x12\x0e\n\x06height\x18\x03 \x01(\x01\"<\n\x0c\x43olorPolygon\x12,\n\x06points\x18\x01 \x03(\x0b\x32\x1c.datasetdoctor.v1.ColorPoint\"L\n\x0c\x43olorHueGate\x12\x13\n\x0bhue_min_deg\x18\x01 \x01(\x01\x12\x13\n\x0bhue_max_deg\x18\x02 \x01(\x01\x12\x12\n\nwraps_zero\x18\x03 \x01(\x08\"\xc6\x01\n\x0e\x43olorOperation\x12-\n\x06method\x18\x01 \x01(\x0e\x32\x1d.datasetdoctor.v1.ColorMethod\x12\x12\n\ntarget_rgb\x18\x02 \x03(\r\x12\x15\n\x08strength\x18\x03 \x01(\x01H\x00\x88\x01\x01\x12\x12\n\nfeather_px\x18\x04 \x01(\x01\x12\x39\n\x11source_color_gate\x18\x05 \x01(\x0b\x32\x1e.datasetdoctor.v1.ColorHueGateB\x0b\n\t_strength\"\xd7\x02\n\x11\x43olorPreviewInput\x12\x30\n\x05image\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x39\n\x0einput_manifest\x18\x02 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x18\n\x10output_directory\x18\x03 \x01(\t\x12\x12\n\nmax_pixels\x18\x04 \x01(\x04\x12\x35\n\trectangle\x18\x05 \x01(\x0b\x32 .datasetdoctor.v1.ColorRectangleH\x00\x12\x31\n\x07polygon\x18\x06 \x01(\x0b\x32\x1e.datasetdoctor.v1.ColorPolygonH\x00\x12\x33\n\toperation\x18\x07 \x01(\x0b\x32 .datasetdoctor.v1.ColorOperationB\x08\n\x06region\"\xb9\x01\n\x13\x43olorPreviewRequest\x12.\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1d.datasetdoctor.v1.TaskContext\x12\x39\n\x12input_manifest_ref\x18\x02 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x37\n\nparameters\x18\x03 \x01(\x0b\x32#.datasetdoctor.v1.ColorPreviewInput\"6\n\x0f\x45xecutionLookup\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x12\n\nattempt_id\x18\x02 \x01(\t\"\xa6\x01\n\x11\x45xecutionSnapshot\x12\x31\n\x06handle\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.ExecutionHandle\x12\x0e\n\x06status\x18\x02 \x01(\t\x12:\n\x13result_manifest_ref\x18\x03 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x12\n\nerror_code\x18\x04 \x01(\t*d\n\x0b\x43olorMethod\x12\x1c\n\x18\x43OLOR_METHOD_UNSPECIFIED\x10\x00\x12\x1a\n\x16\x43OLOR_METHOD_HUE_REMAP\x10\x01\x12\x1b\n\x17\x43OLOR_METHOD_SOLID_FILL\x10\x02\x32\xcf\x03\n\x0cPythonWorker\x12i\n\x1cStartAnnotationGeometryAudit\x12&.datasetdoctor.v1.GeometryAuditRequest\x1a!.datasetdoctor.v1.ExecutionHandle\x12]\n\x11StartColorPreview\x12%.datasetdoctor.v1.ColorPreviewRequest\x1a!.datasetdoctor.v1.ExecutionHandle\x12V\n\x0cGetExecution\x12!.datasetdoctor.v1.ExecutionLookup\x1a#.datasetdoctor.v1.ExecutionSnapshot\x12K\n\x06Health\x12\x1f.datasetdoctor.v1.HealthRequest\x1a .datasetdoctor.v1.HealthSnapshot\x12P\n\x08Shutdown\x12!.datasetdoctor.v1.ShutdownRequest\x1a!.datasetdoctor.v1.ShutdownReceiptb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'datasetdoctor.v1.worker_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_COLORMETHOD']._serialized_start=2072
+  _globals['_COLORMETHOD']._serialized_end=2172
   _globals['_HEALTHREQUEST']._serialized_start=129
   _globals['_HEALTHREQUEST']._serialized_end=144
   _globals['_HEALTHSNAPSHOT']._serialized_start=147
@@ -47,10 +49,24 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GEOMETRYAUDITINPUT']._serialized_end=649
   _globals['_GEOMETRYAUDITREQUEST']._serialized_start=652
   _globals['_GEOMETRYAUDITREQUEST']._serialized_end=839
-  _globals['_EXECUTIONLOOKUP']._serialized_start=841
-  _globals['_EXECUTIONLOOKUP']._serialized_end=895
-  _globals['_EXECUTIONSNAPSHOT']._serialized_start=898
-  _globals['_EXECUTIONSNAPSHOT']._serialized_end=1064
-  _globals['_PYTHONWORKER']._serialized_start=1067
-  _globals['_PYTHONWORKER']._serialized_end=1435
+  _globals['_COLORPOINT']._serialized_start=841
+  _globals['_COLORPOINT']._serialized_end=875
+  _globals['_COLORRECTANGLE']._serialized_start=877
+  _globals['_COLORRECTANGLE']._serialized_end=970
+  _globals['_COLORPOLYGON']._serialized_start=972
+  _globals['_COLORPOLYGON']._serialized_end=1032
+  _globals['_COLORHUEGATE']._serialized_start=1034
+  _globals['_COLORHUEGATE']._serialized_end=1110
+  _globals['_COLOROPERATION']._serialized_start=1113
+  _globals['_COLOROPERATION']._serialized_end=1311
+  _globals['_COLORPREVIEWINPUT']._serialized_start=1314
+  _globals['_COLORPREVIEWINPUT']._serialized_end=1657
+  _globals['_COLORPREVIEWREQUEST']._serialized_start=1660
+  _globals['_COLORPREVIEWREQUEST']._serialized_end=1845
+  _globals['_EXECUTIONLOOKUP']._serialized_start=1847
+  _globals['_EXECUTIONLOOKUP']._serialized_end=1901
+  _globals['_EXECUTIONSNAPSHOT']._serialized_start=1904
+  _globals['_EXECUTIONSNAPSHOT']._serialized_end=2070
+  _globals['_PYTHONWORKER']._serialized_start=2175
+  _globals['_PYTHONWORKER']._serialized_end=2638
 # @@protoc_insertion_point(module_scope)

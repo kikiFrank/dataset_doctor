@@ -124,6 +124,11 @@ path = "../../tests/integration/rpc/worker_geometry.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "worker_color_preview"
+path = "../../tests/integration/rpc/worker_color_preview.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "worker_process"
 path = "../../tests/integration/rpc/worker_process.rs"
 required-features = ["execution-rpc"]

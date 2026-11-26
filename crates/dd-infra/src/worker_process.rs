@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use dd_protocol::v1::{
-    ExecutionHandle, ExecutionLookup, ExecutionSnapshot, GeometryAuditRequest, HealthRequest,
-    HealthSnapshot, ShutdownRequest, python_worker_client::PythonWorkerClient,
+    ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, GeometryAuditRequest,
+    HealthRequest, HealthSnapshot, ShutdownRequest, python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
 use tonic::transport::Channel;
@@ -61,6 +61,17 @@ impl WorkerProcess {
     ) -> Result<ExecutionHandle, WorkerProcessError> {
         self.client
             .start_annotation_geometry_audit(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
+
+    pub async fn start_color_preview(
+        &mut self,
+        request: ColorPreviewRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_color_preview(self.process.request(request))
             .await
             .map(|reply| reply.into_inner())
             .map_err(WorkerProcessError::Rpc)

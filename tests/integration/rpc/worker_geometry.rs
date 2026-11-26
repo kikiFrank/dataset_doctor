@@ -155,7 +155,12 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     .await
     .unwrap();
     let health = worker.health().await.unwrap();
-    assert_eq!(health.loaded_capability_ids, ["annotation_geometry.v1"]);
+    assert!(
+        health
+            .loaded_capability_ids
+            .iter()
+            .any(|capability| capability == "annotation_geometry.v1")
+    );
 
     let request = GeometryAuditRequest {
         context: Some(TaskContext {

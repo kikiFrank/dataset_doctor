@@ -41,6 +41,59 @@ message GeometryAuditRequest {
   GeometryAuditInput parameters = 3;
 }
 
+message ColorPoint {
+  double x = 1;
+  double y = 2;
+}
+
+message ColorRectangle {
+  ColorPoint origin = 1;
+  double width = 2;
+  double height = 3;
+}
+
+message ColorPolygon {
+  repeated ColorPoint points = 1;
+}
+
+message ColorHueGate {
+  double hue_min_deg = 1;
+  double hue_max_deg = 2;
+  bool wraps_zero = 3;
+}
+
+enum ColorMethod {
+  COLOR_METHOD_UNSPECIFIED = 0;
+  COLOR_METHOD_HUE_REMAP = 1;
+  COLOR_METHOD_SOLID_FILL = 2;
+}
+
+message ColorOperation {
+  ColorMethod method = 1;
+  repeated uint32 target_rgb = 2;
+  optional double strength = 3;
+  double feather_px = 4;
+  ColorHueGate source_color_gate = 5;
+}
+
+message ColorPreviewInput {
+  WorkerInputFile image = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  uint64 max_pixels = 4;
+  oneof region {
+    ColorRectangle rectangle = 5;
+    ColorPolygon polygon = 6;
+  }
+  ColorOperation operation = 7;
+}
+
+message ColorPreviewRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  ColorPreviewInput parameters = 3;
+}
+
 message ExecutionLookup {
   string task_id = 1;
   string attempt_id = 2;
@@ -55,6 +108,7 @@ message ExecutionSnapshot {
 
 service PythonWorker {
   rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
+  rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
   rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);

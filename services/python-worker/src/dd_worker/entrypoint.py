@@ -17,7 +17,9 @@ worker_root = Path(__file__).resolve().parent
 sys.path[:0] = [str(worker_root), str(worker_root / "generated")]
 from datasetdoctor.v1 import worker_service_pb2 as protocol
 from datasetdoctor.v1 import worker_service_pb2_grpc as service
-from geometry_execution import CAPABILITY, GeometryExecutions
+import color_execution
+import geometry_execution
+from worker_execution import WorkerExecutions
 
 PROTOCOL_MAJOR = 1
 BUILD_VERSION = "0.1.0"
@@ -57,11 +59,11 @@ def read_bootstrap(source):
 
 
 class Worker(service.PythonWorkerServicer):
-    def __init__(self, token, session_id, stop, geometry):
+    def __init__(self, token, session_id, stop, executions):
         self._authorization = f"Bearer {token}"
         self._session_id = session_id
         self._stop = stop
-        self._geometry = geometry
+        self._executions = executions
 
     def _authorize(self, context):
         values = [
@@ -83,21 +85,30 @@ class Worker(service.PythonWorkerServicer):
             executor_session_id=self._session_id,
             protocol_major=PROTOCOL_MAJOR,
             build_version=BUILD_VERSION,
-            loaded_capability_ids=[CAPABILITY] if self._geometry is not None else [],
-            active_executions=self._geometry.active_count() if self._geometry is not None else 0,
+            loaded_capability_ids=(
+                [geometry_execution.CAPABILITY, color_execution.CAPABILITY]
+                if self._executions is not None else []
+            ),
+            active_executions=self._executions.active_count() if self._executions is not None else 0,
         )
 
     def StartAnnotationGeometryAudit(self, request, context):
+        return self._start(request, context, geometry_execution)
+
+    def StartColorPreview(self, request, context):
+        return self._start(request, context, color_execution)
+
+    def _start(self, request, context, capability):
         self._authorize(context)
-        if self._geometry is None or self._stop.is_set():
-            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Worker cannot admit geometry executions")
-        return self._geometry.start(request, context)
+        if self._executions is None or self._stop.is_set():
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Worker cannot admit executions")
+        return self._executions.start(request, context, capability.OPERATION_DOMAIN, capability.compute_result)
 
     def GetExecution(self, request, context):
         self._authorize(context)
-        if self._geometry is None:
+        if self._executions is None:
             context.abort(grpc.StatusCode.NOT_FOUND, "execution not found")
-        return self._geometry.snapshot(request, context)
+        return self._executions.snapshot(request, context)
 
     def Shutdown(self, request, context):
         self._authorize(context)
@@ -119,8 +130,11 @@ def main():
     channel = grpc.insecure_channel(core["address"], options=options) if core else nullcontext()
     with ThreadPoolExecutor(max_workers=2) as pool, ThreadPoolExecutor(max_workers=1) as compute, channel as connection:
         server = grpc.server(pool, options=options)
-        geometry = GeometryExecutions(connection, core["claim_token"], session, compute) if core else None
-        service.add_PythonWorkerServicer_to_server(Worker(token, session, stop, geometry), server)
+        executions = (
+            WorkerExecutions(connection, core["claim_token"], session, compute)
+            if core else None
+        )
+        service.add_PythonWorkerServicer_to_server(Worker(token, session, stop, executions), server)
         port = server.add_insecure_port("127.0.0.1:0")
         server.start()
         try:
