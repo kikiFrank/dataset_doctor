@@ -27,6 +27,8 @@ pub mod execution_rpc;
 pub mod frame_runtime;
 #[cfg(feature = "execution-rpc")]
 pub mod geometry_runtime;
+#[cfg(feature = "execution-rpc")]
+pub mod image_quality_runtime;
 pub mod import_preflight;
 pub mod import_registration;
 pub mod input_fingerprint;

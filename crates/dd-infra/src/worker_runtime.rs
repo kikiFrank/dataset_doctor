@@ -13,8 +13,9 @@ use dd_core::workspace::WorkspaceSession;
 use dd_protocol::v1::{
     ArtifactRef, ColorPreviewInput, ColorPreviewRequest, DatasetProfileInput,
     DatasetProfileRequest, ExecutionHandle, ExecutionLookup, FrameResolveInput,
-    FrameResolveRequest, GeometryAuditInput, GeometryAuditRequest, TaskContext, VideoProbeInput,
-    VideoProbeRequest, VideoTrackingInput, VideoTrackingRequest, artifact_ref::Owner,
+    FrameResolveRequest, GeometryAuditInput, GeometryAuditRequest, ImageQualityInput,
+    StartImageQualityInspectionRequest, TaskContext, VideoProbeInput, VideoProbeRequest,
+    VideoTrackingInput, VideoTrackingRequest, artifact_ref::Owner,
     core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
@@ -123,6 +124,7 @@ pub(crate) struct WorkerJob {
 pub(crate) enum WorkerOperation {
     Geometry(GeometryAuditInput),
     DatasetProfile(DatasetProfileInput),
+    ImageQuality(ImageQualityInput),
     ColorPreview(ColorPreviewInput),
     VideoProbe(VideoProbeInput),
     FrameResolve(FrameResolveInput),
@@ -134,6 +136,7 @@ impl WorkerOperation {
         match self {
             Self::Geometry(_) => crate::geometry_runtime::CAPABILITY,
             Self::DatasetProfile(_) => crate::dataset_profile_runtime::CAPABILITY,
+            Self::ImageQuality(_) => crate::image_quality_runtime::CAPABILITY,
             Self::ColorPreview(_) => crate::color_preview::CAPABILITY,
             Self::VideoProbe(_) => crate::video_registration::CAPABILITY,
             Self::FrameResolve(_) => crate::frame_runtime::CAPABILITY,
@@ -152,6 +155,11 @@ impl WorkerOperation {
             Self::DatasetProfile(input) => {
                 input.output_directory = output;
                 domain = b"datasetdoctor.v1.PythonWorker.StartProfileDataset\0";
+                input.encode_to_vec()
+            }
+            Self::ImageQuality(input) => {
+                input.output_directory = output;
+                domain = b"datasetdoctor.v1.PythonWorker.StartImageQualityInspection\0";
                 input.encode_to_vec()
             }
             Self::ColorPreview(input) => {
@@ -200,6 +208,15 @@ impl WorkerOperation {
             Self::DatasetProfile(parameters) => {
                 worker
                     .start_dataset_profile(DatasetProfileRequest {
+                        context: Some(context),
+                        input_manifest_ref: Some(manifest),
+                        parameters: Some(parameters),
+                    })
+                    .await
+            }
+            Self::ImageQuality(parameters) => {
+                worker
+                    .start_image_quality(StartImageQualityInspectionRequest {
                         context: Some(context),
                         input_manifest_ref: Some(manifest),
                         parameters: Some(parameters),
