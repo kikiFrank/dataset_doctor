@@ -17,6 +17,7 @@ use crate::dataset_query::{
     AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary, RegisteredImage,
 };
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
+use crate::review_store::{ReviewSession, ReviewStoreError};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission};
@@ -34,6 +35,7 @@ pub enum WorkspaceThreadError {
     Task(TaskStoreError),
     Import(ImportRegistrationError),
     Dataset(DatasetQueryError),
+    Review(ReviewStoreError),
     Busy,
     Stopped,
 }
@@ -46,6 +48,7 @@ impl Display for WorkspaceThreadError {
             Self::Task(error) => Display::fmt(error, formatter),
             Self::Import(error) => Display::fmt(error, formatter),
             Self::Dataset(error) => Display::fmt(error, formatter),
+            Self::Review(error) => Display::fmt(error, formatter),
             Self::Busy => write!(formatter, "Workspace request queue is full"),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
@@ -60,6 +63,7 @@ impl Error for WorkspaceThreadError {
             Self::Task(error) => Some(error),
             Self::Import(error) => Some(error),
             Self::Dataset(error) => Some(error),
+            Self::Review(error) => Some(error),
             _ => None,
         }
     }
@@ -224,6 +228,46 @@ impl WorkspaceThread {
     pub fn close(&self, expected_session_id: Uuid) -> Result<(), WorkspaceThreadError> {
         self.request(|reply| Request::Close(expected_session_id, reply))?
             .map_err(WorkspaceThreadError::Access)
+    }
+
+    pub fn open_review(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        asset: Uuid,
+        now_ms: i64,
+    ) -> Result<ReviewSession, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .open_review(dataset, asset, now_ms)
+                .map_err(WorkspaceThreadError::Review)
+        })
+    }
+
+    pub fn get_review(
+        &self,
+        session: Uuid,
+        review: Uuid,
+    ) -> Result<ReviewSession, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .get_review(review)
+                .map_err(WorkspaceThreadError::Review)
+        })
+    }
+
+    pub fn cancel_review(
+        &self,
+        session: Uuid,
+        review: Uuid,
+        expected_revision: u64,
+        now_ms: i64,
+    ) -> Result<ReviewSession, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .cancel_review(review, expected_revision, now_ms)
+                .map_err(WorkspaceThreadError::Review)
+        })
     }
 
     pub fn enqueue_task(

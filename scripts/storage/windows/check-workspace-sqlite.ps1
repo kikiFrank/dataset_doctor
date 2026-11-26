@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'TaskStore')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'TaskStore')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,7 +46,7 @@ if ($Suite -in @('All', 'Migration', 'AppMigration')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
-if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'TaskStore')) {
+if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'ReviewSession', 'TaskStore')) {
     $env:DD_WORKSPACE_LOCK_RUN_DIR = Join-Path $repo "target\p02-workspace\runs\$run"
     $directories += $env:DD_WORKSPACE_LOCK_RUN_DIR
 }
@@ -81,6 +81,7 @@ switch ($Suite) {
     'DatasetBrowse' { $cargoArgs += @('-p', 'dd-infra', '--test', 'dataset_browse') }
     'InputFingerprint' { $cargoArgs += @('-p', 'dd-infra', '--test', 'input_fingerprint') }
     'ReviewValidation' { $cargoArgs += @('-p', 'dd-infra', '--test', 'review_validation') }
+    'ReviewSession' { $cargoArgs += @('-p', 'dd-infra', '--test', 'review_session') }
     'TaskStore' { $cargoArgs += @('-p', 'dd-infra', '--test', 'task_store') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }

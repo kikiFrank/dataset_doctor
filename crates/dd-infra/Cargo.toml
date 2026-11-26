@@ -94,6 +94,10 @@ name = "review_validation"
 path = "../../tests/storage/review/validation.rs"
 
 [[test]]
+name = "review_session"
+path = "../../tests/storage/review/session.rs"
+
+[[test]]
 name = "core_claim_loopback"
 path = "../../tests/integration/rpc/core_claim_loopback.rs"
 required-features = ["execution-rpc"]
