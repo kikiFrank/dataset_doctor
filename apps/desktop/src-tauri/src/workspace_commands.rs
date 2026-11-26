@@ -34,6 +34,7 @@ pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
 pub(crate) mod video_sampling;
 pub(crate) mod video_tracking;
+pub(crate) mod workflow;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
     if let (Some(python), Some(entrypoint)) = (
@@ -87,6 +88,10 @@ mod import_tests;
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/geometry.rs"]
 mod geometry_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/workflow.rs"]
+mod workflow_tests;
 
 #[cfg(all(test, feature = "video-acceptance"))]
 #[path = "../../../../tests/desktop/host/video_frame.rs"]

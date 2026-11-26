@@ -9,7 +9,7 @@ use dd_infra::staging_commit::{
     AcknowledgedFinding, AcknowledgedIncompleteCheck, StagingCommitError,
     StagingCommitRequest as StoredCommitRequest, StagingCommitService,
 };
-use dd_infra::staging_report::{StagingReportError, StagingReportService};
+use dd_infra::staging_report::{ReportCheck, StagingReportError, StagingReportService};
 use dd_infra::task_store::{TaskStoreError, format_digest};
 use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportOperationRef, ImportTaskView};
 use dd_ui_contracts::staging::{
@@ -19,6 +19,7 @@ use dd_ui_contracts::staging::{
     StagingState,
 };
 use dd_ui_contracts::video::VideoFrame;
+use dd_ui_contracts::workflow::{ReportGetRequest, ReportGetView};
 use dd_ui_contracts::{ArtifactOwner, ArtifactReference, DecimalU64};
 use tauri::State;
 use uuid::Uuid;
@@ -27,14 +28,21 @@ use super::{AppError, Commands, WorkspaceThread, WorkspaceThreadError, run};
 
 #[tauri::command]
 pub async fn report_get(
-    request: StagingReportGetRequest,
+    request: ReportGetRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
-) -> Result<StagingReportView, AppError> {
-    run(
-        thread,
-        request.context.request_id.clone(),
-        move |commands| commands.get_staging_report(request),
-    )
+) -> Result<ReportGetView, AppError> {
+    let request_id = match &request {
+        ReportGetRequest::Workflow(request) => request.context.request_id.clone(),
+        ReportGetRequest::Staging(request) => request.context.request_id.clone(),
+    };
+    run(thread, request_id, move |commands| match request {
+        ReportGetRequest::Workflow(request) => commands
+            .get_workflow_report(request)
+            .map(ReportGetView::Workflow),
+        ReportGetRequest::Staging(request) => commands
+            .get_staging_report(request)
+            .map(ReportGetView::Staging),
+    })
     .await
 }
 
@@ -296,8 +304,31 @@ impl Commands {
         })?;
         let data = report.data;
         let scope = data.scope;
-        let checks = data
-            .checks
+        Ok(StagingReportView {
+            report_id: self.uuid_text(data.report_id.to_string())?,
+            scope: StagingReportScopeView {
+                dataset_id: self.uuid_text(scope.dataset_id.to_string())?,
+                asset_id: self.uuid_text(scope.asset_id.to_string())?,
+                media_digest: scope.media_digest,
+                annotation_digest: scope.annotation_digest,
+                label_schema_digest: scope.label_schema_digest,
+            },
+            input_fingerprint: data.input_fingerprint,
+            execution_coverage: data.execution_coverage,
+            findings_by_severity: data.findings_by_severity,
+            human_ack_status: data.human_ack_status,
+            unexecuted_checks: data.unexecuted_checks,
+            repair_outcomes: data.repair_outcomes,
+            checks: self.report_checks_view(data.checks)?,
+            report_artifact_ref: self.wire_artifact(report.reference)?,
+        })
+    }
+
+    pub(super) fn report_checks_view(
+        &self,
+        checks: Vec<ReportCheck>,
+    ) -> Result<Vec<StagingReportCheckView>, AppError> {
+        checks
             .into_iter()
             .map(|check| {
                 let findings = check
@@ -342,25 +373,7 @@ impl Commands {
                     finished_at: check.finished_at,
                 })
             })
-            .collect::<Result<_, AppError>>()?;
-        Ok(StagingReportView {
-            report_id: self.uuid_text(data.report_id.to_string())?,
-            scope: StagingReportScopeView {
-                dataset_id: self.uuid_text(scope.dataset_id.to_string())?,
-                asset_id: self.uuid_text(scope.asset_id.to_string())?,
-                media_digest: scope.media_digest,
-                annotation_digest: scope.annotation_digest,
-                label_schema_digest: scope.label_schema_digest,
-            },
-            input_fingerprint: data.input_fingerprint,
-            execution_coverage: data.execution_coverage,
-            findings_by_severity: data.findings_by_severity,
-            human_ack_status: data.human_ack_status,
-            unexecuted_checks: data.unexecuted_checks,
-            repair_outcomes: data.repair_outcomes,
-            checks,
-            report_artifact_ref: self.wire_artifact(report.reference)?,
-        })
+            .collect()
     }
 
     pub(super) fn wire_artifact(

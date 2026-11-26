@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use super::{Commands, run};
 
-const MAX_IMAGE_PIXELS: u64 = 100_000_000;
+pub(super) const MAX_IMAGE_PIXELS: u64 = 100_000_000;
 
 pub(crate) struct GeometryRunner {
     interpreter: PathBuf,

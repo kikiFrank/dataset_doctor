@@ -7,6 +7,7 @@ pub mod dataset_export;
 pub mod dataset_import;
 pub mod staging;
 pub mod video;
+pub mod workflow;
 pub mod workspace;
 
 use std::fmt::Display;
@@ -190,6 +191,20 @@ pub fn wire_primitives_typescript() -> String {
         staging::StagingIncompleteCheckAck::decl(&config),
         staging::StagingCommitRequest::decl(&config),
         staging::StagingCommitView::decl(&config),
+        workflow::WorkflowStartRequest::decl(&config),
+        workflow::WorkflowDatasetScope::decl(&config),
+        workflow::WorkflowPolicyOverrides::decl(&config),
+        workflow::WorkflowGetRequest::decl(&config),
+        workflow::WorkflowView::decl(&config),
+        workflow::WorkflowStatusView::decl(&config),
+        workflow::WorkflowPlanSourceView::decl(&config),
+        workflow::WorkflowTaskView::decl(&config),
+        workflow::WorkflowGeometryTaskView::decl(&config),
+        workflow::WorkflowReportGetRequest::decl(&config),
+        workflow::ReportGetRequest::decl(&config),
+        workflow::ReportGetView::decl(&config),
+        workflow::WorkflowReportView::decl(&config),
+        workflow::WorkflowReportScopeView::decl(&config),
         dataset_export::DatasetExportFormat::decl(&config),
         dataset_export::DatasetExportSelection::decl(&config),
         dataset_export::ExportPolicy::decl(&config),

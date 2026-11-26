@@ -3,12 +3,11 @@
 use std::path::PathBuf;
 
 use dd_core::workflow::{ScopeKind, WorkflowInput};
-use dd_domain::workflow_templates::DATASET_HEALTHCHECK;
 use serde_json::json;
 use uuid::Uuid;
 
 use super::super::{CAPABILITY, WorkflowDraftRequest, WorkflowError, WorkflowStore, database};
-use super::{LocalHealthcheckRequest, execution};
+use super::{LocalHealthcheckRequest, LocalHealthcheckRuntime, execution};
 use crate::input_fingerprint::freeze_input_manifest;
 use crate::paths::publish_immutable;
 use crate::sqlite::row_uuid;
@@ -77,7 +76,7 @@ pub(super) fn freeze_dataset(
             manifest_id,
             fingerprint: manifest.input_fingerprint,
         },
-        template_id: DATASET_HEALTHCHECK.id.into(),
+        template_id: LocalHealthcheckRuntime::template_id().into(),
         input_path: path,
         input_manifest_sha256: manifest.sha256,
         request_id: request.request_id,

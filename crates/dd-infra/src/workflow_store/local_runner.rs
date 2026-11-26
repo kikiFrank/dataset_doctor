@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use dd_core::workflow::{PlanPolicy, Step};
+use dd_domain::workflow_templates::DATASET_HEALTHCHECK;
 use rusqlite::params;
 use uuid::Uuid;
 
@@ -49,6 +50,10 @@ pub struct LocalHealthcheckRuntime {
 }
 
 impl LocalHealthcheckRuntime {
+    pub fn template_id() -> &'static str {
+        DATASET_HEALTHCHECK.id
+    }
+
     pub fn new(
         owner: Arc<WorkspaceThread>,
         interpreter: PathBuf,

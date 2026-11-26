@@ -195,6 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&workspace),
         workspace_commands::GRANT_LIFETIME,
     ));
+    let workflow = workspace_commands::workflow::configured(Arc::clone(&workspace));
     tauri::Builder::default()
         .register_uri_scheme_protocol("dd-media", |context, request| {
             let service = context.app_handle().state::<Arc<MediaDisplayService>>();
@@ -204,6 +205,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(workspace)
         .manage(media)
         .manage(imports)
+        .manage(workflow)
         .manage(workspace_commands::geometry::GeometryRunner::configured())
         .manage(workspace_commands::color::ColorRunner::configured())
         .manage(workspace_commands::video::VideoRunner::configured())
@@ -247,6 +249,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset_import::dataset_import_external,
             workspace_commands::dataset_import::task_get,
             workspace_commands::geometry::annotation_geometry_submit,
+            workspace_commands::workflow::workflow_start,
+            workspace_commands::workflow::workflow_get,
             workspace_commands::color::repair_color_preview,
             workspace_commands::color::repair_color_apply,
             workspace_commands::video::video_import,

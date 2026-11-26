@@ -94,6 +94,34 @@ export type StagingCommitRequest = { context: CommandContext, target_dataset_id:
 
 export type StagingCommitView = { target_dataset_id: UuidText, accepted_asset_ids: Array<UuidText>, quality_report_ref: ArtifactReference, acknowledged_findings: Array<StagingFindingAck>, acknowledged_incomplete_checks: Array<StagingIncompleteCheckAck>, };
 
+export type WorkflowStartRequest = { context: CommandContext, scope: WorkflowDatasetScope, template_id: string, policy_overrides: WorkflowPolicyOverrides, };
+
+export type WorkflowDatasetScope = { dataset_id: UuidText, };
+
+export type WorkflowPolicyOverrides = { sample_limit?: number, };
+
+export type WorkflowGetRequest = { context: CommandContext, workflow_run_id: UuidText, };
+
+export type WorkflowView = { workflow_run_id: UuidText, planning_task_id: UuidText, status: WorkflowStatusView, row_revision: DecimalU64, plan_revision: DecimalU64 | null, input_fingerprint: string | null, plan_source: WorkflowPlanSourceView | null, profile_task: WorkflowTaskView | null, geometry_tasks: Array<WorkflowGeometryTaskView>, report_task_id: UuidText | null, error_code: string | null, };
+
+export type WorkflowStatusView = "DRAFT" | "READY" | "RUNNING" | "INTERRUPTED" | "WAITING_REVIEW" | "FAILED";
+
+export type WorkflowPlanSourceView = "PROPOSED" | "LOCAL_DEFAULT";
+
+export type WorkflowTaskView = { task_id: UuidText, status: string, };
+
+export type WorkflowGeometryTaskView = { asset_id: UuidText, task_id: UuidText, status: string, };
+
+export type WorkflowReportGetRequest = { context: CommandContext, workflow_run_id: UuidText, };
+
+export type ReportGetRequest = WorkflowReportGetRequest | StagingReportGetRequest;
+
+export type ReportGetView = WorkflowReportView | StagingReportView;
+
+export type WorkflowReportView = { report_id: UuidText, scope: WorkflowReportScopeView, input_fingerprint: string, execution_coverage: { [key in string]: number }, findings_by_severity: { [key in string]: number }, human_ack_status: string, unexecuted_checks: Array<string>, repair_outcomes: unknown[], checks: Array<StagingReportCheckView>, report_artifact_ref: ArtifactReference, };
+
+export type WorkflowReportScopeView = { dataset_id: UuidText, workflow_run_id: UuidText, };
+
 export type DatasetExportFormat = "COCO_DETECTION";
 
 export type DatasetExportSelection = "ALL_MEMBERS";
