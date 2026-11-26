@@ -7,3 +7,7 @@ publish = false
 
 [dependencies]
 uuid = { version = "=1.29.3", features = ["v4"] }
+
+[[test]]
+name = "grant_claim"
+path = "../../tests/scheduler/grant_claim.rs"
