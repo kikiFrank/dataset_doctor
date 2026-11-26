@@ -45,15 +45,7 @@ impl Commands {
             ));
         }
         let config = request.dataset_sampling_config;
-        let mode = match (config.mode, config.every_n, config.interval_ms) {
-            (DatasetSamplingMode::EveryNFrames, Some(every_n), None) => {
-                VideoSamplingMode::EveryNFrames { every_n }
-            }
-            (DatasetSamplingMode::TimeInterval, None, Some(interval_ms)) => {
-                VideoSamplingMode::TimeInterval { interval_ms }
-            }
-            _ => return Err(self.error("INVALID_ARGUMENT", "采样间隔必须与所选模式对应。")),
-        };
+        let mode = self.video_sampling_mode(config.mode, config.every_n, config.interval_ms)?;
         let selection = VideoSamplingRequest {
             source_video_id: self.parse_uuid(request.source_video_id)?,
             target_dataset_id: self.parse_uuid(request.target_dataset_id)?,
@@ -132,6 +124,7 @@ impl Commands {
             .transpose()?;
         Ok(ImportTaskView {
             staging_commit: None,
+            video_tracking: None,
             task_id: self.uuid_text(snapshot.task_id.to_string())?,
             operation_kind: ImportOperationKind::VideoSample,
             status: snapshot.status,
@@ -144,6 +137,23 @@ impl Commands {
             coco_export: None,
             workspace_backup: None,
         })
+    }
+
+    pub(super) fn video_sampling_mode(
+        &self,
+        mode: DatasetSamplingMode,
+        every_n: Option<u32>,
+        interval_ms: Option<u32>,
+    ) -> Result<VideoSamplingMode, AppError> {
+        match (mode, every_n, interval_ms) {
+            (DatasetSamplingMode::EveryNFrames, Some(every_n), None) => {
+                Ok(VideoSamplingMode::EveryNFrames { every_n })
+            }
+            (DatasetSamplingMode::TimeInterval, None, Some(interval_ms)) => {
+                Ok(VideoSamplingMode::TimeInterval { interval_ms })
+            }
+            _ => Err(self.error("INVALID_ARGUMENT", "采样间隔必须与所选模式对应。")),
+        }
     }
 
     fn video_sample_service(&self) -> Result<VideoSampleService, AppError> {

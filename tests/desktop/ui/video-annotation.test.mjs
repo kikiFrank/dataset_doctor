@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { datasetSamplingConfig, keyframeChoices, locateDraft, segmentInput } from "../../../apps/desktop/src/video-annotation.ts";
+import {
+  datasetSamplingConfig, keyframeChoices, locateDraft, segmentInput,
+  trackingObservationsAtFrame, trackingSamplingConfig,
+} from "../../../apps/desktop/src/video-annotation.ts";
 
 const frame = (index, time, digest = "source") => ({
   source_video_id: "video", source_digest: digest, stream_index: 0,
@@ -42,4 +45,26 @@ test("training sampling submits only the active mode and an optional positive li
   assert.throws(() => datasetSamplingConfig("TIME_INTERVAL", "3600001", false, ""), /间隔/);
   assert.throws(() => datasetSamplingConfig("EVERY_N_FRAMES", "01", false, ""), /间隔/);
   assert.throws(() => datasetSamplingConfig("TIME_INTERVAL", "400", true, "0"), /上限/);
+});
+
+test("tracking has its own sampling limits and sends only the selected interval", () => {
+  assert.deepEqual(trackingSamplingConfig("EVERY_N_FRAMES", "1000"),
+    { mode: "EVERY_N_FRAMES", every_n: 1000 });
+  assert.deepEqual(trackingSamplingConfig("TIME_INTERVAL", "600"),
+    { mode: "TIME_INTERVAL", interval_ms: 600 });
+  assert.throws(() => trackingSamplingConfig("EVERY_N_FRAMES", "1001"), /间隔/);
+  assert.throws(() => trackingSamplingConfig("TIME_INTERVAL", "0"), /间隔/);
+});
+
+test("tracking candidates bind to the exact video and display frame identity", () => {
+  const target = frame("9007199254740993", "9007199254740994");
+  const observed = { frame_index: target.frame_index, source: "TRACKER" };
+  const tracks = {
+    source_video_id: "video", source_digest: "source", stream_index: 0,
+    observations: [observed, { frame_index: "9007199254740992", source: "HUMAN_SEED" }],
+  };
+  assert.deepEqual(trackingObservationsAtFrame(tracks, target), [observed]);
+  assert.deepEqual(trackingObservationsAtFrame(tracks, { ...target, source_digest: "changed" }), []);
+  assert.deepEqual(trackingObservationsAtFrame(tracks, { ...target, stream_index: 1 }), []);
+  assert.deepEqual(trackingObservationsAtFrame(tracks, null), []);
 });

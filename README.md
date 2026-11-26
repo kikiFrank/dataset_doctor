@@ -179,6 +179,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 
 Windows 开发版的视频入口从启动进程继承已核验的视频工具路径。使用 `$env:DD_WORKER_VIDEO_FFMPEG = $ffmpeg` 和 `$env:DD_WORKER_VIDEO_FFPROBE = $ffprobe` 设置工具路径后启动桌面程序。`tests/desktop/windows/check-command-handlers.ps1` 接受 `-VideoFfmpegExe` 和 `-VideoFfprobeExe` 参数，可在命令行复跑 Windows 桌面命令宿主的真实视频探测。
 
+在视频工作台保存人工关键帧和片段后，从「视频追踪」选择片段和取帧方式。本机平移追踪使用首个有标注的关键帧。在时间轴选择实际显示帧时，可查看对应的候选框、来源及需审核的轨迹区间。
+
 在目标数据集的待接收区选择视频样本，运行标注检查后刷新待接收区并点击「查看报告」。报告显示实际几何检查、发现项和未评估的语义检查。确认 Final 后重新运行标注检查，Core 会按当前图像、标注和类别生成报告。
 
 样本进入「可接收」后，在当前报告中逐项确认相关发现，为未执行的检查填写接收理由，再点击「确认接收」。接收成功后，待接收区和数据集成员列表更新，并保留可查询的任务回执。

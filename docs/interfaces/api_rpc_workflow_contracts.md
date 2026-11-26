@@ -230,6 +230,8 @@ video_get 的 video_annotation_manifest_ref 和 video_annotation_manifest 公开
 
 训练采样受理时冻结片段修订、真实帧选择及类别摘要。完成后 task_get 的 video_sample 返回已核验回执和受管样本 ID；登记与成功终态同事务提交。重复采样复用同一帧的受管资产。当前支持人工关键帧以及无候选的实际帧，提供 tracking_result_ref 的入口待追踪任务接通。
 
+桌面 `video_track_submit` 提交暂存片段和独立的追踪采样方式，Core 冻结源、首个人工种子、片段修订及类别摘要。未指定追踪配置时使用内置平移适配器。成功后 `task_get.video_tracking` 返回已核验的范围、轨迹引用、人工种子、候选与待审核区间。当前帧的结果按来源摘要、流和显示帧号匹配。
+
 桌面对单个 Staging 样本运行几何检查后，Core 使用已接纳的检查结果生成 BUILD_REPORT，并在 staging_list 返回匹配当前内容的 current_report_ref。报告的 Task ID 可通过 report_get 查询。语义证据没有就绪时保留未执行的原因和覆盖缺口。进入 READY_FOR_ACCEPTANCE 仍需有效 Final 及已通过的必需结构检查。
 
 单样本接收成功后，task_get 返回 staging_commit 回执，其中列出数据集、接收的 Asset ID、报告引用和用户逐项确认的覆盖缺口及发现。接收记录与成员关系的更新同事务提交，重开工作区后可继续查询。

@@ -89,6 +89,7 @@ impl Commands {
             .ok_or_else(|| self.error("NOT_FOUND", "当前工作区中没有此任务。"))?;
         Ok(ImportTaskView {
             staging_commit: None,
+            video_tracking: None,
             task_id: self.uuid_text(task_id.to_string())?,
             operation_kind: ImportOperationKind::ReviewCommit,
             status: task.status,

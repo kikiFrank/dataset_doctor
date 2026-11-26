@@ -1,5 +1,6 @@
 import type {
-  DatasetSamplingConfigInput, DatasetSamplingMode, VideoAnnotationManifest, VideoFrame, VideoKeyframe,
+  DatasetSamplingConfigInput, DatasetSamplingMode, TrackingSamplingConfigInput,
+  VideoAnnotationManifest, VideoFrame, VideoKeyframe, VideoTrackingView,
 } from "./api/generated/wire-primitives";
 
 function sameFrame(left: VideoFrame, right: VideoFrame): boolean {
@@ -53,17 +54,31 @@ export function segmentInput(start_us: string, end_us: string, keyframes: VideoK
 export function datasetSamplingConfig(
   mode: DatasetSamplingMode, interval: string, include_keyframes: boolean, limit: string,
 ): DatasetSamplingConfigInput {
-  const value = Number(interval);
-  if (!/^[1-9][0-9]*$/.test(interval) || value > (mode === "TIME_INTERVAL" ? 3_600_000 : 100_000)) {
-    throw new Error("请输入所选模式支持的正整数采样间隔。");
-  }
+  const timing = samplingInterval(mode, interval, 100_000);
   const max_frames = Number(limit);
   if (limit !== "" && (!/^[1-9][0-9]*$/.test(limit) || max_frames > 4_294_967_295)) {
     throw new Error("帧数上限必须是正整数。");
   }
   return {
-    mode, include_keyframes,
-    ...(mode === "TIME_INTERVAL" ? { interval_ms: value } : { every_n: value }),
+    ...timing, include_keyframes,
     ...(limit === "" ? {} : { max_frames }),
   };
+}
+
+export function trackingSamplingConfig(mode: DatasetSamplingMode, interval: string): TrackingSamplingConfigInput {
+  return samplingInterval(mode, interval, 1_000);
+}
+
+function samplingInterval(mode: DatasetSamplingMode, interval: string, frameLimit: number): TrackingSamplingConfigInput {
+  const value = Number(interval);
+  if (!/^[1-9][0-9]*$/.test(interval) || value > (mode === "TIME_INTERVAL" ? 3_600_000 : frameLimit)) {
+    throw new Error("请输入所选模式支持的正整数采样间隔。");
+  }
+  return mode === "TIME_INTERVAL" ? { mode, interval_ms: value } : { mode, every_n: value };
+}
+
+export function trackingObservationsAtFrame(tracks: VideoTrackingView, frame: VideoFrame | null) {
+  if (!frame || frame.source_video_id !== tracks.source_video_id || frame.source_digest !== tracks.source_digest
+      || frame.stream_index !== tracks.stream_index) return [];
+  return tracks.observations.filter(observation => observation.frame_index === frame.frame_index);
 }

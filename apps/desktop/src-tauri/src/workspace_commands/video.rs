@@ -99,6 +99,46 @@ impl VideoRunner {
             .await;
     }
 
+    pub(super) async fn execute_tracking(
+        self: Arc<Self>,
+        workspace: Arc<WorkspaceThread>,
+        session: Uuid,
+        job: dd_infra::video_tracking_runtime::VideoTrackingJob,
+    ) {
+        use dd_infra::video_tracking_runtime::VideoTrackingRuntime;
+        let task = job.task_id();
+        let _slot = self.slot.lock().await;
+        let owner = Arc::clone(&workspace);
+        let queued = async_runtime::spawn_blocking(move || owner.task_outcome(session, task)).await;
+        if !matches!(queued, Ok(Ok(outcome)) if outcome.status == "QUEUED") {
+            return;
+        }
+        let launched = VideoTrackingRuntime::launch(
+            Arc::clone(&workspace),
+            session,
+            self.interpreter.clone(),
+            self.entrypoint.clone(),
+        )
+        .await;
+        let startup_failed = match launched {
+            Ok(mut worker) => {
+                if worker.run(job).await.is_ok() {
+                    let _ = worker.shutdown().await;
+                    return;
+                }
+                if worker.terminate().await.is_err() {
+                    return;
+                }
+                false
+            }
+            Err(_) => true,
+        };
+        let _ = async_runtime::spawn_blocking(move || {
+            VideoTrackingRuntime::record_unavailable(&workspace, session, task, startup_failed)
+        })
+        .await;
+    }
+
     async fn execute(
         self: Arc<Self>,
         workspace: Arc<WorkspaceThread>,
@@ -252,6 +292,7 @@ impl Commands {
             .map_err(|error| self.dataset_error(error))?;
         Ok(ImportTaskView {
             staging_commit: None,
+            video_tracking: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::VideoProbe,
             status: outcome.status,

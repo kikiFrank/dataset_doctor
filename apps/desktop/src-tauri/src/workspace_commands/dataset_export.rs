@@ -112,6 +112,7 @@ impl Commands {
         });
         Ok(ImportTaskView {
             staging_commit: None,
+            video_tracking: None,
             task_id: self.uuid_text(task_id.to_string())?,
             operation_kind: ImportOperationKind::DatasetExport,
             status: task.status,

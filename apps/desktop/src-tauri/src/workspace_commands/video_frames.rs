@@ -104,6 +104,7 @@ impl Commands {
             .map_err(|error| self.frame_error(error))?;
         Ok(ImportTaskView {
             staging_commit: None,
+            video_tracking: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::FrameResolve,
             status: snapshot.status,

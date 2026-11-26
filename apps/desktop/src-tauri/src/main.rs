@@ -230,6 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::video_annotations::video_get_keyframe_draft,
             workspace_commands::video_annotations::video_save_segment,
             workspace_commands::video_sampling::video_sample_submit,
+            workspace_commands::video_tracking::video_track_submit,
             workspace_commands::staging::staging_list,
             workspace_commands::staging::staging_commit,
             workspace_commands::staging::report_get,

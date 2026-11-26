@@ -31,6 +31,7 @@ pub(crate) mod video;
 pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
 pub(crate) mod video_sampling;
+pub(crate) mod video_tracking;
 pub(crate) mod staging;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {

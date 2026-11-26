@@ -238,6 +238,71 @@ pub struct VideoSampleView {
     pub samples: Vec<StagedVideoSampleView>,
 }
 
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct TrackingSamplingConfigInput {
+    pub mode: DatasetSamplingMode,
+    #[ts(optional)]
+    pub every_n: Option<u32>,
+    #[ts(optional)]
+    pub interval_ms: Option<u32>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoTrackSubmitRequest {
+    pub context: CommandContext,
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    pub segment_id: UuidText,
+    #[ts(optional)]
+    pub tracker_profile_id: Option<UuidText>,
+    pub tracking_sampling_config: TrackingSamplingConfigInput,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct VideoTrackingView {
+    pub source_video_id: UuidText,
+    pub source_digest: String,
+    pub stream_index: u32,
+    pub target_dataset_id: UuidText,
+    pub label_schema_digest: String,
+    pub segment_id: UuidText,
+    pub segment_revision: DecimalU64,
+    pub tracker_profile_id: UuidText,
+    pub input_fingerprint: String,
+    pub algorithm: String,
+    pub tracks_ref: ArtifactReference,
+    pub processed_frame_count: u32,
+    pub observations: Vec<TrackObservationView>,
+    pub uncertain_ranges: Vec<TrackUncertainRangeView>,
+    pub tail_checks: Vec<TrackTailCheckView>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct TrackObservationView {
+    pub frame_index: DecimalU64,
+    pub track_id: UuidText,
+    pub category_id: DecimalU64,
+    pub bbox_xywh: [f64; 4],
+    pub source: String,
+    pub mean_absolute_error: Option<f64>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct TrackUncertainRangeView {
+    pub track_id: UuidText,
+    pub first_frame_index: DecimalU64,
+    pub last_frame_index: DecimalU64,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct TrackTailCheckView {
+    pub track_id: UuidText,
+    pub status: String,
+}
+
 #[derive(Debug, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FrameResolution {

@@ -4,6 +4,7 @@ import type { DisplayLocator, FrameResolution, MediaGetLocatorRequest, VideoFram
 import type {
   ArtifactReference, CocoDocument, ImportOperationRef, KeyframeDraftReceipt, SegmentReceipt,
   VideoGetKeyframeDraftRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+  VideoTrackSubmitRequest,
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -31,6 +32,14 @@ export function submitVideoSamples(workspace: OpenWorkspace, fields: Omit<VideoS
     ...fields, context: { ...context(workspace, crypto.randomUUID()), idempotency_key: idempotencyKey },
   };
   return invoke("video_sample_submit", { request });
+}
+
+export function submitVideoTracking(workspace: OpenWorkspace, fields: Omit<VideoTrackSubmitRequest, "context">,
+  idempotencyKey: string): Promise<ImportOperationRef> {
+  const request: VideoTrackSubmitRequest = {
+    ...fields, context: { ...context(workspace, crypto.randomUUID()), idempotency_key: idempotencyKey },
+  };
+  return invoke("video_track_submit", { request });
 }
 
 export function pickVideoFile(workspace: OpenWorkspace): Promise<PathGrant | null> {

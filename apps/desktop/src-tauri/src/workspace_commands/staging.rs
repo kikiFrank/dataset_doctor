@@ -142,7 +142,7 @@ impl Commands {
                 .into_iter()
                 .map(|id| self.uuid_text(id.to_string()))
                 .collect::<Result<_, _>>()?,
-            quality_report_ref: self.staging_artifact(receipt.quality_report_ref)?,
+            quality_report_ref: self.wire_artifact(receipt.quality_report_ref)?,
             acknowledged_findings: receipt
                 .acknowledged_findings
                 .into_iter()
@@ -175,6 +175,7 @@ impl Commands {
             video_frame: None,
             video_sample: None,
             staging_commit: Some(staging_commit),
+            video_tracking: None,
         })
     }
 
@@ -254,7 +255,7 @@ impl Commands {
                     source_frame_ref,
                     current_report_ref: item
                         .current_report_ref
-                        .map(|reference| self.staging_artifact(reference))
+                        .map(|reference| self.wire_artifact(reference))
                         .transpose()?,
                     blocking_reasons: item
                         .blocking_reasons
@@ -316,7 +317,7 @@ impl Commands {
                 let evidence_refs = check
                     .evidence_refs
                     .into_iter()
-                    .map(|reference| self.staging_artifact(reference))
+                    .map(|reference| self.wire_artifact(reference))
                     .collect::<Result<_, AppError>>()?;
                 Ok(StagingReportCheckView {
                     check_id: check.check_id,
@@ -356,11 +357,14 @@ impl Commands {
             unexecuted_checks: data.unexecuted_checks,
             repair_outcomes: data.repair_outcomes,
             checks,
-            report_artifact_ref: self.staging_artifact(report.reference)?,
+            report_artifact_ref: self.wire_artifact(report.reference)?,
         })
     }
 
-    fn staging_artifact(&self, reference: StoredReference) -> Result<ArtifactReference, AppError> {
+    pub(super) fn wire_artifact(
+        &self,
+        reference: StoredReference,
+    ) -> Result<ArtifactReference, AppError> {
         let owner = match reference.owner {
             StoredOwner::Task(id) => ArtifactOwner::Task(self.uuid_text(id.to_string())?),
             StoredOwner::Asset(id) => ArtifactOwner::Asset(self.uuid_text(id.to_string())?),
@@ -373,7 +377,7 @@ impl Commands {
             media_type: reference.media_type,
             sha256: reference.sha256,
             size_bytes: DecimalU64::try_from(reference.size_bytes)
-                .map_err(|_| self.error("DATA_CORRUPTION", "报告记录的大小无效。"))?,
+                .map_err(|_| self.error("DATA_CORRUPTION", "产物记录的大小无效。"))?,
             schema_id: reference.schema_id,
         })
     }

@@ -12,9 +12,10 @@ use dd_ui_contracts::staging::{
     StagingCommitRequest, StagingIncompleteCheckAck, StagingReportGetRequest, StagingState,
 };
 use dd_ui_contracts::video::{
-    FrameResolution, VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest,
-    VideoResolveFrameRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest,
-    VideoSaveSegmentRequest,
+    DatasetSamplingMode, FrameResolution, TrackingSamplingConfigInput,
+    VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest, VideoResolveFrameRequest,
+    VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+    VideoTrackSubmitRequest,
 };
 use tauri::http::Request;
 
@@ -673,5 +674,67 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
             .unwrap()
             .task_id,
         accepted.task_id
+    );
+    let track_key = uuid(Uuid::new_v4().to_string());
+    let track_request = |step, key: UuidText| {
+        let mut command_context = context(reopened);
+        command_context.idempotency_key = Some(key);
+        VideoTrackSubmitRequest {
+            context: command_context,
+            source_video_id: uuid(source_id.clone()),
+            target_dataset_id: dataset.clone(),
+            segment_id: reopened_segment_id.clone(),
+            tracker_profile_id: None,
+            tracking_sampling_config: TrackingSamplingConfigInput {
+                mode: DatasetSamplingMode::EveryNFrames,
+                every_n: Some(step),
+                interval_ms: None,
+            },
+        }
+    };
+    let submitted = commands
+        .start_video_tracking(
+            Some(Arc::clone(&runner)),
+            track_request(1, track_key.clone()),
+        )
+        .unwrap();
+    let tracked = wait(reopened, submitted.task_id.clone());
+    assert_eq!(tracked.status, "SUCCEEDED");
+    assert!(matches!(
+        tracked.operation_kind,
+        ImportOperationKind::VideoTrack
+    ));
+    let bundle = tracked.video_tracking.unwrap();
+    assert_eq!(bundle.segment_id, reopened_segment_id);
+    assert_eq!(bundle.processed_frame_count, 1);
+    assert_eq!(
+        String::from(bundle.observations[0].frame_index.clone()),
+        "3"
+    );
+    assert_eq!(bundle.observations[0].source, "HUMAN_SEED");
+    assert_eq!(bundle.tracks_ref.kind, "VIDEO_TRACK_BUNDLE");
+    assert_eq!(
+        commands
+            .start_video_tracking(
+                Some(Arc::clone(&runner)),
+                track_request(1, track_key.clone())
+            )
+            .unwrap()
+            .task_id,
+        submitted.task_id
+    );
+    assert_eq!(
+        commands
+            .start_video_tracking(Some(Arc::clone(&runner)), track_request(2, track_key))
+            .unwrap_err()
+            .code,
+        "CONFLICT"
+    );
+    let unavailable = commands
+        .start_video_tracking(None, track_request(1, uuid(Uuid::new_v4().to_string())))
+        .unwrap();
+    assert_eq!(
+        wait(reopened, unavailable.task_id).error_code.as_deref(),
+        Some("WORKER_START_FAILED")
     );
 }

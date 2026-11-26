@@ -191,6 +191,7 @@ impl Commands {
                     .transpose()?;
                 Ok(ImportTaskView {
                     staging_commit: None,
+                    video_tracking: None,
                     task_id: self.uuid_text(id.to_string())?,
                     operation_kind: ImportOperationKind::DatasetImportInspect,
                     status: task.status,
@@ -220,6 +221,7 @@ impl Commands {
                             Self::backup_task,
                             Self::frame_task,
                             Self::video_sample_task,
+                            Self::video_tracking_task,
                             Self::staging_commit_task,
                         ];
                         for query in queries {
@@ -247,6 +249,7 @@ impl Commands {
                     task_id: self.uuid_text(id.to_string())?,
                     operation_kind: ImportOperationKind::DatasetImportExternal,
                     staging_commit: None,
+                    video_tracking: None,
                     status: task.status,
                     error_code: task.error_code,
                     registration,

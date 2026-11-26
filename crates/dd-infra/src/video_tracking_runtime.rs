@@ -176,6 +176,15 @@ pub struct VideoTrackingRuntime {
 }
 
 impl VideoTrackingRuntime {
+    pub fn record_unavailable(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        startup_failed: bool,
+    ) -> Result<(), TrackingError> {
+        WorkerRuntime::record_unavailable(workspace, session, task, CAPABILITY, startup_failed)
+    }
+
     pub async fn launch(
         owner: Arc<WorkspaceThread>,
         session: Uuid,
@@ -206,6 +215,10 @@ impl VideoTrackingRuntime {
 
     pub async fn shutdown(self) -> Result<(), TrackingError> {
         self.runtime.shutdown().await
+    }
+
+    pub async fn terminate(self) -> Result<(), TrackingError> {
+        self.runtime.terminate().await
     }
 }
 
@@ -269,6 +282,7 @@ struct LoadedTrackingTask {
     video: Uuid,
     digest: [u8; 32],
     schema: String,
+    segment_revision: u64,
 }
 
 fn read_task(
@@ -343,6 +357,13 @@ fn load_binding(
         .as_str()
         .ok_or_else(invalid)?
         .to_owned();
+    let revision = value["resolved_config"]["segment_revision"]
+        .as_str()
+        .ok_or_else(invalid)?;
+    let segment_revision = revision.parse::<u64>().map_err(|_| invalid())?;
+    if segment_revision == 0 || segment_revision.to_string() != revision {
+        return Err(invalid());
+    }
     let binding: TrackingBinding =
         serde_json::from_value(value["resolved_config"]["tracking_binding"].clone())
             .map_err(|_| invalid())?;
@@ -359,6 +380,7 @@ fn load_binding(
         video,
         digest,
         schema,
+        segment_revision,
     })
 }
 
