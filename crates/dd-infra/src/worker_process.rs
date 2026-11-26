@@ -22,12 +22,47 @@ pub struct WorkerLaunch {
     pub core: Option<CoreClaimEndpoint>,
 }
 
+#[derive(Clone, Debug)]
+pub enum WorkerProgram {
+    Script {
+        interpreter: PathBuf,
+        entrypoint: PathBuf,
+    },
+    Packaged {
+        executable: PathBuf,
+    },
+}
+
 pub struct WorkerProcess {
     process: LocalProcess,
     client: PythonWorkerClient<Channel>,
 }
 
 impl WorkerProcess {
+    pub(crate) async fn launch_program(
+        program: WorkerProgram,
+        executor_session: Uuid,
+        core: CoreClaimEndpoint,
+    ) -> Result<Self, WorkerProcessError> {
+        match program {
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            } => {
+                Self::launch(WorkerLaunch {
+                    interpreter,
+                    entrypoint,
+                    executor_session,
+                    core: Some(core),
+                })
+                .await
+            }
+            WorkerProgram::Packaged { executable } => {
+                Self::launch_packaged(executable, executor_session, Some(core)).await
+            }
+        }
+    }
+
     pub async fn launch(config: WorkerLaunch) -> Result<Self, WorkerProcessError> {
         if !config.interpreter.is_absolute() || !config.entrypoint.is_absolute() {
             return Err(WorkerProcessError::InvalidLaunch);

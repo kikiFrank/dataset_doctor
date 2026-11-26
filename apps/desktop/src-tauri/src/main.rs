@@ -227,7 +227,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(media)
         .manage(imports)
         .manage(workflow)
-        .manage(workspace_commands::geometry::GeometryRunner::configured())
         .manage(workspace_commands::color::ColorRunner::configured())
         .manage(workspace_commands::video::VideoRunner::configured())
         .manage(RuntimeMode {
@@ -240,6 +239,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_report_export,
         })
         .setup(|app| {
+            app.manage(workspace_commands::geometry::GeometryRunner::configured(
+                app.path().resource_dir().ok(),
+            ));
             let runtime = app.state::<RuntimeMode>();
             let mut window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))

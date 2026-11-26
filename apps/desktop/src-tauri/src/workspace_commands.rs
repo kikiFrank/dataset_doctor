@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use dd_core::workspace::{WorkspaceAccessError, WorkspaceSession};
 use dd_infra::task_store::TaskStoreError;
+use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workspace::WorkspaceOpenError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::UuidText;
@@ -36,6 +37,26 @@ pub(crate) mod video_frames;
 pub(crate) mod video_sampling;
 pub(crate) mod video_tracking;
 pub(crate) mod workflow;
+
+fn configured_worker_program(resource_dir: Option<PathBuf>) -> Option<WorkerProgram> {
+    let packaged = resource_dir.and_then(|directory| {
+        let root = directory.canonicalize().ok()?;
+        let name = if cfg!(windows) {
+            "dd-worker.exe"
+        } else {
+            "dd-worker"
+        };
+        let executable = root.join("dd-worker").join(name).canonicalize().ok()?;
+        (executable.starts_with(&root) && executable.is_file())
+            .then_some(WorkerProgram::Packaged { executable })
+    });
+    packaged.or_else(|| {
+        configured_worker_script().map(|(interpreter, entrypoint)| WorkerProgram::Script {
+            interpreter,
+            entrypoint,
+        })
+    })
+}
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
     if let (Some(python), Some(entrypoint)) = (

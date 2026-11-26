@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
     [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')][string]$Suite = 'Runtime',
-    [string]$PythonExe
+    [string]$PythonExe,
+    [string]$PackagedWorkerExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +22,24 @@ try {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     $start.EnvironmentVariables['DD_DESKTOP_SMOKE_ROOT'] = $run
+    if ($PackagedWorkerExe) {
+        if ($Suite -ne 'WorkspaceBusiness') { throw 'Packaged Worker layout requires WorkspaceBusiness.' }
+        $product = (Resolve-Path -LiteralPath $PackagedWorkerExe).Path
+        if ((Split-Path -Leaf $product) -ne 'dd-worker.exe') { throw 'Expected the packaged dd-worker.exe.' }
+        $appFolder = Join-Path $run 'Packaged desktop'
+        New-Item -ItemType Directory -Path $appFolder | Out-Null
+        $copy = Join-Path $appFolder 'Dataset Doctor.exe'
+        Copy-Item -LiteralPath $exe -Destination $copy
+        $workerFolder = Join-Path $appFolder 'dd-worker'
+        Copy-Item -LiteralPath (Split-Path -Parent $product) -Destination $workerFolder -Recurse
+        $workerDigest = (Get-FileHash -LiteralPath $product).Hash
+        if ((Get-FileHash -LiteralPath (Join-Path $workerFolder 'dd-worker.exe')).Hash -ne $workerDigest) {
+            throw 'Worker executable changed while copying the product layout.'
+        }
+        $start.FileName = $copy
+        $start.EnvironmentVariables['DD_WORKER_PYTHON'] = Join-Path $run 'missing-python.exe'
+        $start.EnvironmentVariables['DD_WORKER_ENTRYPOINT'] = Join-Path $run 'missing-worker.py'
+    }
     $expected = 'DESKTOP_WEBVIEW2_READY'
     if ($Suite -eq 'Workspace') {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
@@ -91,6 +110,7 @@ try {
             & $python -I -B (Join-Path $PSScriptRoot 'verify_business_fixture.py') @arguments
             if ($LASTEXITCODE -ne 0) { throw 'The target COCO reader rejected the exported business fixture.' }
         }
+        if ($PackagedWorkerExe) { "Packaged Worker SHA-256 $workerDigest" | Add-Content -LiteralPath $log -Encoding UTF8 }
         "Native desktop $Suite completed Tauri IPC and exited: $log"
     } finally {
         $process.Dispose()

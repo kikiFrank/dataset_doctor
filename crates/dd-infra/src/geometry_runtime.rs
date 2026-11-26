@@ -23,6 +23,7 @@ use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
 use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
 use crate::task_store::{StoredTask, TaskOutcome, TaskSubmission, format_digest};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -66,12 +67,27 @@ impl GeometryRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, GeometryRuntimeError> {
-        Ok(Self {
-            runtime: WorkerRuntime::launch(
-                workspace,
-                expected_session,
+        Self::launch_with_program(
+            workspace,
+            expected_session,
+            WorkerProgram::Script {
                 interpreter,
                 entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        workspace: Arc<WorkspaceThread>,
+        expected_session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, GeometryRuntimeError> {
+        Ok(Self {
+            runtime: WorkerRuntime::launch_with_program(
+                workspace,
+                expected_session,
+                program,
                 CAPABILITY,
             )
             .await?,

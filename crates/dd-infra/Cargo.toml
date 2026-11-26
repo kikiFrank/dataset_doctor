@@ -317,6 +317,11 @@ path = "../../tests/integration/rpc/workspace_image_quality.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "packaged_workspace_geometry"
+path = "../../tests/integration/rpc/packaged_workspace_geometry.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "report_export"
 path = "../../tests/integration/rpc/report_export.rs"
 required-features = ["execution-rpc"]

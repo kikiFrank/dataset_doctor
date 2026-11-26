@@ -88,7 +88,8 @@ $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test
     '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final',
     '--test', 'workspace_backup_task')
 if ($PackagedWorkerExe) {
-    $tests = @('--test', 'worker_color_preview', '--test', 'worker_dataset_profile', '--test', 'worker_image_quality')
+    $tests = @('--test', 'worker_color_preview', '--test', 'worker_dataset_profile', '--test', 'worker_image_quality',
+        '--test', 'packaged_workspace_geometry')
 }
 if ($VideoFfmpegExe) {
     $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve', '--test', 'worker_tracking')

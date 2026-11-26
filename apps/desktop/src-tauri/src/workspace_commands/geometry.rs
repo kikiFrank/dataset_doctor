@@ -7,6 +7,7 @@ use dd_infra::geometry_runtime::{
 };
 use dd_infra::staging_report::{OptionalStagingCheck, StagingReportRequest, StagingReportService};
 use dd_infra::task_store::TaskStoreError;
+use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::dataset_import::{
     GeometryFindingView, GeometryReportView, GeometrySubmitRequest, ImportOperationKind,
@@ -21,23 +22,28 @@ use super::{Commands, run};
 pub(super) const MAX_IMAGE_PIXELS: u64 = 100_000_000;
 
 pub(crate) struct GeometryRunner {
-    interpreter: PathBuf,
-    entrypoint: PathBuf,
+    program: WorkerProgram,
     active: Mutex<Option<Uuid>>,
 }
 
 impl GeometryRunner {
+    #[cfg(test)]
     pub(crate) fn new(interpreter: PathBuf, entrypoint: PathBuf) -> Arc<Self> {
-        Arc::new(Self {
+        Self::from_program(WorkerProgram::Script {
             interpreter,
             entrypoint,
+        })
+    }
+
+    fn from_program(program: WorkerProgram) -> Arc<Self> {
+        Arc::new(Self {
+            program,
             active: Mutex::new(None),
         })
     }
 
-    pub(crate) fn configured() -> Option<Arc<Self>> {
-        let (interpreter, entrypoint) = super::configured_worker_script()?;
-        Some(Self::new(interpreter, entrypoint))
+    pub(crate) fn configured(resource_dir: Option<PathBuf>) -> Option<Arc<Self>> {
+        super::configured_worker_program(resource_dir).map(Self::from_program)
     }
 
     pub(crate) fn wait_for_idle(&self, timeout: std::time::Duration) -> bool {
@@ -61,11 +67,10 @@ impl GeometryRunner {
     ) {
         let _reservation = Reservation(Arc::clone(&self));
         let task = job.task().task_id;
-        let worker = GeometryRuntime::launch(
+        let worker = GeometryRuntime::launch_with_program(
             Arc::clone(&workspace),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await;
         let startup_failed = match worker {

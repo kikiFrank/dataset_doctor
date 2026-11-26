@@ -32,7 +32,7 @@ use crate::execution_rpc::CoreClaimService;
 use crate::input_fingerprint::InputFingerprintError;
 use crate::paths::scoped_directory;
 use crate::task_store::{TaskOutcome, TaskStoreError, format_digest};
-use crate::worker_process::{CoreClaimEndpoint, WorkerLaunch, WorkerProcess, WorkerProcessError};
+use crate::worker_process::{CoreClaimEndpoint, WorkerProcess, WorkerProcessError, WorkerProgram};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const GRANT_LIFETIME: Duration = Duration::from_secs(10);
@@ -322,6 +322,24 @@ impl WorkerRuntime {
         entrypoint: PathBuf,
         capability: &str,
     ) -> Result<Self, WorkerRuntimeError> {
+        Self::launch_with_program(
+            workspace,
+            expected_session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+            capability,
+        )
+        .await
+    }
+
+    pub(crate) async fn launch_with_program(
+        workspace: Arc<WorkspaceThread>,
+        expected_session: Uuid,
+        program: WorkerProgram,
+        capability: &str,
+    ) -> Result<Self, WorkerRuntimeError> {
         let storage = Arc::clone(&workspace);
         let (session, root) = tokio::task::spawn_blocking(move || {
             let session = storage
@@ -355,15 +373,14 @@ impl WorkerRuntime {
                 })
                 .await
         });
-        let mut worker = WorkerProcess::launch(WorkerLaunch {
-            interpreter,
-            entrypoint,
-            executor_session: executor,
-            core: Some(CoreClaimEndpoint {
+        let mut worker = WorkerProcess::launch_program(
+            program,
+            executor,
+            CoreClaimEndpoint {
                 address,
                 claim_token,
-            }),
-        })
+            },
+        )
         .await?;
         if !worker
             .health()
