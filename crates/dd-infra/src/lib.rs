@@ -43,4 +43,5 @@ pub mod worker_process;
 mod worker_runtime;
 pub mod workflow_store;
 pub mod workspace;
+pub mod workspace_backup;
 pub mod workspace_thread;

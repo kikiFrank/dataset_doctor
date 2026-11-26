@@ -55,6 +55,10 @@ name = "backup_artifacts"
 path = "../../tests/storage/workspace/backup_artifacts.rs"
 
 [[test]]
+name = "backup_roundtrip"
+path = "../../tests/storage/workspace/backup_roundtrip.rs"
+
+[[test]]
 name = "json_contracts"
 path = "../../tests/contracts/rust/json_contracts.rs"
 

@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'BackupArtifacts', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'VideoRegistration', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceBackup', 'BackupAssets', 'BackupArtifacts', 'BackupRoundtrip', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'VideoFileGrants', 'VideoRegistration', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,6 +72,7 @@ switch ($Suite) {
     'WorkspaceBackup' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_backup') }
     'BackupAssets' { $cargoArgs += @('-p', 'dd-infra', '--test', 'backup_assets') }
     'BackupArtifacts' { $cargoArgs += @('-p', 'dd-infra', '--test', 'backup_artifacts') }
+    'BackupRoundtrip' { $cargoArgs += @('-p', 'dd-infra', '--test', 'backup_roundtrip') }
     'WorkspaceLock' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_ownership') }
     'WorkspaceOpen' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_open') }
     'WorkspaceAccess' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_access') }

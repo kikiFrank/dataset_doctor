@@ -4,11 +4,12 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File};
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, Row};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{copy_and_hash, is_portable_relative_file, open_scoped_file};
@@ -91,9 +92,21 @@ pub fn stage_formal_backup_artifacts(
     let temp = tempfile::Builder::new()
         .prefix(".backup-artifacts-")
         .tempdir_in(staging_directory)?;
+    let files = formal_backup_inventory(snapshot, workspace_root, Some(temp.path()))?;
+    if !files.is_empty() {
+        fs::rename(temp.path().join("artifacts"), destination)?;
+    }
+    Ok(files)
+}
+
+pub(crate) fn formal_backup_inventory(
+    snapshot: &Connection,
+    workspace_root: &Path,
+    destination: Option<&Path>,
+) -> Result<Vec<BackupArtifactFile>, BackupArtifactError> {
     let mut staged = ArtifactStage {
         root: workspace_root,
-        directory: temp.path(),
+        directory: destination,
         files: BTreeMap::new(),
     };
     let mut references = snapshot.prepare(
@@ -130,9 +143,6 @@ pub fn stage_formal_backup_artifacts(
         } else {
             staged.copy(&result.path, result.sha256.as_deref(), None)?;
         }
-    }
-    if !staged.files.is_empty() {
-        fs::rename(temp.path().join("artifacts"), destination)?;
     }
     Ok(staged.files.into_values().collect())
 }
@@ -189,7 +199,13 @@ fn stage_result(
         .filter(|value| parse_digest(value).is_some())
         .ok_or_else(invalid)?;
     stage.copy(&result.path, Some(digest), Some(size))?;
-    let bytes = fs::read(stage.directory.join(&result.path))?;
+    let mut bytes = Vec::new();
+    open_scoped_file(stage.directory.unwrap_or(stage.root), &result.path)?
+        .take(size + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 != size || format!("{:x}", Sha256::digest(&bytes)) != digest {
+        return Err(BackupArtifactError::DigestMismatch(result.path));
+    }
     let manifest = contracts
         .validate(JsonProfile::TaskResultManifest, &bytes)
         .map_err(BackupArtifactError::Contract)?;
@@ -215,7 +231,7 @@ fn stage_result(
 
 struct ArtifactStage<'a> {
     root: &'a Path,
-    directory: &'a Path,
+    directory: Option<&'a Path>,
     files: BTreeMap<PathBuf, BackupArtifactFile>,
 }
 
@@ -242,16 +258,22 @@ impl ArtifactStage<'_> {
             .map(|segment| segment.to_str().expect("validated UTF-8"))
             .collect::<Vec<_>>()
             .join("/");
-        let target = self.directory.join(path);
-        fs::create_dir_all(target.parent().expect("validated artifact parent"))?;
         let mut source = open_scoped_file(self.root, path)?;
         if let Some(expected) = size
             && source.metadata()?.len() != expected
         {
             return Err(BackupArtifactError::DigestMismatch(path.to_owned()));
         }
-        let mut output = File::create_new(target)?;
-        let (size_bytes, sha256) = copy_and_hash(&mut source, &mut output)?;
+        let (size_bytes, sha256) = if let Some(directory) = self.directory {
+            let target = directory.join(path);
+            fs::create_dir_all(target.parent().expect("validated artifact parent"))?;
+            let mut output = File::create_new(target)?;
+            let proof = copy_and_hash(&mut source, &mut output)?;
+            output.sync_all()?;
+            proof
+        } else {
+            copy_and_hash(&mut source, &mut io::sink())?
+        };
         let record = BackupArtifactFile {
             package_path: workspace_path.clone(),
             workspace_path,
@@ -259,7 +281,6 @@ impl ArtifactStage<'_> {
             size_bytes,
         };
         compare(path, &record, digest, size)?;
-        output.sync_all()?;
         self.files.insert(path.to_owned(), record);
         Ok(())
     }
