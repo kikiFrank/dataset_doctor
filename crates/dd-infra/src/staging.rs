@@ -1,12 +1,17 @@
 //! Read-only paging of Staging, with status derived from the current files and records.
 
+use std::path::Path;
+
 use rusqlite::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::artifact_reference::ArtifactReference;
 use crate::dataset_query::{DatasetPage, DatasetQueryError, RegisteredInputFile, checked_limit};
 use crate::sqlite::row_uuid;
+#[cfg(feature = "execution-rpc")]
+use crate::staging_report::{self, StoredReport};
 use crate::task_store::parse_digest;
 use crate::workspace::OpenedWorkspace;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
@@ -43,6 +48,7 @@ pub struct StagingItem {
     pub state: StagingState,
     pub review_state: Option<String>,
     pub source_frame: Option<StagingFrameSource>,
+    pub current_report_ref: Option<ArtifactReference>,
     pub blocking_reasons: Vec<&'static str>,
 }
 
@@ -77,6 +83,8 @@ struct StagingRow {
     source_video_id: Option<Uuid>,
     source_metadata: String,
     checking: bool,
+    #[cfg(feature = "execution-rpc")]
+    report: Option<StoredReport>,
 }
 
 impl StagingRow {
@@ -102,6 +110,8 @@ impl StagingRow {
             source_video_id: optional_uuid(row, 17)?,
             source_metadata: row.get(18)?,
             checking: row.get(19)?,
+            #[cfg(feature = "execution-rpc")]
+            report: StoredReport::read(row, 20).ok(),
         })
     }
 }
@@ -124,10 +134,11 @@ impl WorkspaceThread {
         } else {
             i64::from(query.page_size)
         };
-        let rows = self.workspace_action(session, move |workspace| {
-            workspace
+        let (root, rows) = self.workspace_action(session, move |workspace| {
+            let rows = workspace
                 .scan_staging(session, query, scan + 1)
-                .map_err(WorkspaceThreadError::Dataset)
+                .map_err(WorkspaceThreadError::Dataset)?;
+            Ok((workspace.root().to_owned(), rows))
         })?;
         let more = rows.len() > scan as usize;
         let mut candidates = rows.into_iter().take(scan as usize).peekable();
@@ -135,7 +146,7 @@ impl WorkspaceThread {
         let mut last_examined = None;
         while let Some(candidate) = candidates.next() {
             last_examined = Some(candidate.row.asset);
-            let item = candidate.view();
+            let item = candidate.view(&root);
             if query.status.is_none_or(|status| status == item.state) {
                 items.push(item);
             }
@@ -169,13 +180,21 @@ impl OpenedWorkspace {
                 .optional()?
                 .ok_or(DatasetQueryError::UnknownDataset)?;
         }
+        #[cfg(feature = "execution-rpc")]
+        let report_capability = staging_report::CAPABILITY;
+        #[cfg(not(feature = "execution-rpc"))]
+        let report_capability = "";
         let mut statement = self.connection.prepare(
             "SELECT a.asset_id,s.target_dataset_id,a.original_filename,a.kind,a.availability,a.location_kind,a.path,
                     a.media_digest,a.annotation_path,a.annotation_digest,a.annotation_format,
                     active.status,final.status,final.confirmed_media_digest,final.confirmed_annotation_digest,
                     final.confirmed_label_schema_digest,d.categories_json,a.source_video_id,a.source_metadata_json,
                     COALESCE(t.operation_kind='BUILD_REPORT' AND t.dataset_id=s.target_dataset_id
-                        AND t.workspace_session_id=?3 AND t.status IN ('QUEUED','DISPATCHING','RUNNING'),0)
+                        AND t.workspace_session_id=?3 AND t.status IN ('QUEUED','DISPATCHING','RUNNING'),0),
+                    CASE WHEN t.operation_kind='BUILD_REPORT' AND t.dataset_id=s.target_dataset_id
+                        AND t.capability_id=?5 AND t.status='SUCCEEDED' THEN t.task_id END,
+                    t.output_manifest_path,t.input_fingerprint,t.dataset_id,
+                    json_extract(t.execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
              FROM staging_items s JOIN assets a USING(asset_id)
              LEFT JOIN datasets d ON d.dataset_id=s.target_dataset_id
              LEFT JOIN review_sessions active ON active.asset_id=s.asset_id AND active.dataset_id=s.target_dataset_id
@@ -193,6 +212,7 @@ impl OpenedWorkspace {
                     query.after.map(|id| id.to_string()),
                     session.to_string(),
                     limit,
+                    report_capability,
                 ],
                 StagingRow::read,
             )?
@@ -270,8 +290,13 @@ impl StagingCandidate {
         (StagingState::NeedsCheck, "SCOPED_REPORT_REQUIRED")
     }
 
-    fn view(self) -> StagingItem {
+    fn view(self, _root: &Path) -> StagingItem {
         let (state, reason) = self.state();
+        let reason = Some(reason);
+        #[cfg(feature = "execution-rpc")]
+        let (state, reason, current_report_ref) = self.resolve_report(_root, state, reason);
+        #[cfg(not(feature = "execution-rpc"))]
+        let current_report_ref = None;
         let row = self.row;
         let source_frame = row
             .source_video_id
@@ -283,8 +308,55 @@ impl StagingCandidate {
             state,
             review_state: row.active_review.or(row.final_review),
             source_frame,
-            blocking_reasons: vec![reason],
+            current_report_ref,
+            blocking_reasons: reason.into_iter().collect(),
         }
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    fn resolve_report(
+        &self,
+        root: &Path,
+        state: StagingState,
+        reason: Option<&'static str>,
+    ) -> (
+        StagingState,
+        Option<&'static str>,
+        Option<ArtifactReference>,
+    ) {
+        if state != StagingState::NeedsCheck {
+            return (state, reason, None);
+        }
+        let Some(report) = self
+            .row
+            .report
+            .as_ref()
+            .and_then(|stored| stored.load(root).ok())
+        else {
+            return (state, reason, None);
+        };
+        let row = &self.row;
+        let scope = &report.data.scope;
+        if Some(scope.dataset_id) != row.dataset
+            || scope.asset_id != row.asset
+            || Some(&scope.media_digest) != row.confirmed_media.as_ref()
+            || scope.annotation_digest != row.confirmed_annotation
+            || Some(&scope.label_schema_digest) != row.confirmed_schema.as_ref()
+        {
+            return (state, reason, None);
+        }
+        if report.data.required_geometry_passed() {
+            return (
+                StagingState::ReadyForAcceptance,
+                None,
+                Some(report.reference),
+            );
+        }
+        (
+            state,
+            Some("REQUIRED_GEOMETRY_NOT_PASSED"),
+            Some(report.reference),
+        )
     }
 }
 

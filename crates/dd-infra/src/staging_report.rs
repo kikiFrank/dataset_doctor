@@ -7,7 +7,7 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -24,8 +24,8 @@ use crate::task_store::{TaskStoreError, TaskSubmission, enqueue_task_in, format_
 use crate::workspace::OpenedWorkspace;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
-const KIND: &str = "BUILD_REPORT";
-const CAPABILITY: &str = "staging_report.v1";
+pub(crate) const KIND: &str = "BUILD_REPORT";
+pub(crate) const CAPABILITY: &str = "staging_report.v1";
 const ARTIFACT_KIND: &str = "STAGING_CHECK_REPORT";
 const MAX_REPORT_BYTES: u64 = 16 * 1024 * 1024;
 const GEOMETRY: &str = "annotation_geometry";
@@ -46,7 +46,7 @@ pub struct StagingReportRequest {
     pub optional_checks: Vec<OptionalStagingCheck>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ReportScope {
     pub dataset_id: Uuid,
     pub asset_id: Uuid,
@@ -265,22 +265,44 @@ impl StagingReportService {
 
     /// Return historical accepted evidence after reverifying its stored bytes.
     pub fn get(&self, session: Uuid, task: Uuid) -> Result<StagingReport, StagingReportError> {
-        let (root, path, fingerprint, dataset, encoded_ref) =
-            self.owner.workspace_action(session, move |workspace| {
+        let (root, stored) = self.owner.workspace_action(session, move |workspace| {
                 workspace.connection.query_row(
-                    "SELECT output_manifest_path,input_fingerprint,dataset_id,
+                    "SELECT task_id,output_manifest_path,input_fingerprint,dataset_id,
                         json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
                      FROM tasks WHERE task_id=?1 AND operation_kind=?2 AND capability_id=?3 AND status='SUCCEEDED'",
                     params![task.to_string(),KIND,CAPABILITY],
-                    |row| Ok((workspace.root().to_owned(),row.get::<_,String>(0)?,
-                        row.get::<_,String>(1)?,row_uuid(row,2)?,row.get::<_,String>(3)?)),
+                    |row| Ok((workspace.root().to_owned(), StoredReport::read(row, 0)?)),
                 ).optional().map_err(database)?.ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
             })?;
+        stored.load(&root)
+    }
+}
+
+pub(crate) struct StoredReport {
+    task: Uuid,
+    path: String,
+    fingerprint: String,
+    dataset: Uuid,
+    encoded_ref: String,
+}
+
+impl StoredReport {
+    pub(crate) fn read(row: &Row<'_>, start: usize) -> rusqlite::Result<Self> {
+        Ok(Self {
+            task: row_uuid(row, start)?,
+            path: row.get(start + 1)?,
+            fingerprint: row.get(start + 2)?,
+            dataset: row_uuid(row, start + 3)?,
+            encoded_ref: row.get(start + 4)?,
+        })
+    }
+
+    pub(crate) fn load(&self, root: &Path) -> Result<StagingReport, StagingReportError> {
         let invalid = || StagingReportError::InvalidReport;
         let reference: ArtifactReference =
-            serde_json::from_str(&encoded_ref).map_err(|_| invalid())?;
-        if path != report_path(task)
-            || reference.owner != ArtifactOwner::Task(task)
+            serde_json::from_str(&self.encoded_ref).map_err(|_| invalid())?;
+        if self.path != report_path(self.task)
+            || reference.owner != ArtifactOwner::Task(self.task)
             || reference.kind != ARTIFACT_KIND
             || reference.media_type != "application/json"
             || reference.artifact_id.is_nil()
@@ -288,7 +310,7 @@ impl StagingReportService {
             return Err(invalid());
         }
         let mut bytes = Vec::new();
-        open_scoped_file(&root, Path::new(&path))?
+        open_scoped_file(root, Path::new(&self.path))?
             .take(MAX_REPORT_BYTES + 1)
             .read_to_end(&mut bytes)?;
         if bytes.len() as u64 > MAX_REPORT_BYTES
@@ -301,16 +323,27 @@ impl StagingReportService {
             serde_json::from_value(strict_json(&bytes).map_err(|_| invalid())?)
                 .map_err(|_| invalid())?;
         if data.contract_version != 1
-            || data.report_id != task
-            || data.input_fingerprint != fingerprint
-            || data.scope.dataset_id != dataset
+            || data.report_id != self.task
+            || data.input_fingerprint != self.fingerprint
+            || data.scope.dataset_id != self.dataset
         {
             return Err(invalid());
         }
         Ok(StagingReport {
-            task_id: task,
+            task_id: self.task,
             reference,
             data,
+        })
+    }
+}
+
+impl StagingReportData {
+    pub(crate) fn required_geometry_passed(&self) -> bool {
+        self.checks.iter().any(|check| {
+            check.check_id == GEOMETRY
+                && check.execution_status == "COMPLETED"
+                && check.assessment == "PASS"
+                && (check.processed_assets, check.total_assets) == (1, 1)
         })
     }
 }

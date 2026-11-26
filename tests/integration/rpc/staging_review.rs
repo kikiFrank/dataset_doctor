@@ -8,6 +8,7 @@ use dd_infra::media_display::MediaDisplayService;
 use dd_infra::review_draft::{ReviewDraftRequest, ReviewDraftService};
 use dd_infra::review_final::{FinalOperationState, ReviewFinalRequest, ReviewFinalService};
 use dd_infra::staging::{StagingQuery, StagingState};
+use dd_infra::staging_report::{OptionalStagingCheck, StagingReportRequest, StagingReportService};
 use dd_infra::video_annotation_store::{VideoArtifactOwner, VideoKeyframe};
 use dd_infra::video_keyframes::{
     KeyframeDraftRequest, SegmentRequest, VideoAnnotationService, VideoSamplingMode,
@@ -97,10 +98,14 @@ async fn a_staged_video_frame_passes_real_check_and_explicit_final_without_membe
             .open_review(session, Uuid::new_v4(), asset, 303)
             .is_err()
     );
-    let mut worker =
-        GeometryRuntime::launch(Arc::clone(owner), session, fixture.python, fixture.entry)
-            .await
-            .unwrap();
+    let mut worker = GeometryRuntime::launch(
+        Arc::clone(owner),
+        session,
+        fixture.python.clone(),
+        fixture.entry.clone(),
+    )
+    .await
+    .unwrap();
     let checked = worker
         .audit(GeometryAuditRequest {
             dataset_id: dataset,
@@ -199,11 +204,76 @@ async fn a_staged_video_frame_passes_real_check_and_explicit_final_without_membe
     );
     drop(connection);
     owner.close(session).unwrap();
-    let grant = owner.grant_selected_directory(fixture.root).unwrap();
+    let grant = owner
+        .grant_selected_directory(fixture.root.clone())
+        .unwrap();
     let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
     assert_eq!(
         owner.list_staging(reopened, query).unwrap().items[0].state,
         StagingState::NeedsCheck
     );
     assert!(media.resolve(locator.grant_id, now).is_err());
+    let reports = StagingReportService::new(Arc::clone(owner)).unwrap();
+    let report_request = StagingReportRequest {
+        request_id: Uuid::new_v4(),
+        idempotency_key: Uuid::new_v4(),
+        target_dataset_id: dataset,
+        asset_id: asset,
+        geometry_task_id: checked.task_id,
+        optional_checks: vec![OptionalStagingCheck::SemanticReview],
+    };
+    assert!(
+        reports
+            .build(reopened, report_request.clone(), 308)
+            .is_err()
+    );
+    let mut worker =
+        GeometryRuntime::launch(Arc::clone(owner), reopened, fixture.python, fixture.entry)
+            .await
+            .unwrap();
+    let recheck = worker
+        .audit(GeometryAuditRequest {
+            dataset_id: dataset,
+            asset_id: asset,
+            request_id: Uuid::new_v4(),
+            idempotency_key: Uuid::new_v4(),
+            max_pixels: 10_000,
+        })
+        .await
+        .unwrap();
+    worker.shutdown().await.unwrap();
+    assert_eq!(recheck.status, "SUCCEEDED");
+    let report = reports
+        .build(
+            reopened,
+            StagingReportRequest {
+                geometry_task_id: recheck.task_id,
+                ..report_request
+            },
+            309,
+        )
+        .unwrap();
+    let page = owner
+        .list_staging(
+            reopened,
+            StagingQuery {
+                status: Some(StagingState::ReadyForAcceptance),
+                ..query
+            },
+        )
+        .unwrap();
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].state, StagingState::ReadyForAcceptance);
+    assert!(page.items[0].blocking_reasons.is_empty());
+    assert_eq!(
+        page.items[0].current_report_ref.as_ref(),
+        Some(&report.reference)
+    );
+    let path = fixture
+        .root
+        .join(format!("artifacts/tasks/{}/report.json", report.task_id));
+    std::fs::write(path, b"report bytes changed after publication").unwrap();
+    let page = owner.list_staging(reopened, query).unwrap();
+    assert_eq!(page.items[0].state, StagingState::NeedsCheck);
+    assert!(page.items[0].current_report_ref.is_none());
 }
