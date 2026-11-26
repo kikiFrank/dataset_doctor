@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([Parameter(Mandatory = $true)][string]$RustBin)
+param(
+    [Parameter(Mandatory = $true)][string]$RustBin,
+    [string]$CocoReaderPythonExe
+)
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -19,5 +22,12 @@ $args = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked',
 $ErrorActionPreference = 'Continue'
 & $cargo @args 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
 $result = $LASTEXITCODE
+if ($result -eq 0 -and $CocoReaderPythonExe) {
+    $reader = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path
+    $package = Get-Content -LiteralPath (Join-Path $run 'export-reader-package.txt') -Raw
+    & $reader -I -B (Join-Path $repo 'tests/integration/rpc/read_coco_export.py') $package --desktop-negative 2>&1 |
+        ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+    $result = $LASTEXITCODE
+}
 "exit_code=$result" | Tee-Object -FilePath $log -Append
 exit $result

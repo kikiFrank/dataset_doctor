@@ -19,6 +19,7 @@ use crate::RuntimeMode;
 
 pub(crate) mod annotation;
 pub(crate) mod dataset;
+pub(crate) mod dataset_export;
 pub(crate) mod dataset_import;
 pub(crate) mod geometry;
 pub(crate) mod review;
@@ -61,7 +62,8 @@ pub async fn path_select(
     run(thread, request.request_id, move |commands| {
         match (&request.purpose, &request.access, &request.context) {
             (PathPurpose::Workspace, PathAccess::ReadWrite, _) => {}
-            (PathPurpose::Import, PathAccess::Read, Some(context)) => {
+            (PathPurpose::Import, PathAccess::Read, Some(context))
+            | (PathPurpose::Export, PathAccess::ReadWrite, Some(context)) => {
                 commands.session(context.clone())?;
             }
             _ => {
@@ -84,6 +86,12 @@ pub async fn path_select(
                 .context
                 .ok_or_else(|| commands.error("INVALID_ARGUMENT", "请选择当前工作区。"))?;
             return commands.import_directory(context, selection).map(Some);
+        }
+        if let PathPurpose::Export = request.purpose {
+            let context = request
+                .context
+                .ok_or_else(|| commands.error("INVALID_ARGUMENT", "请选择当前工作区。"))?;
+            return commands.export_directory(context, selection).map(Some);
         }
         let root = selection
             .canonicalize()

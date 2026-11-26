@@ -13,12 +13,14 @@ def main():
     assert version("pycocotools") == "2.0.11"
     reader = COCO(str(package / "annotations.json"))
     images = reader.loadImgs(reader.getImgIds())
-    assert len(images) == 2
-    assert sorted(img["id"] for img in images) == [1, 2]
-    assert {item["name"]: item["id"] for item in reader.loadCats(reader.getCatIds())} == {
-        "helmet": 1,
-        "signal": 2,
-    }
+    desktop_negative = sys.argv[2:] == ["--desktop-negative"]
+    if desktop_negative:
+        assert sorted(img["id"] for img in images) == [1]
+        expected_categories = {"helmet": 1}
+    else:
+        assert sorted(img["id"] for img in images) == [1, 2]
+        expected_categories = {"helmet": 1, "signal": 2}
+    assert {item["name"]: item["id"] for item in reader.loadCats(reader.getCatIds())} == expected_categories
     counts = []
     annotation_ids = []
     for media in images:
@@ -36,8 +38,8 @@ def main():
             assert annotation["category_id"] in reader.cats
         if annotations:
             assert sorted(ann["category_id"] for ann in annotations) == [1, 2]
-    assert sorted(counts) == [0, 2]
-    assert sorted(annotation_ids) == [1, 2]
+    assert sorted(counts) == ([0] if desktop_negative else [0, 2])
+    assert sorted(annotation_ids) == ([] if desktop_negative else [1, 2])
 
 
 if __name__ == "__main__":

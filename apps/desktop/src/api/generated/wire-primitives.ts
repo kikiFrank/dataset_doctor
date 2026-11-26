@@ -8,7 +8,7 @@ export type UuidText = string;
 
 export type ArtifactOwner = { "kind": "TASK", "id": UuidText } | { "kind": "ASSET", "id": UuidText } | { "kind": "REVIEW", "id": UuidText };
 
-export type PathPurpose = "WORKSPACE" | "IMPORT";
+export type PathPurpose = "WORKSPACE" | "IMPORT" | "EXPORT";
 
 export type PathKind = "DIRECTORY";
 
@@ -52,6 +52,16 @@ export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText, display_n
 
 export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };
 
+export type DatasetExportFormat = "COCO_DETECTION";
+
+export type DatasetExportSelection = "ALL_MEMBERS";
+
+export type ExportPolicy = "STRICT" | "EXCLUDE_INELIGIBLE";
+
+export type DatasetExportSubmitRequest = { context: CommandContext, dataset_id: UuidText, destination_grant_id: UuidText, format: DatasetExportFormat, selection: DatasetExportSelection, export_policy: ExportPolicy, };
+
+export type CocoExportView = { package_path: string, image_count: DecimalU64, annotation_count: DecimalU64, excluded_count: DecimalU64, };
+
 export type ImportFormat = "COCO_IMAGE_BBOX";
 
 export type DatasetImportInspectRequest = { context: CommandContext, root_grant_id: UuidText, dataset_name: string, format: ImportFormat, };
@@ -60,7 +70,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "REVIEW_COMMIT";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "REVIEW_COMMIT" | "DATASET_EXPORT";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -70,7 +80,7 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, };
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 

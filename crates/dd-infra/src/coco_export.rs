@@ -1,6 +1,8 @@
 //! Package current, explicitly confirmed single-image annotations as standard COCO.
 
 mod selection;
+mod task;
+pub use task::{CocoExportJob, CocoExportSubmission, CocoExportTaskSnapshot};
 
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -9,7 +11,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -35,7 +37,7 @@ pub struct CocoExportRequest {
     pub policy: CocoExportPolicy,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ExclusionReason {
     Unconfirmed,
@@ -44,13 +46,13 @@ pub enum ExclusionReason {
     Offline,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ExcludedAsset {
     pub asset_id: Uuid,
     pub reason: ExclusionReason,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CocoExportReceipt {
     pub package: PathBuf,
     pub image_count: usize,
@@ -68,6 +70,7 @@ pub enum CocoExportError {
     NoEligibleImages,
     InvalidData,
     InputChanged,
+    InvalidTask,
 }
 
 impl Display for CocoExportError {
@@ -89,6 +92,7 @@ impl Display for CocoExportError {
             Self::InputChanged => {
                 formatter.write_str("An export input or destination changed during export")
             }
+            Self::InvalidTask => formatter.write_str("The export task or manifest is invalid"),
         }
     }
 }
@@ -138,6 +142,16 @@ impl CocoExportService {
             .owner
             .consume_export_directory(session, request.destination_grant_id)
             .map_err(CocoExportError::Storage)?;
+        self.export_to(session, request, &destination, Uuid::new_v4())
+    }
+
+    fn export_to(
+        &self,
+        session: Uuid,
+        request: CocoExportRequest,
+        destination: &Path,
+        publication: Uuid,
+    ) -> Result<CocoExportReceipt, CocoExportError> {
         let selection = collect(&self.owner, &self.contracts, session, request.dataset_id)?;
         if request.policy == CocoExportPolicy::Strict && !selection.exclusions.is_empty() {
             return Err(CocoExportError::Ineligible(selection.exclusions));
@@ -150,7 +164,7 @@ impl CocoExportService {
         }
         let stage = tempfile::Builder::new()
             .prefix(".datasetdoctor-export-")
-            .tempdir_in(&destination)?;
+            .tempdir_in(destination)?;
         let (annotations, index) = assemble(stage.path(), request.dataset_id, &selection)?;
         write_json(stage.path().join("annotations.json"), &annotations)?;
         write_json(stage.path().join("manifest.json"), &index)?;
@@ -166,7 +180,7 @@ impl CocoExportService {
         if destination.canonicalize()? != destination {
             return Err(CocoExportError::InputChanged);
         }
-        let package = destination.join(format!("dataset-{}", Uuid::new_v4()));
+        let package = destination.join(format!("dataset-{publication}"));
         if package.try_exists()? {
             return Err(CocoExportError::InputChanged);
         }

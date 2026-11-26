@@ -2,6 +2,7 @@
 
 pub mod annotation;
 pub mod dataset;
+pub mod dataset_export;
 pub mod dataset_import;
 pub mod workspace;
 
@@ -147,6 +148,11 @@ pub fn wire_primitives_typescript() -> String {
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),
         dataset::AssetPage::decl(&config),
+        dataset_export::DatasetExportFormat::decl(&config),
+        dataset_export::DatasetExportSelection::decl(&config),
+        dataset_export::ExportPolicy::decl(&config),
+        dataset_export::DatasetExportSubmitRequest::decl(&config),
+        dataset_export::CocoExportView::decl(&config),
         dataset_import::ImportFormat::decl(&config),
         dataset_import::DatasetImportInspectRequest::decl(&config),
         dataset_import::DatasetImportExternalRequest::decl(&config),

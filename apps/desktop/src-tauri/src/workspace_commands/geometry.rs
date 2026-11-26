@@ -217,6 +217,7 @@ impl Commands {
             preview: None,
             registration: None,
             geometry_report,
+            coco_export: None,
         })
     }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { DatasetImportPanel } from "./dataset-import-panel";
+import { DatasetExportPanel } from "./dataset-export-panel";
 import { GeometryCheckPanel } from "./geometry-check-panel";
 import type { GeometryEvidence } from "./geometry-check-panel";
 import { ReviewPanel } from "./review-panel";
@@ -117,6 +118,7 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
   return (
     <div className="dataset-assets">
       <h3>{dataset.name}</h3>
+      <DatasetExportPanel workspace={workspace} datasetId={dataset.dataset_id} />
       {error && <p role="alert">{error}</p>}
       {!page && !error && <p role="status">正在读取资源…</p>}
       {page?.items.length === 0 && <p>此数据集没有资源。</p>}

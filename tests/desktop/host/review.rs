@@ -8,6 +8,9 @@ use dd_ui_contracts::annotation::{
     ReviewOpenRequest, ReviewSaveDraftRequest,
 };
 use dd_ui_contracts::dataset::AnnotationState;
+use dd_ui_contracts::dataset_export::{
+    DatasetExportFormat, DatasetExportSelection, DatasetExportSubmitRequest, ExportPolicy,
+};
 use dd_ui_contracts::dataset_import::{GeometrySubmitRequest, TaskGetRequest};
 
 use super::{geometry::GeometryRunner, *};
@@ -34,6 +37,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         include_bytes!("../../../testdata/image_io/p00-worker-rgb.png"),
     )
     .unwrap();
+    fs::copy(input.join("image.png"), input.join("unreviewed.png")).unwrap();
     let formal_path = input.join("image.json");
     let formal = br#"{"images":[{"id":4,"file_name":"image.png","width":2,"height":1}],"annotations":[{"id":7,"image_id":4,"category_id":19,"bbox":[0,0,3,1],"area":3,"iscrowd":0}],"categories":[{"id":19,"name":"helmet"}]}"#;
     fs::write(&formal_path, formal).unwrap();
@@ -52,9 +56,12 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         .unwrap();
     let dataset_id = Uuid::parse_str(&receipt.dataset_id).unwrap();
     let asset_id = thread
-        .list_assets(session, dataset_id, None, 1)
+        .list_assets(session, dataset_id, None, 2)
         .unwrap()
-        .items[0]
+        .items
+        .into_iter()
+        .find(|item| item.filename == "image.png")
+        .unwrap()
         .asset_id;
     let id = |value: Uuid| UuidText::try_from(value.to_string()).unwrap();
     let context = |session| CommandContext {
@@ -181,7 +188,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
     assert_eq!(fs::read(&formal_path).unwrap(), formal);
 
     thread.close(session).unwrap();
-    let grant = thread.grant_selected_directory(root).unwrap();
+    let grant = thread.grant_selected_directory(root.clone()).unwrap();
     let reopened = thread.open(grant.grant_id).unwrap();
     let current_session = reopened.workspace_session_id;
     let restored = commands
@@ -279,5 +286,129 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         commands.commit_review(commit(false)).unwrap_err().code,
         "CONFLICT"
     );
+
+    let destination = run.join("Desktop COCO export");
+    fs::create_dir(&destination).unwrap();
+    let build = |grant_id, policy, key| {
+        let mut context = context(current_session);
+        context.idempotency_key = Some(id(key));
+        DatasetExportSubmitRequest {
+            context,
+            dataset_id: id(dataset_id),
+            destination_grant_id: grant_id,
+            format: DatasetExportFormat::CocoDetection,
+            selection: DatasetExportSelection::AllMembers,
+            export_policy: policy,
+        }
+    };
+    let read_grant = thread
+        .grant_import_directory(current_session, destination.clone())
+        .unwrap();
+    let forbidden = commands
+        .submit_export(build(
+            id(read_grant.grant_id),
+            ExportPolicy::Strict,
+            Uuid::new_v4(),
+        ))
+        .unwrap_err();
+    assert_eq!(forbidden.code, "PERMISSION_DENIED");
+    let grant = commands
+        .export_directory(context(current_session), destination.clone())
+        .unwrap();
+    let wait = |task_id: UuidText| {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            let result = commands
+                .import_task(
+                    &imports,
+                    TaskGetRequest {
+                        context: context(current_session),
+                        task_id: task_id.clone(),
+                    },
+                )
+                .unwrap();
+            if !matches!(result.status.as_str(), "QUEUED" | "RUNNING") {
+                break result;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    };
+    let strict = commands
+        .submit_export(build(grant.grant_id, ExportPolicy::Strict, Uuid::new_v4()))
+        .unwrap();
+    let result = wait(strict.task_id);
+    assert_eq!(result.status, "FAILED");
+    assert_eq!(result.error_code.as_deref(), Some("EXPORT_BLOCKED"));
+    assert_eq!(fs::read_dir(&destination).unwrap().count(), 0);
+
+    let grant = commands
+        .export_directory(context(current_session), destination.clone())
+        .unwrap();
+    let key = Uuid::new_v4();
+    let accepted = commands
+        .submit_export(build(
+            grant.grant_id.clone(),
+            ExportPolicy::ExcludeIneligible,
+            key,
+        ))
+        .unwrap();
+    assert_eq!(accepted.status, "QUEUED");
+    let result = wait(accepted.task_id.clone());
+    assert_eq!(result.status, "SUCCEEDED");
+    let receipt = result.coco_export.unwrap();
+    assert_eq!(receipt.image_count, 1_u64.into());
+    assert_eq!(receipt.annotation_count, 0_u64.into());
+    assert_eq!(receipt.excluded_count, 1_u64.into());
+    let package = PathBuf::from(receipt.package_path).canonicalize().unwrap();
+    assert_eq!(
+        package.parent(),
+        Some(destination.canonicalize().unwrap().as_path())
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(package.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["excluded"][0]["reason"], "UNCONFIRMED");
+    let replay = commands
+        .submit_export(build(
+            grant.grant_id.clone(),
+            ExportPolicy::ExcludeIneligible,
+            key,
+        ))
+        .unwrap();
+    assert_eq!(replay.task_id, accepted.task_id);
+    assert_eq!(replay.status, "SUCCEEDED");
+    assert_eq!(
+        commands
+            .submit_export(build(grant.grant_id, ExportPolicy::Strict, key))
+            .unwrap_err()
+            .code,
+        "CONFLICT"
+    );
+    assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
+    fs::write(
+        run.join("export-reader-package.txt"),
+        package.to_str().unwrap(),
+    )
+    .unwrap();
     thread.close(current_session).unwrap();
+
+    let grant = thread.grant_selected_directory(root).unwrap();
+    let reopened = thread.open(grant.grant_id).unwrap().workspace_session_id;
+    let recovered = commands
+        .import_task(
+            &imports,
+            TaskGetRequest {
+                context: context(reopened),
+                task_id: accepted.task_id,
+            },
+        )
+        .unwrap();
+    assert_eq!(recovered.status, "SUCCEEDED");
+    assert_eq!(
+        PathBuf::from(recovered.coco_export.unwrap().package_path)
+            .canonicalize()
+            .unwrap(),
+        package
+    );
+    thread.close(reopened).unwrap();
 }

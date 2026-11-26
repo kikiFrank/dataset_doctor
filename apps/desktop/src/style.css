@@ -113,6 +113,8 @@ button:disabled { opacity: 0.58; cursor: wait; }
 .import-path { overflow-wrap: anywhere; }
 .import-preview { max-height: 240px; overflow: auto; padding-left: 20px; }
 .import-preview small { margin-left: 12px; opacity: 0.8; }
+.dataset-export { margin: 12px 0; padding: 10px; border: 1px solid #d5dee9; border-radius: 8px; }
+.dataset-export summary { cursor: pointer; }
 
 .review-panel { margin: 18px 0; border-top: 1px solid #d5dee9; }
 .review-panel h5 { margin: 16px 0 8px; font-size: 1rem; }

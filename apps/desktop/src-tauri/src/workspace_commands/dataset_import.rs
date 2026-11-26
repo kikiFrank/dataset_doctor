@@ -197,6 +197,7 @@ impl Commands {
                     registration: None,
                     preview,
                     geometry_report: None,
+                    coco_export: None,
                 })
             }
             Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
@@ -209,7 +210,12 @@ impl Commands {
                     ))) => {
                         return match self.geometry_task(session, id) {
                             Err(error) if error.code == "NOT_FOUND" => {
-                                self.review_commit_task(session, id)
+                                match self.review_commit_task(session, id) {
+                                    Err(error) if error.code == "NOT_FOUND" => {
+                                        self.export_task(session, id)
+                                    }
+                                    result => result,
+                                }
                             }
                             result => result,
                         };
@@ -235,6 +241,7 @@ impl Commands {
                     registration,
                     preview: None,
                     geometry_report: None,
+                    coco_export: None,
                 })
             }
             Err(error) => Err(self.import_error(error)),

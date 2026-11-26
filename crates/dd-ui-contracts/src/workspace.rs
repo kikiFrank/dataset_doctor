@@ -8,6 +8,7 @@ use crate::{DecimalU64, UuidText};
 pub enum PathPurpose {
     Workspace,
     Import,
+    Export,
 }
 
 #[derive(Deserialize, TS)]

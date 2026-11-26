@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{DecimalU64, UuidText, workspace::CommandContext};
+use crate::{DecimalU64, UuidText, dataset_export::CocoExportView, workspace::CommandContext};
 
 #[derive(Deserialize, TS)]
 pub enum ImportFormat {
@@ -37,6 +37,7 @@ pub enum ImportOperationKind {
     DatasetImportExternal,
     AnnotationGeometry,
     ReviewCommit,
+    DatasetExport,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -82,6 +83,7 @@ pub struct ImportTaskView {
     pub preview: Option<DatasetImportPreview>,
     pub registration: Option<DatasetImportRegistration>,
     pub geometry_report: Option<GeometryReportView>,
+    pub coco_export: Option<CocoExportView>,
 }
 
 #[derive(Deserialize, TS)]
