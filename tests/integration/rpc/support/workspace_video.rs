@@ -29,6 +29,18 @@ impl Fixture {
         let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
             .canonicalize()
             .unwrap();
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let python = PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap());
+        Self::create_at(&run, &repo, python, file_name, build).await
+    }
+
+    pub async fn create_at(
+        run: &Path,
+        repo: &Path,
+        python: PathBuf,
+        file_name: &str,
+        build: fn(&Path),
+    ) -> Self {
         let run = run.join(format!("frame-fixture-{}", Uuid::new_v4()));
         fs::create_dir(&run).unwrap();
         let root = run.join("Frame resolve Workspace");
@@ -57,9 +69,8 @@ impl Fixture {
                 200,
             )
             .unwrap();
-        let python = PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap());
-        let entry = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../services/python-worker/src/dd_worker/entrypoint.py")
+        let entry = repo
+            .join("services/python-worker/src/dd_worker/entrypoint.py")
             .canonicalize()
             .unwrap();
         let mut probe =

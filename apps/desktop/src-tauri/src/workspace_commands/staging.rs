@@ -9,12 +9,15 @@ use dd_infra::staging_commit::{
     AcknowledgedFinding, AcknowledgedIncompleteCheck, StagingCommitError,
     StagingCommitRequest as StoredCommitRequest, StagingCommitService,
 };
-use dd_infra::staging_report::{ReportCheck, StagingReportError, StagingReportService};
+use dd_infra::staging_report::{
+    ReportCheck, StagingBatchReportRequest, StagingReportError, StagingReportService,
+};
 use dd_infra::task_store::{TaskStoreError, format_digest};
 use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportOperationRef, ImportTaskView};
 use dd_ui_contracts::staging::{
-    StagingCommitRequest, StagingCommitView, StagingFindingAck, StagingIncompleteCheckAck,
-    StagingItem, StagingListRequest, StagingPage, StagingReportCheckView, StagingReportFindingView,
+    StagingBatchReportBuildRequest, StagingBatchReportView, StagingCommitRequest,
+    StagingCommitView, StagingFindingAck, StagingIncompleteCheckAck, StagingItem,
+    StagingListRequest, StagingPage, StagingReportCheckView, StagingReportFindingView,
     StagingReportGetRequest, StagingReportReasonView, StagingReportScopeView, StagingReportView,
     StagingState,
 };
@@ -47,6 +50,19 @@ pub async fn report_get(
 }
 
 #[tauri::command]
+pub async fn staging_batch_report_build(
+    request: StagingBatchReportBuildRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<StagingBatchReportView, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.prepare_staging_batch(request),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn staging_commit(
     request: StagingCommitRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
@@ -73,15 +89,57 @@ pub async fn staging_list(
 }
 
 impl Commands {
+    pub(super) fn prepare_staging_batch(
+        &self,
+        request: StagingBatchReportBuildRequest,
+    ) -> Result<StagingBatchReportView, AppError> {
+        let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
+        let dataset = self.parse_uuid(request.target_dataset_id.clone())?;
+        let refs = request
+            .source_report_refs
+            .into_iter()
+            .map(|reference| self.stored_report_reference(reference))
+            .collect::<Result<Vec<_>, _>>()?;
+        let service = StagingReportService::new(Arc::clone(&self.thread))
+            .map_err(|_| self.error("INTERNAL", "无法初始化批次报告。"))?;
+        let report = service
+            .build_batch(
+                session,
+                StagingBatchReportRequest {
+                    target_dataset_id: dataset,
+                    source_report_refs: refs,
+                    request_id,
+                    idempotency_key,
+                },
+                self.now_ms()?,
+            )
+            .map_err(|error| match error {
+                StagingReportError::Workspace(WorkspaceThreadError::Task(
+                    TaskStoreError::IdempotencyConflict,
+                )) => self.error("CONFLICT", "批次内容已变化，请重新选择样本。"),
+                StagingReportError::Workspace(error) => self.dataset_error(error),
+                _ => self.error("REPORT_STALE", "无法核验批次报告，请刷新选中的样本。"),
+            })?;
+        let label_schema_digest = report.label_schema_digest().to_owned();
+        let unexecuted_checks = report.unexecuted_checks().iter().cloned().collect();
+        Ok(StagingBatchReportView {
+            target_dataset_id: request.target_dataset_id,
+            label_schema_digest,
+            unexecuted_checks,
+            asset_ids: report
+                .asset_ids
+                .into_iter()
+                .map(|id| self.uuid_text(id.to_string()))
+                .collect::<Result<_, _>>()?,
+            quality_report_ref: self.wire_artifact(report.reference)?,
+        })
+    }
+
     pub(super) fn commit_staging(
         &self,
         request: StagingCommitRequest,
     ) -> Result<ImportOperationRef, AppError> {
         let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
-        let reference = request.quality_report_ref;
-        let ArtifactOwner::Task(report_task) = reference.owner else {
-            return Err(self.error("INVALID_ARGUMENT", "请选择待接收区的检查报告。"));
-        };
         let stored = StoredCommitRequest {
             request_id,
             idempotency_key,
@@ -91,15 +149,7 @@ impl Commands {
                 .into_iter()
                 .map(|id| self.parse_uuid(id))
                 .collect::<Result<_, _>>()?,
-            quality_report_ref: StoredReference {
-                artifact_id: self.parse_uuid(reference.artifact_id)?,
-                owner: StoredOwner::Task(self.parse_uuid(report_task)?),
-                kind: reference.kind,
-                media_type: reference.media_type,
-                sha256: reference.sha256,
-                size_bytes: reference.size_bytes.into(),
-                schema_id: reference.schema_id,
-            },
+            quality_report_ref: self.stored_report_reference(request.quality_report_ref)?,
             expected_schema_fingerprint: request.expected_schema_fingerprint,
             acknowledged_findings: request
                 .acknowledged_findings
@@ -131,6 +181,24 @@ impl Commands {
             "SUCCEEDED".into(),
             receipt.accepted_at_ms,
         )
+    }
+
+    fn stored_report_reference(
+        &self,
+        reference: ArtifactReference,
+    ) -> Result<StoredReference, AppError> {
+        let ArtifactOwner::Task(task) = reference.owner else {
+            return Err(self.error("INVALID_ARGUMENT", "请选择待接收区的检查报告。"));
+        };
+        Ok(StoredReference {
+            artifact_id: self.parse_uuid(reference.artifact_id)?,
+            owner: StoredOwner::Task(self.parse_uuid(task)?),
+            kind: reference.kind,
+            media_type: reference.media_type,
+            sha256: reference.sha256,
+            size_bytes: reference.size_bytes.into(),
+            schema_id: reference.schema_id,
+        })
     }
 
     pub(super) fn staging_commit_task(

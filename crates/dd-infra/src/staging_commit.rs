@@ -1,4 +1,6 @@
-//! Explicitly admit a checked and confirmed staged image into its target Dataset.
+//! Explicitly admit checked and confirmed Staging samples into their target Dataset.
+
+mod reports;
 
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -18,7 +20,8 @@ use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
 use crate::sqlite::row_uuid;
 use crate::staging_report::{
-    ReportScope, StagingReportError, image_scope, read_report, staged_image, verify_image,
+    MAX_BATCH_ASSETS, ReportScope, StagingReportError, image_scope, manifest_asset, staged_image,
+    verify_image,
 };
 use crate::task_store::{TaskStoreError, TaskSubmission, enqueue_task_in, format_digest};
 use crate::workspace::OpenedWorkspace;
@@ -152,7 +155,12 @@ impl StagingCommitService {
         if status != "SUCCEEDED"
             || receipt.task_id != task
             || receipt.target_dataset_id != dataset
-            || receipt.accepted_asset_ids.len() != 1
+            || receipt.accepted_asset_ids.is_empty()
+            || receipt.accepted_asset_ids.len() > MAX_BATCH_ASSETS
+            || !receipt
+                .accepted_asset_ids
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
             || receipt.accepted_at_ms != finish
         {
             return Err(StagingCommitError::InvalidReceipt);
@@ -166,17 +174,17 @@ impl StagingCommitService {
         mut request: StagingCommitRequest,
         now: i64,
     ) -> Result<StagingCommitReceipt, StagingCommitError> {
-        let [asset] = request.asset_ids.as_slice() else {
-            return Err(StagingCommitError::InvalidRequest);
-        };
-        let asset = *asset;
+        request.asset_ids.sort_unstable();
         let ArtifactOwner::Task(report_task) = request.quality_report_ref.owner else {
             return Err(StagingCommitError::InvalidRequest);
         };
         if request.request_id.is_nil()
             || request.idempotency_key.is_nil()
             || now < 0
-            || asset.is_nil()
+            || request.asset_ids.is_empty()
+            || request.asset_ids.len() > MAX_BATCH_ASSETS
+            || request.asset_ids.iter().any(Uuid::is_nil)
+            || request.asset_ids.windows(2).any(|pair| pair[0] == pair[1])
             || request.target_dataset_id.is_nil()
             || report_task.is_nil()
         {
@@ -230,7 +238,7 @@ impl StagingCommitService {
             if status != "SUCCEEDED"
                 || receipt.task_id != task
                 || receipt.target_dataset_id != dataset
-                || receipt.accepted_asset_ids != [asset]
+                || receipt.accepted_asset_ids != request.asset_ids
                 || receipt.quality_report_ref != request.quality_report_ref
                 || receipt.acknowledged_findings != request.acknowledged_findings
                 || receipt.acknowledged_incomplete_checks != request.acknowledged_incomplete_checks
@@ -240,31 +248,24 @@ impl StagingCommitService {
             return Ok(receipt);
         }
 
-        let report =
-            read_report(&self.owner, session, report_task).map_err(StagingCommitError::Report)?;
-        let scope = &report.data.scope;
-        if report.reference != request.quality_report_ref
-            || scope.dataset_id != dataset
-            || scope.asset_id != asset
-            || scope.label_schema_digest != request.expected_schema_fingerprint
-        {
-            return Err(StagingCommitError::InvalidRequest);
-        }
-        if scope.annotation_digest.is_none() || !report.data.required_geometry_passed() {
-            return Err(StagingCommitError::NotReady);
-        }
-        let mut incomplete = report.data.unexecuted_checks.clone();
-        incomplete.sort_unstable();
-        let mut findings: Vec<Uuid> = report
-            .data
-            .checks
+        let reports = reports::accepted_reports(&self.owner, session, report_task, &request)?;
+        let mut incomplete: Vec<_> = reports
             .iter()
+            .flat_map(|report| &report.data.unexecuted_checks)
+            .map(String::as_str)
+            .collect();
+        incomplete.sort_unstable();
+        incomplete.dedup();
+        let mut findings: Vec<Uuid> = reports
+            .iter()
+            .flat_map(|report| &report.data.checks)
             .flat_map(|check| &check.findings)
             .filter(|finding| finding.severity != "INFO")
             .map(|finding| finding.issue_id)
             .collect();
         findings.sort_unstable();
-        if !incomplete.iter().map(String::as_str).eq(request
+        findings.dedup();
+        if !incomplete.iter().copied().eq(request
             .acknowledged_incomplete_checks
             .iter()
             .map(|ack| ack.check_id.as_str()))
@@ -279,19 +280,26 @@ impl StagingCommitService {
         {
             return Err(StagingCommitError::AcknowledgementRequired);
         }
-        let image = self.owner.workspace_action(session, move |workspace| {
-            staged_image(workspace, dataset, asset)
+        let assets = request.asset_ids.clone();
+        let images = self.owner.workspace_action(session, move |workspace| {
+            assets
+                .into_iter()
+                .map(|asset| staged_image(workspace, dataset, asset))
+                .collect::<Result<Vec<_>, _>>()
         })?;
-        if image_scope(&image) != *scope || !verify_image(&image).map_err(StagingCommitError::Io)? {
-            return Err(StagingCommitError::NotReady);
+        for (image, report) in images.iter().zip(&reports) {
+            if image_scope(image) != report.data.scope
+                || !verify_image(image).map_err(StagingCommitError::Io)?
+            {
+                return Err(StagingCommitError::NotReady);
+            }
         }
         let input = freeze_input_manifest(
             &self.contracts,
             json!({
                 "capability_id":CAPABILITY,"implementation_version":"1","model_identity":null,
-                "dataset_id":dataset,"label_schema_digest":scope.label_schema_digest,
-                "assets":[{"asset_id":asset,"media_digest":scope.media_digest,
-                    "annotation_digest":scope.annotation_digest,"source_metadata_digest":null}],
+                "dataset_id":dataset,"label_schema_digest":request.expected_schema_fingerprint,
+                "assets":reports.iter().map(|report| manifest_asset(&report.data.scope)).collect::<Vec<_>>(),
                 "resolved_config":intent,
             }),
         )
@@ -313,16 +321,21 @@ impl StagingCommitService {
             request_fingerprint: fingerprint,
             input_fingerprint: input.input_fingerprint,
         };
+        let members: Vec<_> = reports
+            .into_iter()
+            .map(|report| (report.task_id, report.data.scope))
+            .collect();
         self.owner.workspace_action(session, move |workspace| {
-            let current = staged_image(workspace, dataset, asset)?;
-            if image_scope(&current) != report.data.scope {
-                return Ok(Err(StagingCommitError::NotReady));
+            for (_, scope) in &members {
+                let current = staged_image(workspace, dataset, scope.asset_id)?;
+                if image_scope(&current) != *scope {
+                    return Ok(Err(StagingCommitError::NotReady));
+                }
             }
             Ok(commit_membership(
                 workspace,
                 &submission,
-                report.data.scope,
-                report_task,
+                members,
                 request,
                 now,
             ))
@@ -333,8 +346,7 @@ impl StagingCommitService {
 fn commit_membership(
     workspace: &mut OpenedWorkspace,
     submission: &TaskSubmission,
-    scope: ReportScope,
-    report_task: Uuid,
+    members: Vec<(Uuid, ReportScope)>,
     request: StagingCommitRequest,
     now: i64,
 ) -> Result<StagingCommitReceipt, StagingCommitError> {
@@ -342,9 +354,13 @@ fn commit_membership(
         .connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(database)?;
-    let asset = scope.asset_id.to_string();
-    let dataset = scope.dataset_id.to_string();
-    let review = tx.query_row(
+    let dataset = request.target_dataset_id.to_string();
+    let task = enqueue_task_in(&tx, submission, now)
+        .map_err(WorkspaceThreadError::Task)?
+        .task_id;
+    for (report_task, scope) in members {
+        let asset = scope.asset_id.to_string();
+        let review = tx.query_row(
         "SELECT r.review_id
          FROM staging_items s JOIN review_sessions r
             ON r.review_id=s.review_id AND r.asset_id=s.asset_id AND r.dataset_id=s.target_dataset_id
@@ -356,17 +372,18 @@ fn commit_membership(
         params![asset,dataset,report_task.to_string(),scope.media_digest,scope.annotation_digest,scope.label_schema_digest],
         |row| row.get::<_,String>(0),
     ).optional().map_err(database)?.ok_or(StagingCommitError::NotReady)?;
-    let task = enqueue_task_in(&tx, submission, now)
-        .map_err(WorkspaceThreadError::Task)?
-        .task_id;
-    tx.execute(
+        tx.execute(
         "INSERT INTO dataset_assets(dataset_id,asset_id,final_review_id,added_at_ms) VALUES (?1,?2,?3,?4)",
         params![dataset,asset,review,now],
     ).map_err(database)?;
-    let removed = tx.execute(
+        let removed = tx.execute(
         "DELETE FROM staging_items WHERE asset_id=?1 AND target_dataset_id=?2 AND check_task_id=?3",
         params![asset,dataset,report_task.to_string()],
     ).map_err(database)?;
+        if removed != 1 {
+            return Err(StagingCommitError::NotReady);
+        }
+    }
     let revised = tx
         .execute(
             "UPDATE datasets SET row_revision=row_revision+1,updated_at_ms=max(updated_at_ms,?2)
@@ -374,13 +391,13 @@ fn commit_membership(
             params![dataset, now],
         )
         .map_err(database)?;
-    if removed != 1 || revised != 1 {
+    if revised != 1 {
         return Err(StagingCommitError::NotReady);
     }
     let receipt = StagingCommitReceipt {
         task_id: task,
-        target_dataset_id: scope.dataset_id,
-        accepted_asset_ids: vec![scope.asset_id],
+        target_dataset_id: request.target_dataset_id,
+        accepted_asset_ids: request.asset_ids,
         quality_report_ref: request.quality_report_ref,
         acknowledged_findings: request.acknowledged_findings,
         acknowledged_incomplete_checks: request.acknowledged_incomplete_checks,

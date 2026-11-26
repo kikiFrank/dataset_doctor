@@ -118,6 +118,10 @@ mod workflow_tests;
 #[cfg(all(test, feature = "video-acceptance"))]
 #[path = "../../../../tests/desktop/host/video_frame.rs"]
 mod video_frame_tests;
+
+#[cfg(all(test, feature = "video-acceptance"))]
+#[path = "../../../../tests/desktop/host/staging_batch.rs"]
+mod staging_batch_tests;
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/video_import.rs"]
 mod video_import_tests;

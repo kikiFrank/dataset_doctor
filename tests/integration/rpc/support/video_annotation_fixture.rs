@@ -10,7 +10,10 @@ mod workspace_video;
 pub(crate) use workspace_video::Fixture;
 
 pub async fn prepared() -> (Fixture, Uuid, VideoFrameReference) {
-    let fixture = Fixture::create().await;
+    prepared_from(Fixture::create().await).await
+}
+
+pub async fn prepared_from(fixture: Fixture) -> (Fixture, Uuid, VideoFrameReference) {
     let dataset = Uuid::new_v4();
     Connection::open(fixture.root.join("workspace.db"))
         .unwrap()
@@ -20,6 +23,11 @@ pub async fn prepared() -> (Fixture, Uuid, VideoFrameReference) {
             [dataset.to_string()],
         )
         .unwrap();
+    let frame = resolve_frame(&fixture, 3, 250).await;
+    (fixture, dataset, frame)
+}
+
+pub async fn resolve_frame(fixture: &Fixture, index: u64, accepted_at: i64) -> VideoFrameReference {
     let frames = FrameService::new(Arc::clone(&fixture.owner)).unwrap();
     let (task, job) = frames
         .submit(
@@ -28,10 +36,10 @@ pub async fn prepared() -> (Fixture, Uuid, VideoFrameReference) {
                 request_id: Uuid::new_v4(),
                 idempotency_key: Uuid::new_v4(),
                 video_id: fixture.video_id,
-                target: FrameTarget::Index(3),
+                target: FrameTarget::Index(index),
                 policy: SeekPolicy::Nearest,
             },
-            250,
+            accepted_at,
         )
         .unwrap();
     let mut worker = FrameResolveRuntime::launch(
@@ -49,8 +57,7 @@ pub async fn prepared() -> (Fixture, Uuid, VideoFrameReference) {
         .unwrap()
         .frame
         .unwrap();
-    let frame = VideoFrameReference::from_resolved(task.task_id, &resolved).unwrap();
-    (fixture, dataset, frame)
+    VideoFrameReference::from_resolved(task.task_id, &resolved).unwrap()
 }
 
 pub fn document() -> Value {

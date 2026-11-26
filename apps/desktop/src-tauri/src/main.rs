@@ -292,6 +292,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::video_sampling::video_sample_submit,
             workspace_commands::video_tracking::video_track_submit,
             workspace_commands::staging::staging_list,
+            workspace_commands::staging::staging_batch_report_build,
             workspace_commands::staging::staging_commit,
             workspace_commands::staging::report_get,
             workspace_commands::report_export::report_export_submit,

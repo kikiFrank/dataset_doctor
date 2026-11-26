@@ -57,6 +57,23 @@ pub struct StagingPage {
 
 #[derive(Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct StagingBatchReportBuildRequest {
+    pub context: CommandContext,
+    pub target_dataset_id: UuidText,
+    pub source_report_refs: Vec<ArtifactReference>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingBatchReportView {
+    pub target_dataset_id: UuidText,
+    pub asset_ids: Vec<UuidText>,
+    pub quality_report_ref: ArtifactReference,
+    pub label_schema_digest: String,
+    pub unexecuted_checks: Vec<String>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct StagingReportGetRequest {
     pub context: CommandContext,
     #[ts(optional)]

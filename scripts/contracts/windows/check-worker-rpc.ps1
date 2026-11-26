@@ -95,6 +95,7 @@ if ($VideoFfmpegExe) {
     $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve', '--test', 'worker_tracking')
     if (-not $PackagedWorkerExe) {
         $tests += @('--test', 'workspace_video_probe', '--test', 'workspace_frame_resolve', '--test', 'video_keyframes', '--test', 'video_segments', '--test', 'video_sampling', '--test', 'workspace_video_tracking', '--test', 'video_staging', '--test', 'video_sample_task', '--test', 'video_tracking_sample_task', '--test', 'video_tracking_review', '--test', 'staging_review', '--test', 'staging_report', '--test', 'staging_commit')
+        $tests += @('--test', 'staging_batch_commit')
     }
 }
 if ($CocoReaderPythonExe) {

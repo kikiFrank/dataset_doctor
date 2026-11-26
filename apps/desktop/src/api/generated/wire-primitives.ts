@@ -74,6 +74,10 @@ export type StagingItem = { asset_id: UuidText, target_dataset_id: UuidText | nu
 
 export type StagingPage = { items: Array<StagingItem>, next_cursor: UuidText | null, };
 
+export type StagingBatchReportBuildRequest = { context: CommandContext, target_dataset_id: UuidText, source_report_refs: Array<ArtifactReference>, };
+
+export type StagingBatchReportView = { target_dataset_id: UuidText, asset_ids: Array<UuidText>, quality_report_ref: ArtifactReference, label_schema_digest: string, unexecuted_checks: Array<string>, };
+
 export type StagingReportGetRequest = { context: CommandContext, report_id?: UuidText, task_id?: UuidText, };
 
 export type StagingReportView = { report_id: UuidText, scope: StagingReportScopeView, input_fingerprint: string, execution_coverage: { [key in string]: number }, findings_by_severity: { [key in string]: number }, human_ack_status: string, unexecuted_checks: Array<string>, repair_outcomes: unknown[], checks: Array<StagingReportCheckView>, report_artifact_ref: ArtifactReference, };

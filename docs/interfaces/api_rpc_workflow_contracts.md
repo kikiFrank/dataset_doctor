@@ -229,6 +229,7 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 | video_track_submit | source_video_id、segment_id、tracking_sampling_config、tracker_profile、input_fingerprint | 异步 | 输出逐帧候选轨迹与低置信区间；不直接产生成员关系 |
 | video_sample_submit | source_video_id、segment_id、tracking_result_ref?、dataset_sampling_config、target_dataset_id | 异步 | 在 Workspace 视频目录生成图片与单图 JSON/候选；登记 Staging；采样值由用户配置 |
 | staging_list | target_dataset_id?、status?、cursor | Page<StagingItem> | 显示标注/检查/审核状态以及来源帧 |
+| staging_batch_report_build | target_dataset_id、source_report_refs[] | StagingBatchReportView | 核验当前单样本报告，生成选中范围的一份报告引用和待确认的未执行检查 |
 | staging_commit | asset_ids[]、target_dataset_id、quality_report_ref、acknowledged_findings[]、expected_schema_fingerprint | 异步 | 用户明确确认；核对当前摘要、Final 与报告新鲜度；更新关系不复制帧 |
 | staging_remove_submit | asset_ids[]、delete_generated_files | 异步 | 删除关系和明确指定的已生成文件；不删除源视频 |
 
@@ -241,6 +242,8 @@ video_get 的 video_annotation_manifest_ref 和 video_annotation_manifest 公开
 桌面对单个 Staging 样本运行几何检查后，Core 使用已接纳的检查结果生成 BUILD_REPORT，并在 staging_list 返回匹配当前内容的 current_report_ref。报告的 Task ID 可通过 report_get 查询。语义证据没有就绪时保留未执行的原因和覆盖缺口。进入 READY_FOR_ACCEPTANCE 仍需有效 Final 及已通过的必需结构检查。
 
 单样本接收成功后，task_get 返回 staging_commit 回执，其中列出数据集、接收的 Asset ID、报告引用和用户逐项确认的覆盖缺口及发现。接收记录与成员关系的更新同事务提交，重开工作区后可继续查询。
+
+批次报告冻结同一目标 Dataset、类别版本和每个选中样本的当前报告引用。Core 在明确接收时逐条核验报告摘要、输入和 Final，并要求确认所选样本中的发现与覆盖缺口。整批成员关系、Staging 更新和回执使用同一个事务。相同成员的请求顺序可重排，回执按 Asset ID 排序。
 
 帧解析的 accepted 返回持久 Task，成功后通过 task_get 的 video_frame 读取精确 FrameRef。已核验的缓存直接返回 ready。帧图像使用 media_get_locator 的 artifact_id 与 owner_task_id 申请当前会话显示授权，Core 核对已接纳的帧任务和实际图像摘要。旧 asset_id 图片请求继续兼容。混用两种定位范围返回 INVALID_ARGUMENT。
 

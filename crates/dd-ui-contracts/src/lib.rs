@@ -182,6 +182,8 @@ pub fn wire_primitives_typescript() -> String {
         staging::StagingListRequest::decl(&config),
         staging::StagingItem::decl(&config),
         staging::StagingPage::decl(&config),
+        staging::StagingBatchReportBuildRequest::decl(&config),
+        staging::StagingBatchReportView::decl(&config),
         staging::StagingReportGetRequest::decl(&config),
         staging::StagingReportView::decl(&config),
         staging::StagingReportScopeView::decl(&config),

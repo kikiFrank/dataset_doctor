@@ -16,6 +16,10 @@ tauri-plugin-dialog = "=2.8.4"
 time = { version = "=0.3.55", features = ["formatting"] }
 uuid = "=1.29.3"
 
+[dev-dependencies]
+dd-domain = { path = "../../../crates/dd-domain" }
+rusqlite = { workspace = true }
+
 [build-dependencies]
 tauri-build = "=2.7.6"
 

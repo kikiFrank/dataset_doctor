@@ -783,8 +783,10 @@ name = "dd-desktop"
 version = "0.1.0"
 dependencies = [
  "dd-core",
+ "dd-domain",
  "dd-infra",
  "dd-ui-contracts",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",

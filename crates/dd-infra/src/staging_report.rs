@@ -1,4 +1,8 @@
-//! Produce and reopen a deterministic report for one staged image.
+//! Produce and reopen deterministic quality reports for Staging.
+mod batch;
+
+pub(crate) use batch::{BATCH_KIND, MAX_BATCH_ASSETS, manifest_asset, read_batch_report};
+pub use batch::{StagingBatchReport, StagingBatchReportRequest};
 
 use std::collections::BTreeMap;
 use std::error::Error;
