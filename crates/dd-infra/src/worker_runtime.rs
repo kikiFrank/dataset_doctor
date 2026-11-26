@@ -11,10 +11,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use dd_core::execution_grant::{GrantBook, GrantError, GrantScope};
 use dd_core::workspace::WorkspaceSession;
 use dd_protocol::v1::{
-    ArtifactRef, ColorPreviewInput, ColorPreviewRequest, ExecutionHandle, ExecutionLookup,
-    FrameResolveInput, FrameResolveRequest, GeometryAuditInput, GeometryAuditRequest, TaskContext,
-    VideoProbeInput, VideoProbeRequest, VideoTrackingInput, VideoTrackingRequest,
-    artifact_ref::Owner, core_execution_control_server::CoreExecutionControlServer,
+    ArtifactRef, ColorPreviewInput, ColorPreviewRequest, DatasetProfileInput,
+    DatasetProfileRequest, ExecutionHandle, ExecutionLookup, FrameResolveInput,
+    FrameResolveRequest, GeometryAuditInput, GeometryAuditRequest, TaskContext, VideoProbeInput,
+    VideoProbeRequest, VideoTrackingInput, VideoTrackingRequest, artifact_ref::Owner,
+    core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
 use rusqlite::params;
@@ -121,6 +122,7 @@ pub(crate) struct WorkerJob {
 
 pub(crate) enum WorkerOperation {
     Geometry(GeometryAuditInput),
+    DatasetProfile(DatasetProfileInput),
     ColorPreview(ColorPreviewInput),
     VideoProbe(VideoProbeInput),
     FrameResolve(FrameResolveInput),
@@ -131,6 +133,7 @@ impl WorkerOperation {
     fn capability(&self) -> &'static str {
         match self {
             Self::Geometry(_) => crate::geometry_runtime::CAPABILITY,
+            Self::DatasetProfile(_) => crate::dataset_profile_runtime::CAPABILITY,
             Self::ColorPreview(_) => crate::color_preview::CAPABILITY,
             Self::VideoProbe(_) => crate::video_registration::CAPABILITY,
             Self::FrameResolve(_) => crate::frame_runtime::CAPABILITY,
@@ -144,6 +147,11 @@ impl WorkerOperation {
             Self::Geometry(input) => {
                 input.output_directory = output;
                 domain = b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0";
+                input.encode_to_vec()
+            }
+            Self::DatasetProfile(input) => {
+                input.output_directory = output;
+                domain = b"datasetdoctor.v1.PythonWorker.StartProfileDataset\0";
                 input.encode_to_vec()
             }
             Self::ColorPreview(input) => {
@@ -183,6 +191,15 @@ impl WorkerOperation {
             Self::Geometry(parameters) => {
                 worker
                     .start_geometry(GeometryAuditRequest {
+                        context: Some(context),
+                        input_manifest_ref: Some(manifest),
+                        parameters: Some(parameters),
+                    })
+                    .await
+            }
+            Self::DatasetProfile(parameters) => {
+                worker
+                    .start_dataset_profile(DatasetProfileRequest {
                         context: Some(context),
                         input_manifest_ref: Some(manifest),
                         parameters: Some(parameters),

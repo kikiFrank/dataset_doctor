@@ -7,6 +7,8 @@ pub mod artifact_reference;
 pub mod backup_artifacts;
 pub mod backup_assets;
 pub mod dataset_import;
+#[cfg(feature = "execution-rpc")]
+pub mod dataset_profile_runtime;
 pub mod dataset_query;
 #[cfg(feature = "execution-rpc")]
 mod local_process;
