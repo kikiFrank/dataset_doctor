@@ -1,0 +1,14 @@
+[package]
+name = "dd-sqlite-connection-init-tests"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dev-dependencies]
+dd-infra = { path = "../../../../crates/dd-infra" }
+rusqlite.workspace = true
+
+[[test]]
+name = "workspace_connection"
+path = "workspace_connection.rs"

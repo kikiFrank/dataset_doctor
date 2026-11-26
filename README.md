@@ -97,6 +97,41 @@ $LASTEXITCODE
 
 入口离线编译并比对重复生成的描述符，用 [共享合成向量](testdata/contracts/proto/v1/artifact-ref/cases.json) 验证 [ArtifactRef](contracts/proto/datasetdoctor/v1/common.proto) 的字段编号、三种 owner、`uint64` 和 `schema_id` 存在性。输出和日志位于 `target/contract-check/p01-02/`。退出码 `0` 为通过，`1` 为编译或验收失败，`2` 为工具或 include 先决条件失败。生产代码生成、跨语言 RPC 和授权校验留待后续验证。
 
+## Windows Workspace SQLite 写连接初始化（P01-03）
+
+在已初始化的 x64 VS Developer PowerShell 中，从仓库根目录运行。使用 Rust/Cargo 1.97.1 的 MSVC 工具链和 P00-03 预填的 `target/p00-03/cargo-home/`。当前进程应使用默认的 Cargo/MSVC 编译选项。以下命令清除 SQLite 链接覆盖变量并使用 bundled 源。
+
+```powershell
+$rustBin = '<Rust 1.97.1 x86_64-pc-windows-msvc 工具链的 bin 绝对路径>'
+$cargo = Join-Path $rustBin 'cargo.exe'
+$env:RUSTC = Join-Path $rustBin 'rustc.exe'
+$env:CC = (Get-Command cl.exe -CommandType Application -ErrorAction Stop).Source
+$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = (Get-Command link.exe -CommandType Application -ErrorAction Stop).Source
+Get-ChildItem Env: | Where-Object Name -Match 'SQLITE|SQLCIPHER' | ForEach-Object {
+    [Environment]::SetEnvironmentVariable($_.Name, $null, 'Process')
+}
+$env:CARGO_HOME = (Resolve-Path -LiteralPath '.\target\p00-03\cargo-home').Path
+$env:CARGO_NET_OFFLINE = 'true'
+$env:CARGO_REGISTRIES_CRATES_IO_PROTOCOL = 'sparse'
+$out = Join-Path (Get-Location).Path 'target\p01-03'
+$run = [Guid]::NewGuid().ToString('N')
+$env:CARGO_TARGET_DIR = Join-Path $out 'cargo-target'
+$env:DD_SQLITE_INIT_RUN_DIR = Join-Path $out "runs\$run"
+$env:TEMP = Join-Path $out 'temp'
+$env:TMP = $env:TEMP
+$logs = Join-Path $out 'logs'
+New-Item -ItemType Directory -Path $env:DD_SQLITE_INIT_RUN_DIR, $env:TEMP, $logs -Force | Out-Null
+$cargoArgs = @('--manifest-path', '.\Cargo.toml', '--locked', '--offline', '--target', 'x86_64-pc-windows-msvc', '-p', 'dd-sqlite-connection-init-tests')
+& $cargo tree @cargoArgs -e features
+if ($LASTEXITCODE -ne 0) { throw 'Offline dependency resolution failed.' }
+& $cargo test @cargoArgs --test workspace_connection -- --nocapture 2>&1 | Tee-Object -FilePath (Join-Path $logs "$run.log")
+if ($LASTEXITCODE -ne 0) { throw 'Workspace SQLite connection tests failed.' }
+```
+
+Windows x64 MSVC 上 6 项合成测试全部通过。`dd_infra::sqlite::initialize_workspace_write_connection` 接收调用者已打开的文件连接，设置并读回 WAL、FULL、外键和指定的 busy timeout。重开后确认 WAL 持久化，并重新应用逐连接设置。测试还验证了孤儿行拒绝、只读和内存连接拒绝、活动事务丢弃未提交行、无效超时拒绝，以及后续设置失败时保留 SQLite 错误码和已生效的 WAL。
+
+根锁文件的 11 个外部依赖与 P00-03 一致，使用 `rusqlite 0.42.0`（`bundled`、`backup`）和 `libsqlite3-sys 0.40.0`。已核对运行时 SQLite 3.54.1 及其 Source ID，检查了静态链接和测试程序的 DLL 导入表。验证范围限于合成 Workspace 写连接初始化。数据库迁移、`app.db`、真实 Workspace 数据和其他平台待独立验收。
+
 ## 已有可执行验证
 
 ```sh

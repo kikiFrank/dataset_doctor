@@ -1,0 +1,11 @@
+[workspace]
+members = ["crates/dd-infra", "tests/storage/sqlite/connection-init"]
+exclude = ["tests/storage/sqlite/file-lock", "tests/rig-poc"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.97.1"
+
+[workspace.dependencies]
+rusqlite = { version = "=0.42.0", default-features = false, features = ["bundled", "backup"] }
