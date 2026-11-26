@@ -13,7 +13,12 @@ use serde::Deserialize;
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::sqlite::{WorkspaceMigrationError, open_existing_workspace_database};
 
+mod create;
+pub use create::create_workspace;
+
 const FILE_NAME: &str = ".datasetdoctor.lock";
+const MARKER_FILE: &str = "workspace.json";
+const DATABASE_FILE: &str = "workspace.db";
 const MARKER_LIMIT: u64 = 1_048_576;
 
 #[derive(Debug)]
@@ -73,6 +78,10 @@ pub enum WorkspaceOpenError {
     Io(io::Error),
     Lock(WorkspaceLockError),
     InvalidFile(&'static str),
+    ExistingWorkspace,
+    UnownedDatabase,
+    PendingNameMismatch,
+    CheckpointBusy,
     MarkerTooLarge,
     Marker(ContractError),
     MarkerMapping(serde_json::Error),
@@ -86,6 +95,19 @@ impl Display for WorkspaceOpenError {
             Self::Io(error) => write!(formatter, "Workspace filesystem: {error}"),
             Self::Lock(error) => Display::fmt(error, formatter),
             Self::InvalidFile(name) => write!(formatter, "Workspace {name} must be a regular file"),
+            Self::ExistingWorkspace => write!(formatter, "Open the existing Workspace"),
+            Self::UnownedDatabase => write!(
+                formatter,
+                "Workspace directory already contains unowned database files"
+            ),
+            Self::PendingNameMismatch => write!(
+                formatter,
+                "Workspace creation is pending under a different name"
+            ),
+            Self::CheckpointBusy => write!(
+                formatter,
+                "New Workspace database could not finish its WAL checkpoint"
+            ),
             Self::MarkerTooLarge => write!(formatter, "Workspace marker exceeds 1 MiB"),
             Self::Marker(error) => Display::fmt(error, formatter),
             Self::MarkerMapping(_) => {
@@ -175,14 +197,29 @@ pub fn open_workspace(
         .canonicalize()
         .map_err(WorkspaceOpenError::Io)?;
     let lock = WorkspaceLock::acquire(&root).map_err(WorkspaceOpenError::Lock)?;
+    let (_, marker) = read_marker(&root.join(MARKER_FILE), MARKER_FILE, contracts)?;
+    let connection = open_existing_workspace_database(
+        connect(&root.join(DATABASE_FILE))?,
+        busy_timeout_ms,
+        &marker.workspace_id,
+    )
+    .map_err(WorkspaceOpenError::Migration)?;
+    finish_open(root, lock, marker, connection)
+}
+
+fn read_marker(
+    path: &Path,
+    name: &'static str,
+    contracts: &JsonContracts,
+) -> Result<(Vec<u8>, MarkerIdentity), WorkspaceOpenError> {
     let mut marker_options = OpenOptions::new();
     marker_options.read(true);
     prevent_replacement(&mut marker_options);
-    let marker = marker_options
-        .open(root.join("workspace.json"))
-        .map_err(WorkspaceOpenError::Io)?;
-    if !ordinary_file(&marker.metadata().map_err(WorkspaceOpenError::Io)?) {
-        return Err(WorkspaceOpenError::InvalidFile("workspace.json"));
+    let marker = marker_options.open(path).map_err(WorkspaceOpenError::Io)?;
+    if !ordinary_file(&std::fs::symlink_metadata(path).map_err(WorkspaceOpenError::Io)?)
+        || !ordinary_file(&marker.metadata().map_err(WorkspaceOpenError::Io)?)
+    {
+        return Err(WorkspaceOpenError::InvalidFile(name));
     }
     let mut bytes = Vec::new();
     marker
@@ -192,24 +229,36 @@ pub fn open_workspace(
     if bytes.len() as u64 > MARKER_LIMIT {
         return Err(WorkspaceOpenError::MarkerTooLarge);
     }
-    let document = contracts
-        .validate(JsonProfile::WorkspaceConfig, &bytes)
-        .map_err(WorkspaceOpenError::Marker)?;
-    let marker: MarkerIdentity =
-        serde_json::from_value(document).map_err(WorkspaceOpenError::MarkerMapping)?;
+    let marker = parse_marker(contracts, &bytes)?;
+    Ok((bytes, marker))
+}
 
-    let database = root.join("workspace.db");
-    if !ordinary_file(&std::fs::symlink_metadata(&database).map_err(WorkspaceOpenError::Io)?) {
-        return Err(WorkspaceOpenError::InvalidFile("workspace.db"));
+fn parse_marker(
+    contracts: &JsonContracts,
+    bytes: &[u8],
+) -> Result<MarkerIdentity, WorkspaceOpenError> {
+    let document = contracts
+        .validate(JsonProfile::WorkspaceConfig, bytes)
+        .map_err(WorkspaceOpenError::Marker)?;
+    serde_json::from_value(document).map_err(WorkspaceOpenError::MarkerMapping)
+}
+
+fn connect(database: &Path) -> Result<Connection, WorkspaceOpenError> {
+    if !ordinary_file(&std::fs::symlink_metadata(database).map_err(WorkspaceOpenError::Io)?) {
+        return Err(WorkspaceOpenError::InvalidFile(DATABASE_FILE));
     }
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | OpenFlags::SQLITE_OPEN_NO_MUTEX
         | OpenFlags::SQLITE_OPEN_NOFOLLOW;
-    let connection =
-        Connection::open_with_flags(database, flags).map_err(WorkspaceOpenError::Database)?;
-    let connection =
-        open_existing_workspace_database(connection, busy_timeout_ms, &marker.workspace_id)
-            .map_err(WorkspaceOpenError::Migration)?;
+    Connection::open_with_flags(database, flags).map_err(WorkspaceOpenError::Database)
+}
+
+fn finish_open(
+    root: PathBuf,
+    lock: WorkspaceLock,
+    marker: MarkerIdentity,
+    connection: Connection,
+) -> Result<OpenedWorkspace, WorkspaceOpenError> {
     let offline_asset_count = connection
         .query_row(
             "SELECT count(*) FROM main.assets WHERE availability = 'OFFLINE'",
