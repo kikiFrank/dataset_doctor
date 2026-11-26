@@ -2,3 +2,4 @@
 
 pub mod json;
 pub mod sqlite;
+pub mod workspace;

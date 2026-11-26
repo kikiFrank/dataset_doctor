@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +46,10 @@ if ($Suite -in @('All', 'Migration', 'AppMigration')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
+if ($Suite -in @('All', 'WorkspaceLock')) {
+    $env:DD_WORKSPACE_LOCK_RUN_DIR = Join-Path $repo "target\p02-workspace\runs\$run"
+    $directories += $env:DD_WORKSPACE_LOCK_RUN_DIR
+}
 New-Item -ItemType Directory -Path $directories -Force | Out-Null
 $log = Join-Path $logs "$run.log"
 $cargoArgs = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
@@ -54,6 +58,7 @@ switch ($Suite) {
     'Connection' { $cargoArgs += @('-p', 'dd-sqlite-connection-init-tests', '--test', 'workspace_connection') }
     'Migration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_migration') }
     'AppMigration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'app_migration') }
+    'WorkspaceLock' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_ownership') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')

@@ -11,6 +11,9 @@ jsonschema = { version = "=0.63.1", default-features = false, features = ["arbit
 serde = "=1.0.229"
 serde_json = { version = "=1.0.154", features = ["raw_value"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem"] }
+
 [[test]]
 name = "workspace_migration"
 path = "../../tests/storage/sqlite/migration/workspace_migration.rs"
@@ -22,3 +25,7 @@ path = "../../tests/storage/sqlite/migration/app_migration.rs"
 [[test]]
 name = "json_contracts"
 path = "../../tests/contracts/rust/json_contracts.rs"
+
+[[test]]
+name = "workspace_ownership"
+path = "../../tests/storage/workspace/ownership.rs"
