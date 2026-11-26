@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
@@ -86,21 +87,27 @@ pub struct WorkspaceDirectoryGrant {
     pub display_path: PathBuf,
 }
 
-struct PendingGrant {
-    id: Uuid,
+struct DirectorySelection {
     root: PathBuf,
     issued_at: Instant,
+}
+
+impl DirectorySelection {
+    fn expired(&self, now: Instant, lifetime: Duration) -> bool {
+        now.saturating_duration_since(self.issued_at) >= lifetime
+    }
 }
 
 struct ActiveWorkspace<H> {
     session: WorkspaceSession,
     handle: H,
+    import_directories: HashMap<Uuid, DirectorySelection>,
 }
 
 pub struct WorkspaceAccess<S: WorkspaceStore> {
     store: S,
     grant_lifetime: Duration,
-    pending: Option<PendingGrant>,
+    pending: Option<(Uuid, DirectorySelection)>,
     active: Option<ActiveWorkspace<S::Handle>>,
 }
 
@@ -125,15 +132,64 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
             return Err(WorkspaceAccessError::InvalidSelection);
         }
         let grant_id = Uuid::new_v4();
-        self.pending = Some(PendingGrant {
-            id: grant_id,
-            root: selected.clone(),
-            issued_at: now,
-        });
+        self.pending = Some((
+            grant_id,
+            DirectorySelection {
+                root: selected.clone(),
+                issued_at: now,
+            },
+        ));
         Ok(WorkspaceDirectoryGrant {
             grant_id,
             display_path: selected,
         })
+    }
+
+    /// Accept a trusted native import selection for the currently open Workspace.
+    pub fn grant_import_directory(
+        &mut self,
+        session: Uuid,
+        selected: PathBuf,
+        now: Instant,
+    ) -> Result<WorkspaceDirectoryGrant, WorkspaceAccessError<S::Error>> {
+        if !selected.is_absolute() {
+            return Err(WorkspaceAccessError::InvalidSelection);
+        }
+        let lifetime = self.grant_lifetime;
+        let active = self.active_for_session(session)?;
+        active
+            .import_directories
+            .retain(|_, grant| !grant.expired(now, lifetime));
+        let grant_id = Uuid::new_v4();
+        active.import_directories.insert(
+            grant_id,
+            DirectorySelection {
+                root: selected.clone(),
+                issued_at: now,
+            },
+        );
+        Ok(WorkspaceDirectoryGrant {
+            grant_id,
+            display_path: selected,
+        })
+    }
+
+    pub fn consume_import_directory(
+        &mut self,
+        session: Uuid,
+        grant_id: Uuid,
+        now: Instant,
+    ) -> Result<PathBuf, WorkspaceAccessError<S::Error>> {
+        let lifetime = self.grant_lifetime;
+        let active = self.active_for_session(session)?;
+        let selection = active
+            .import_directories
+            .remove(&grant_id)
+            .ok_or(WorkspaceAccessError::NotAuthorized)?;
+        if selection.expired(now, lifetime) {
+            return Err(WorkspaceAccessError::ExpiredGrant);
+        }
+        Ok(selection.root)
     }
 
     pub fn open(
@@ -172,17 +228,17 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         if self.active.is_some() {
             return Err(WorkspaceAccessError::AlreadyOpen);
         }
-        if self.pending.as_ref().map(|grant| grant.id) != Some(grant_id) {
+        if self.pending.as_ref().map(|(id, _)| *id) != Some(grant_id) {
             return Err(WorkspaceAccessError::NotAuthorized);
         }
-        let grant = self
+        let (_, selection) = self
             .pending
             .take()
             .ok_or(WorkspaceAccessError::NotAuthorized)?;
-        if now.saturating_duration_since(grant.issued_at) >= self.grant_lifetime {
+        if selection.expired(now, self.grant_lifetime) {
             return Err(WorkspaceAccessError::ExpiredGrant);
         }
-        Ok(grant.root)
+        Ok(selection.root)
     }
 
     fn activate(&mut self, identity: WorkspaceIdentity, handle: S::Handle) -> WorkspaceSession {
@@ -196,6 +252,7 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         self.active = Some(ActiveWorkspace {
             session: session.clone(),
             handle,
+            import_directories: HashMap::new(),
         });
         session
     }
@@ -208,11 +265,18 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         &mut self,
         session: Uuid,
     ) -> Result<&mut S::Handle, WorkspaceAccessError<S::Error>> {
+        Ok(&mut self.active_for_session(session)?.handle)
+    }
+
+    fn active_for_session(
+        &mut self,
+        session: Uuid,
+    ) -> Result<&mut ActiveWorkspace<S::Handle>, WorkspaceAccessError<S::Error>> {
         let active = self.active.as_mut().ok_or(WorkspaceAccessError::Closed)?;
         if active.session.workspace_session_id != session {
             return Err(WorkspaceAccessError::StaleSession);
         }
-        Ok(&mut active.handle)
+        Ok(active)
     }
 
     pub fn close(

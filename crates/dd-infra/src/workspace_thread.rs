@@ -57,6 +57,8 @@ impl Error for WorkspaceThreadError {
 
 enum Request {
     Grant(PathBuf, AccessReply<WorkspaceDirectoryGrant>),
+    GrantImport(Uuid, PathBuf, AccessReply<WorkspaceDirectoryGrant>),
+    ConsumeImport(Uuid, Uuid, AccessReply<PathBuf>),
     Open(Uuid, AccessReply<WorkspaceSession>),
     Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
@@ -86,6 +88,20 @@ impl WorkspaceThread {
                         Request::Grant(path, reply) => {
                             let _ =
                                 reply.send(access.grant_selected_directory(path, Instant::now()));
+                        }
+                        Request::GrantImport(session, path, reply) => {
+                            let _ = reply.send(access.grant_import_directory(
+                                session,
+                                path,
+                                Instant::now(),
+                            ));
+                        }
+                        Request::ConsumeImport(session, grant, reply) => {
+                            let _ = reply.send(access.consume_import_directory(
+                                session,
+                                grant,
+                                Instant::now(),
+                            ));
                         }
                         Request::Open(id, reply) => {
                             let _ = reply.send(access.open(id, Instant::now()));
@@ -120,6 +136,24 @@ impl WorkspaceThread {
 
     pub fn open(&self, grant_id: Uuid) -> Result<WorkspaceSession, WorkspaceThreadError> {
         self.request(|reply| Request::Open(grant_id, reply))?
+            .map_err(WorkspaceThreadError::Access)
+    }
+
+    pub fn grant_import_directory(
+        &self,
+        session: Uuid,
+        selected: PathBuf,
+    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
+        self.request(|reply| Request::GrantImport(session, selected, reply))?
+            .map_err(WorkspaceThreadError::Access)
+    }
+
+    pub fn consume_import_directory(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.request(|reply| Request::ConsumeImport(session, grant, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 
