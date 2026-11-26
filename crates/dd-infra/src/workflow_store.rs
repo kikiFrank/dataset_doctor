@@ -1,5 +1,7 @@
 //! Persist the Core's planning run and bind accepted plans to frozen input.
 
+mod adjustment;
+
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
@@ -8,8 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dd_core::workflow::{
-    ApprovalGate, DefaultSkipReason, EnabledStep, Fallback, PlanError, PlanPolicy, ScopeKind, Step,
-    TemplatePlan, WorkflowInput, local_default_plan, template, validate_plan,
+    AdjustmentError, AdjustmentRecord, ApprovalGate, DefaultSkipReason, EnabledStep, Fallback,
+    PlanError, PlanPolicy, ScopeKind, Step, TemplatePlan, WorkflowInput, local_default_plan,
+    template, validate_plan,
 };
 use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -67,6 +70,7 @@ pub struct WorkflowSnapshot {
     pub plan_ref: Option<PlanRef>,
     pub plan_source: Option<PlanSource>,
     pub not_executed: BTreeMap<Step, DefaultSkipReason>,
+    pub adjustments: Vec<AdjustmentRecord>,
 }
 
 #[derive(Debug)]
@@ -75,6 +79,8 @@ pub enum WorkflowError {
     Storage(WorkspaceThreadError),
     Json(serde_json::Error),
     Plan(PlanError),
+    Adjustment(AdjustmentError),
+    ExecutionControlRequired,
     InputChanged,
     InvalidInputScope,
     InvalidRecord,
@@ -90,6 +96,10 @@ impl fmt::Display for WorkflowError {
             Self::Storage(error) => error.fmt(formatter),
             Self::Json(error) => write!(formatter, "Encode or read a workflow plan: {error}"),
             Self::Plan(error) => error.fmt(formatter),
+            Self::Adjustment(error) => error.fmt(formatter),
+            Self::ExecutionControlRequired => {
+                formatter.write_str("The adjustment requires an executing workflow node")
+            }
             Self::InputChanged => {
                 formatter.write_str("Workflow input no longer matches the frozen manifest")
             }
@@ -125,7 +135,7 @@ struct StoredPlan {
     plan_revision: u64,
     plan: Option<PlanBody>,
     adjustment_count: u8,
-    adjustments: Vec<serde_json::Value>,
+    adjustments: Vec<AdjustmentRecord>,
     input: InputProof,
     #[serde(default)]
     plan_source: Option<PlanSource>,
@@ -414,6 +424,7 @@ impl WorkflowStore {
             plan_source: (status == WorkflowStatus::Ready)
                 .then(|| plan.plan_source.unwrap_or(PlanSource::Proposed)),
             not_executed: plan.not_executed,
+            adjustments: plan.adjustments,
         })
     }
 

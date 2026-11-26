@@ -7,8 +7,8 @@ use std::{
 };
 
 use dd_core::workflow::{
-    ApprovalGate, DefaultSkipReason, EnabledStep, PlanPolicy, ScopeKind, Step, TemplatePlan,
-    WorkflowInput,
+    AdjustmentAction, AdjustmentError, ApprovalGate, DefaultSkipReason, EnabledStep, Fallback,
+    PlanAdjustment, PlanPolicy, ScopeKind, Step, TemplatePlan, WorkflowInput,
 };
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::input_fingerprint::freeze_input_manifest;
@@ -82,10 +82,14 @@ fn plans_bind_the_current_input_and_reopen_the_same_accepted_run() {
         fingerprint: frozen.input_fingerprint,
     };
     let policy = PlanPolicy {
-        available_steps: BTreeSet::from([Step::DatasetProfile, Step::AnnotationGeometry]),
+        available_steps: BTreeSet::from([
+            Step::DatasetProfile,
+            Step::AnnotationGeometry,
+            Step::ImageQuality,
+        ]),
         allowed_model_profiles: BTreeSet::new(),
         max_sample_limit: 100,
-        max_adjustments: 1,
+        max_adjustments: 2,
         max_model_calls: 0,
         max_output_tokens: 0,
     };
@@ -95,12 +99,16 @@ fn plans_bind_the_current_input_and_reopen_the_same_accepted_run() {
         input_manifest_id: input.manifest_id,
         expected_scope_fingerprint: input.fingerprint,
         enabled_steps: vec![
-            EnabledStep::DatasetProfile { sample_limit: 1 },
+            EnabledStep::DatasetProfile { sample_limit: 4 },
             EnabledStep::AnnotationGeometry { sample_limit: 1 },
+            EnabledStep::ImageQuality { sample_limit: 4 },
         ],
-        max_adjustments: 1,
+        max_adjustments: 2,
         required_review_gates: vec![ApprovalGate::FinalAnnotation],
-        allowed_fallbacks: BTreeMap::new(),
+        allowed_fallbacks: BTreeMap::from([
+            (Step::AnnotationGeometry, vec![Fallback::RetrySafeStep]),
+            (Step::ImageQuality, vec![Fallback::SkipWithReason]),
+        ]),
     };
     let request = || WorkflowDraftRequest {
         dataset_id: dataset,
@@ -248,18 +256,186 @@ fn plans_bind_the_current_input_and_reopen_the_same_accepted_run() {
     let local = store.get(session, local_draft.run_id).unwrap();
     assert_eq!(local.plan_source, Some(PlanSource::LocalDefault));
     assert_eq!(local.not_executed, default.not_executed);
+
+    let reduce = |revision, sample_limit| PlanAdjustment {
+        expected_revision: revision,
+        reason: "  reduce the frozen sample budget  ".into(),
+        action: AdjustmentAction::ReduceBatch {
+            step: Step::DatasetProfile,
+            sample_limit,
+        },
+    };
+    assert!(matches!(
+        store.adjust_ready(
+            session,
+            draft.run_id,
+            recovered.row_revision,
+            &policy,
+            PlanAdjustment {
+                expected_revision: 1,
+                reason: "A retry belongs to a dispatched node".into(),
+                action: AdjustmentAction::RetrySafeStep {
+                    step: Step::AnnotationGeometry
+                },
+            },
+            9
+        ),
+        Err(WorkflowError::ExecutionControlRequired)
+    ));
+    let db = Connection::open(workspace.join("workspace.db")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER fail_workflow_adjustment BEFORE UPDATE OF plan_json ON workflow_runs
+         WHEN OLD.status='READY'
+         BEGIN SELECT RAISE(ABORT, 'synthetic plan adjustment failure'); END;",
+    )
+    .unwrap();
+    let error = store
+        .adjust_ready(
+            session,
+            draft.run_id,
+            recovered.row_revision,
+            &policy,
+            reduce(1, 3),
+            9,
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("synthetic plan adjustment failure"),
+        "{error}"
+    );
+    let unchanged = store.get(session, draft.run_id).unwrap();
+    assert_eq!(unchanged.plan_ref.as_ref(), Some(&reference));
+    assert_eq!(unchanged.row_revision, recovered.row_revision);
+    assert!(unchanged.adjustments.is_empty());
+    db.execute_batch("DROP TRIGGER fail_workflow_adjustment")
+        .unwrap();
+    drop(db);
+
+    let adjusted = store
+        .adjust_ready(
+            session,
+            draft.run_id,
+            recovered.row_revision,
+            &policy,
+            reduce(1, 3),
+            10,
+        )
+        .unwrap();
+    let second_ref = adjusted.plan_ref.as_ref().unwrap();
+    assert_eq!(second_ref.plan_revision, 2);
+    assert_eq!(second_ref.input_fingerprint, reference.input_fingerprint);
+    assert_eq!(adjusted.row_revision, recovered.row_revision + 1);
+    assert_eq!(
+        adjusted.adjustments[0].reason,
+        "reduce the frozen sample budget"
+    );
+    assert!(matches!(
+        store.validate_ready(session, &reference, &policy),
+        Err(WorkflowError::RevisionConflict)
+    ));
+    assert!(matches!(
+        store.adjust_ready(
+            session,
+            draft.run_id,
+            recovered.row_revision,
+            &policy,
+            reduce(2, 2),
+            11
+        ),
+        Err(WorkflowError::RevisionConflict)
+    ));
+    assert!(matches!(
+        store.adjust_ready(
+            session,
+            draft.run_id,
+            adjusted.row_revision,
+            &policy,
+            reduce(1, 2),
+            11
+        ),
+        Err(WorkflowError::Adjustment(AdjustmentError::RevisionConflict))
+    ));
+    owner.close(session).unwrap();
+    let grant = owner.grant_selected_directory(workspace.clone()).unwrap();
+    let session = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let reopened = store.get(session, draft.run_id).unwrap();
+    assert_eq!(reopened.adjustments, adjusted.adjustments);
+    assert_eq!(reopened.plan_ref.as_ref(), Some(second_ref));
+    let adjusted_plan = store.validate_ready(session, second_ref, &policy).unwrap();
+    assert_eq!(
+        adjusted_plan.enabled_steps[0],
+        EnabledStep::DatasetProfile { sample_limit: 3 }
+    );
+
     let live = source.join("frame.png");
     let before = fs::read(&live).unwrap();
     fs::write(&live, b"changed media").unwrap();
     assert!(matches!(
-        store.validate_ready(session, &reference, &policy),
+        store.validate_ready(session, second_ref, &policy),
+        Err(WorkflowError::InputChanged)
+    ));
+    assert!(matches!(
+        store.adjust_ready(
+            session,
+            draft.run_id,
+            reopened.row_revision,
+            &policy,
+            reduce(2, 2),
+            12
+        ),
         Err(WorkflowError::InputChanged)
     ));
     fs::write(&live, before).unwrap();
 
+    let second = store
+        .adjust_ready(
+            session,
+            draft.run_id,
+            reopened.row_revision,
+            &policy,
+            PlanAdjustment {
+                expected_revision: 2,
+                reason: "Use the limited budget for annotation geometry".into(),
+                action: AdjustmentAction::SkipWithReason {
+                    step: Step::ImageQuality,
+                },
+            },
+            13,
+        )
+        .unwrap();
+    assert_eq!(second.adjustments.len(), 2);
+    assert_eq!(second.plan_ref.as_ref().unwrap().plan_revision, 3);
+    assert_eq!(
+        second.not_executed.get(&Step::ImageQuality),
+        Some(&DefaultSkipReason::SkippedByAdjustment)
+    );
+    let plan = store
+        .validate_ready(session, second.plan_ref.as_ref().unwrap(), &policy)
+        .unwrap();
+    assert_eq!(plan.required_review_gates, [ApprovalGate::FinalAnnotation]);
+    assert!(
+        !plan
+            .enabled_steps
+            .iter()
+            .any(|item| item.step() == Step::ImageQuality)
+    );
+    assert!(matches!(
+        store.adjust_ready(
+            session,
+            draft.run_id,
+            second.row_revision,
+            &policy,
+            reduce(3, 1),
+            14
+        ),
+        Err(WorkflowError::Adjustment(AdjustmentError::BudgetExceeded))
+    ));
+
     fs::write(workspace.join(relative), b"changed input manifest").unwrap();
     assert!(matches!(
-        store.validate_ready(session, &reference, &policy),
+        store.validate_ready(session, second.plan_ref.as_ref().unwrap(), &policy),
         Err(WorkflowError::InputChanged)
     ));
     assert_eq!(

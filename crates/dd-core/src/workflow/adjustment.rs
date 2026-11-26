@@ -2,13 +2,15 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{
     EnabledStep, Fallback, PlanError, PlanPolicy, Step, TemplatePlan, WorkflowInput, validate_plan,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AdjustmentAction {
     EnableCheck(EnabledStep),
     ChangeAllowedModel { step: Step, model_profile_id: Uuid },
@@ -31,7 +33,8 @@ pub enum AdjustmentEffect {
     WaitForHuman(Step),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct AdjustmentRecord {
     pub resulting_plan_revision: u64,
     pub reason: String,
@@ -97,6 +100,39 @@ impl AcceptedPlan {
 
     pub fn plan(&self) -> &TemplatePlan {
         &self.plan
+    }
+
+    pub fn restore(
+        input: &WorkflowInput,
+        policy: &PlanPolicy,
+        plan: TemplatePlan,
+        plan_revision: u64,
+        history: Vec<AdjustmentRecord>,
+    ) -> Result<Self, AdjustmentError> {
+        validate_plan(input, policy, &plan).map_err(AdjustmentError::InvalidPlan)?;
+        if history.len() > usize::from(plan.max_adjustments) {
+            return Err(AdjustmentError::BudgetExceeded);
+        }
+        let mut revision = 1;
+        for record in &history {
+            if record.reason.trim().is_empty() {
+                return Err(AdjustmentError::ReasonRequired);
+            }
+            if record.action.changes_plan() {
+                revision += 1;
+            }
+            if record.resulting_plan_revision != revision {
+                return Err(AdjustmentError::RevisionConflict);
+            }
+        }
+        if plan_revision != revision {
+            return Err(AdjustmentError::RevisionConflict);
+        }
+        Ok(Self {
+            plan,
+            plan_revision,
+            history,
+        })
     }
 
     pub fn plan_revision(&self) -> u64 {
@@ -169,6 +205,13 @@ impl AcceptedPlan {
 }
 
 impl AdjustmentAction {
+    fn changes_plan(self) -> bool {
+        !matches!(
+            self,
+            Self::RetrySafeStep { .. } | Self::RequestHumanReview { .. }
+        )
+    }
+
     fn step(self) -> Step {
         match self {
             Self::EnableCheck(item) => item.step(),

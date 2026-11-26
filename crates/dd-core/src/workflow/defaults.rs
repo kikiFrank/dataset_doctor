@@ -13,6 +13,7 @@ pub enum DefaultSkipReason {
     CapabilityUnavailable,
     ModelNotConfigured,
     NotSelectedByDefault,
+    SkippedByAdjustment,
 }
 
 #[derive(Debug)]
