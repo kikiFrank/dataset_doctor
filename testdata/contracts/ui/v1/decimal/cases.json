@@ -1,0 +1,128 @@
+[
+  {
+    "id": "zero",
+    "profile": "u64",
+    "raw": "\"0\"",
+    "accepted": true
+  },
+  {
+    "id": "large_exact",
+    "profile": "u64",
+    "raw": "\"9007199254740993\"",
+    "accepted": true
+  },
+  {
+    "id": "maximum",
+    "profile": "u64",
+    "raw": "\"18446744073709551615\"",
+    "accepted": true
+  },
+  {
+    "id": "overflow",
+    "profile": "u64",
+    "raw": "\"18446744073709551616\"",
+    "accepted": false
+  },
+  {
+    "id": "number",
+    "profile": "u64",
+    "raw": "9007199254740993",
+    "accepted": false
+  },
+  {
+    "id": "negative",
+    "profile": "u64",
+    "raw": "\"-1\"",
+    "accepted": false
+  },
+  {
+    "id": "leading_zero",
+    "profile": "u64",
+    "raw": "\"01\"",
+    "accepted": false
+  },
+  {
+    "id": "leading_plus",
+    "profile": "u64",
+    "raw": "\"+1\"",
+    "accepted": false
+  },
+  {
+    "id": "trailing_newline",
+    "profile": "u64",
+    "raw": "\"1\\n\"",
+    "accepted": false
+  },
+  {
+    "id": "missing_value",
+    "profile": "u64",
+    "raw": "null",
+    "accepted": false
+  },
+  {
+    "id": "non_ascii",
+    "profile": "u64",
+    "raw": "\"１\"",
+    "accepted": false
+  },
+  {
+    "id": "fraction",
+    "profile": "u64",
+    "raw": "\"1.0\"",
+    "accepted": false
+  },
+  {
+    "id": "negative_pts",
+    "profile": "i64",
+    "raw": "\"-9007199254740993\"",
+    "accepted": true
+  },
+  {
+    "id": "min",
+    "profile": "i64",
+    "raw": "\"-9223372036854775808\"",
+    "accepted": true
+  },
+  {
+    "id": "max",
+    "profile": "i64",
+    "raw": "\"9223372036854775807\"",
+    "accepted": true
+  },
+  {
+    "id": "zero",
+    "profile": "i64",
+    "raw": "\"0\"",
+    "accepted": true
+  },
+  {
+    "id": "min_underflow",
+    "profile": "i64",
+    "raw": "\"-9223372036854775809\"",
+    "accepted": false
+  },
+  {
+    "id": "max_overflow",
+    "profile": "i64",
+    "raw": "\"9223372036854775808\"",
+    "accepted": false
+  },
+  {
+    "id": "negative_zero",
+    "profile": "i64",
+    "raw": "\"-0\"",
+    "accepted": false
+  },
+  {
+    "id": "positive_whitespace",
+    "profile": "i64",
+    "raw": "\" 1\"",
+    "accepted": false
+  },
+  {
+    "id": "exponent",
+    "profile": "i64",
+    "raw": "\"1e3\"",
+    "accepted": false
+  }
+]

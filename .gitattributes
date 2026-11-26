@@ -1,0 +1,2 @@
+services/python-worker/src/dd_worker/generated/** text eol=lf
+apps/desktop/src/api/generated/** text eol=lf

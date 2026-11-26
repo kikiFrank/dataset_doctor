@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/dd-infra", "crates/dd-protocol", "tests/storage/sqlite/connection-init"]
+members = [
+    "crates/dd-infra",
+    "crates/dd-protocol",
+    "crates/dd-ui-contracts",
+    "tests/storage/sqlite/connection-init",
+]
 exclude = ["tests/storage/sqlite/file-lock", "tests/rig-poc"]
 resolver = "3"
 

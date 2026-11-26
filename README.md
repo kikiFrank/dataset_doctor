@@ -116,6 +116,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 
 入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。两项集成测试启动真实 Worker，验证 loopback 鉴权、健康查询与正常退出，以及 Rust/Python 的 ArtifactRef 长整数、三种归属和可选字段往返。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。当前 Worker 报告零项已加载计算能力。
 
+Rust/TypeScript 公共整数和归属类型的验收使用 `scripts/contracts/windows/check-ui-wire.ps1 -RustBin $rustBin -NodeExe (Get-Command node.exe).Source`。脚本重新生成 TypeScript 声明，检查文件漂移，再用同一组向量运行 Serde 和 Node TypeScript 解析。显式传入 `-Generate` 更新受版本控制的声明。
+
 ## Windows Workspace SQLite 写连接初始化（P01-03）
 
 在已初始化的 x64 VS Developer PowerShell 中，从仓库根目录运行。使用 Rust/Cargo 1.97.1 的 MSVC 工具链和 P00-03 预填的 `target/p00-03/cargo-home/`。当前进程应使用默认的 Cargo/MSVC 编译选项。以下命令清除 SQLite 链接覆盖变量并使用 bundled 源。

@@ -1,0 +1,17 @@
+[package]
+name = "dd-ui-contracts"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+ts-rs = "=12.0.1"
+
+[dev-dependencies]
+serde_json = "=1.0.154"
+
+[[test]]
+name = "ui_wire_primitives"
+path = "../../tests/contracts/rust/ui_wire_primitives.rs"
