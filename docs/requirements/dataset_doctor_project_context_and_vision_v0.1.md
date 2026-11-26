@@ -268,7 +268,7 @@ Agent 的期望不是在工作台右侧增加一个聊天窗口，而是让应�
 | 质量算法 | 优先复用 Cleanlab、CleanVision 及必要的成熟 CV 工具 | `Confirmed`（原则），具体依赖需验证 |
 | 核心数据库写入 | Rust Core 中的 Data Manager 为唯一写入入口 | `Confirmed` |
 | 数据库产品/Schema | 尚未确定 | `Pending` |
-| Agent Framework | 先验证候选 Rust Agent Framework，再决定是否采用 | `Confirmed`（验证策略） |
+| Agent Framework | Rig v0.47.1；保持可替换适配器 | `Validated`（独立 SDK PoC）；业务集成待验证 |
 | 进程通信 | 本地 IPC / RPC；Agent 与 Python 直接通信还是经 Core 转发待定 | `Pending` |
 | 运行、部署与依赖 | 本地管理的 Python Runtime / Worker；跨平台分发细节待验证 | `Proposed / Pending` |
 
@@ -373,3 +373,6 @@ Agent 的期望不是在工作台右侧增加一个聊天窗口，而是让应�
 - 若某条未来建议被正式纳入开发，先更新需求/Backlog 状态，再同步架构和测试，不仅修改本文。
 
 **相关工程规范：** 《软件项目设计与开发规范》v1.1（SPD-STD-001）。
+
+
+> 历史进度仅供背景参考；当前 L1/L2 方案Ⅰ为设计基线，前端风格已确认，L3 实施规范可作为开发参考。2026-11-26 更新：采用 Rig v0.47.1（Rust 1.97.1），SDK 独立 PoC 三平台已通过（每平台 10 项），不等同于生产应用集成。Core 持久化、资源准入、授权、人工审核和 Python Worker 职责不变。真实模型、完整恢复与打包仍需验收。
