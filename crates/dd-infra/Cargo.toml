@@ -125,6 +125,11 @@ path = "../../tests/integration/rpc/worker_process.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "agent_process"
+path = "../../tests/integration/rpc/agent_process.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "workspace_geometry"
 path = "../../tests/integration/rpc/workspace_geometry.rs"
 required-features = ["execution-rpc"]

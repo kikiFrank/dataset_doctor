@@ -1,8 +1,12 @@
 //! Dataset Doctor infrastructure adapters.
 
+#[cfg(feature = "execution-rpc")]
+pub mod agent_process;
 pub mod annotation_view;
 pub mod dataset_import;
 pub mod dataset_query;
+#[cfg(feature = "execution-rpc")]
+mod local_process;
 
 #[cfg(feature = "execution-rpc")]
 pub mod artifact_manifest;

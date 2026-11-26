@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [Parameter(Mandatory = $true)][string]$ProtocExe,
-    [ValidateSet('All', 'Lifecycle', 'Model')][string]$Suite = 'All'
+    [ValidateSet('All', 'Lifecycle', 'Model', 'Supervisor')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,8 +23,23 @@ $PSNativeCommandUseErrorActionPreference = $false
 $tests = @()
 if ($Suite -in @('All', 'Lifecycle')) { $tests += @('--test', 'agent_service') }
 if ($Suite -in @('All', 'Model')) { $tests += @('--test', 'rig_model_client') }
-& $cargo test --manifest-path (Join-Path $repo 'Cargo.toml') --locked --offline --target x86_64-pc-windows-msvc -p dd-agent-service @tests -- --nocapture 2>&1 |
-    ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
-$result = $LASTEXITCODE
+$common = @('--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline', '--target', 'x86_64-pc-windows-msvc')
+$result = 0
+if ($tests.Count -gt 0) {
+    & $cargo test @common -p dd-agent-service @tests -- --nocapture 2>&1 |
+        ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+    $result = $LASTEXITCODE
+}
+if ($result -eq 0 -and $Suite -in @('All', 'Supervisor')) {
+    & $cargo build @common -p dd-agent-service --bin dd-agent-service 2>&1 |
+        ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+    $result = $LASTEXITCODE
+    if ($result -eq 0) {
+        $env:DD_AGENT_PROCESS_EXE = Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc\debug\dd-agent-service.exe'
+        & $cargo test @common -p dd-infra --features execution-rpc --test agent_process -- --nocapture 2>&1 |
+            ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+        $result = $LASTEXITCODE
+    }
+}
 "exit_code=$result" | Tee-Object -FilePath $log -Append
 exit $result
