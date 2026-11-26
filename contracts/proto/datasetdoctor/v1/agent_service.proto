@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package datasetdoctor.v1;
+
+import "datasetdoctor/v1/worker_service.proto";
+
+message AgentCapabilitiesRequest {}
+
+message AgentTemplateCapability {
+  string template_id = 1;
+  uint32 contract_version = 2;
+  bool execution_available = 3;
+}
+
+message AgentCapabilities {
+  uint32 protocol_major = 1;
+  repeated AgentTemplateCapability templates = 2;
+  bool model_configured = 3;
+}
+
+service AgentService {
+  rpc GetCapabilities(AgentCapabilitiesRequest) returns (AgentCapabilities);
+  rpc Health(HealthRequest) returns (HealthSnapshot);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);
+}

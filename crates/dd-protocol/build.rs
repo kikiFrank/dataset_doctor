@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         root.join("datasetdoctor/v1/common.proto"),
         root.join("datasetdoctor/v1/core_execution.proto"),
         root.join("datasetdoctor/v1/worker_service.proto"),
+        root.join("datasetdoctor/v1/agent_service.proto"),
     ];
     for source in &sources {
         println!("cargo::rerun-if-changed={}", source.display());

@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
+use dd_domain::workflow_templates::{DATASET_HEALTHCHECK, REPAIR_RECHECK, VIDEO_TO_DATASET};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -152,8 +153,8 @@ pub struct Template {
 
 const TEMPLATES: &[Template] = &[
     Template {
-        id: "industrial_dataset_healthcheck.v1",
-        version: 1,
+        id: DATASET_HEALTHCHECK.id,
+        version: DATASET_HEALTHCHECK.version,
         scope: ScopeKind::Dataset,
         required_steps: &[Step::DatasetProfile, Step::AnnotationGeometry],
         optional_steps: &[
@@ -164,8 +165,8 @@ const TEMPLATES: &[Template] = &[
         gates: &[ApprovalGate::FinalAnnotation],
     },
     Template {
-        id: "video_to_dataset.v1",
-        version: 1,
+        id: VIDEO_TO_DATASET.id,
+        version: VIDEO_TO_DATASET.version,
         scope: ScopeKind::VideoSegment,
         required_steps: &[Step::VideoSampling, Step::StagingQuality],
         optional_steps: &[Step::VideoTracking, Step::VisualReview],
@@ -175,8 +176,8 @@ const TEMPLATES: &[Template] = &[
         ],
     },
     Template {
-        id: "repair_recheck.v1",
-        version: 1,
+        id: REPAIR_RECHECK.id,
+        version: REPAIR_RECHECK.version,
         scope: ScopeKind::RepairCandidate,
         required_steps: &[Step::ColorPreview, Step::Recheck],
         optional_steps: &[Step::VisualReview],

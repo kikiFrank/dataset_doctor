@@ -662,9 +662,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "dd-agent-service"
+version = "0.1.0"
+dependencies = [
+ "dd-domain",
+ "dd-protocol",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "uuid",
+]
+
+[[package]]
 name = "dd-core"
 version = "0.1.0"
 dependencies = [
+ "dd-domain",
  "serde",
  "uuid",
 ]
@@ -684,6 +700,10 @@ dependencies = [
  "time",
  "uuid",
 ]
+
+[[package]]
+name = "dd-domain"
+version = "0.1.0"
 
 [[package]]
 name = "dd-infra"
