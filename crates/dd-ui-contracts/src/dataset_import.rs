@@ -35,6 +35,7 @@ pub struct TaskGetRequest {
 pub enum ImportOperationKind {
     DatasetImportInspect,
     DatasetImportExternal,
+    AnnotationGeometry,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -79,4 +80,27 @@ pub struct ImportTaskView {
     pub error_code: Option<String>,
     pub preview: Option<DatasetImportPreview>,
     pub registration: Option<DatasetImportRegistration>,
+    pub geometry_report: Option<GeometryReportView>,
+}
+
+#[derive(Deserialize, TS)]
+pub struct GeometrySubmitRequest {
+    pub context: CommandContext,
+    pub dataset_id: UuidText,
+    pub asset_id: UuidText,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct GeometryReportView {
+    pub status: String,
+    pub width: u32,
+    pub height: u32,
+    pub image_digest: String,
+    pub findings: Vec<GeometryFindingView>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct GeometryFindingView {
+    pub code: String,
+    pub annotation_id: Option<DecimalU64>,
 }

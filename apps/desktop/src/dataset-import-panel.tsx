@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { confirmImport, getImportTask, inspectImport, pickImportDirectory } from "./api/dataset-import";
+import { confirmImport, inspectImport, pickImportDirectory } from "./api/dataset-import";
+import { getTask } from "./api/task";
 import type { DatasetImportPreview, ImportOperationRef, PathGrant } from "./api/generated/wire-primitives";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
@@ -42,7 +43,7 @@ export function DatasetImportPanel(
     const taskId = operation.task_id;
     async function poll() {
       try {
-        const task = await getImportTask(workspace, taskId);
+        const task = await getTask(workspace, taskId);
         if (!active) return;
         if (task.status === "QUEUED" || task.status === "RUNNING") {
           timer = setTimeout(() => void poll(), 500);

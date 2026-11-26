@@ -20,6 +20,7 @@ use crate::RuntimeMode;
 pub(crate) mod annotation;
 pub(crate) mod dataset;
 pub(crate) mod dataset_import;
+pub(crate) mod geometry;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
@@ -34,6 +35,10 @@ mod dataset_tests;
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/dataset_import.rs"]
 mod import_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/geometry.rs"]
+mod geometry_tests;
 
 #[tauri::command]
 pub async fn path_select(

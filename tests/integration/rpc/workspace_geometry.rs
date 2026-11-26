@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
-use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime, read_review_image};
+use dd_infra::geometry_runtime::{
+    GeometryAuditRequest, GeometryRuntime, read_geometry_report, read_review_image,
+};
 use dd_infra::json::{JsonContracts, JsonProfile};
 use dd_infra::workspace_thread::WorkspaceThread;
 use rusqlite::Connection;
@@ -69,10 +71,6 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
         .join("../../services/python-worker/src/dd_worker/entrypoint.py")
         .canonicalize()
         .unwrap();
-    let mut geometry =
-        GeometryRuntime::launch(Arc::clone(&workspace), session, interpreter, entrypoint)
-            .await
-            .unwrap();
     let request = GeometryAuditRequest {
         dataset_id,
         asset_id,
@@ -80,9 +78,25 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
         idempotency_key: Uuid::new_v4(),
         max_pixels: 100,
     };
-    let accepted = geometry.audit(request.clone()).await.unwrap();
+    let queued = GeometryRuntime::admit(&workspace, session, request.clone()).unwrap();
+    let task_id = queued.task().task_id;
+    assert_eq!(queued.task().status, "QUEUED");
+    assert_eq!(
+        workspace.task_outcome(session, task_id).unwrap().status,
+        "QUEUED"
+    );
+    let mut geometry =
+        GeometryRuntime::launch(Arc::clone(&workspace), session, interpreter, entrypoint)
+            .await
+            .unwrap();
+    let accepted = geometry.audit_admitted(queued).await.unwrap();
+    assert_eq!(accepted.task_id, task_id);
     assert_eq!(accepted.status, "SUCCEEDED");
     assert_eq!(geometry.audit(request).await.unwrap(), accepted);
+    let typed = read_geometry_report(&workspace, session, accepted.task_id).unwrap();
+    assert_eq!(typed.status, "COMPLETED");
+    assert_eq!(typed.findings[0].code, "bbox_out_of_bounds");
+    assert_eq!(typed.findings[0].annotation_id, Some(7));
     let manifest = root.join(accepted.output_manifest_path.clone().unwrap());
     let report: Value =
         serde_json::from_slice(&fs::read(manifest.with_file_name("geometry-result.json")).unwrap())
@@ -119,6 +133,7 @@ async fn imported_workspace_sample_reaches_the_actual_worker_and_durable_task_re
     edited["image"]["width"] = Value::from(9);
     fs::write(&reported_path, serde_json::to_vec(&edited).unwrap()).unwrap();
     assert!(read_review_image(&workspace, session, review.review_id, accepted.task_id).is_err());
+    assert!(read_geometry_report(&workspace, session, accepted.task_id).is_err());
     fs::write(&reported_path, honest_report).unwrap();
 
     geometry.shutdown().await.unwrap();

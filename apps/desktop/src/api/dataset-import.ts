@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   DatasetImportExternalRequest, DatasetImportInspectRequest, DatasetImportPreview,
-  ImportOperationRef, ImportTaskView, PathGrant, PathSelectRequest, TaskGetRequest,
+  ImportOperationRef, PathGrant, PathSelectRequest,
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -39,9 +39,4 @@ export function confirmImport(
     plan_fingerprint: preview.plan_fingerprint,
   };
   return invoke("dataset_import_external", { request });
-}
-
-export function getImportTask(workspace: OpenWorkspace, taskId: string): Promise<ImportTaskView> {
-  const request: TaskGetRequest = { context: context(workspace, crypto.randomUUID()), task_id: taskId };
-  return invoke("task_get", { request });
 }

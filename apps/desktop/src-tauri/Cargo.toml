@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 dd-core = { path = "../../../crates/dd-core" }
-dd-infra = { path = "../../../crates/dd-infra" }
+dd-infra = { path = "../../../crates/dd-infra", features = ["execution-rpc"] }
 dd-ui-contracts = { path = "../../../crates/dd-ui-contracts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"

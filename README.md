@@ -15,6 +15,8 @@ L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线
 
 使用 x64 VS Developer PowerShell 和锁定的 Node、pnpm、Rust。初次准备缓存时，设置 `$env:CARGO_HOME` 为仓库下 `target/dev/cargo-home`，执行 `cargo fetch --locked --target x86_64-pc-windows-msvc`。在 `apps/desktop` 执行 `pnpm install --frozen-lockfile --ignore-scripts --store-dir <仓库绝对路径>/target/dev/pnpm-store`。
 
+启用桌面几何检查的构建需要将 `protoc.exe` 加入 PATH。开发版启动后使用 `target/dev/worker-venv/Scripts/python.exe` 运行仓库中的 Worker。下方跨语言 Worker 验收命令会从本地缓存准备此环境。也可在启动前同时设置 `DD_WORKER_PYTHON` 和 `DD_WORKER_ENTRYPOINT` 为可信的解释器和 `services/python-worker/src/dd_worker/entrypoint.py` 的绝对路径。
+
 ```powershell
 $rustBin = '<Rust 1.97.1 MSVC 工具链的 bin 绝对路径>'
 $pnpm = '<pnpm 10.18.3 的 pnpm.exe 绝对路径>'

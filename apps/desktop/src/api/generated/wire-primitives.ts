@@ -60,7 +60,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -70,7 +70,13 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, };
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, };
+
+export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
+
+export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
+
+export type GeometryReportView = { status: string, width: number, height: number, image_digest: string, findings: Array<GeometryFindingView>, };
 
 export type CocoImage = { id: number, file_name: string, width: number, height: number, };
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { DatasetImportPanel } from "./dataset-import-panel";
+import { GeometryCheckPanel } from "./geometry-check-panel";
 import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary } from "./api/generated/wire-primitives";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
 import { workspaceCommandError } from "./api/workspace";
@@ -167,6 +168,7 @@ function AnnotationDetails({ workspace, asset }: { workspace: OpenWorkspace; ass
       {!view && !error && <p role="status">正在读取标注…</p>}
       {view && <p>{annotationLabels[view.annotation_state]}{view.active_review ? " · 审核进行中" : ""}</p>}
       {view && !document && <p>此样本没有标注文件。</p>}
+      <GeometryCheckPanel workspace={workspace} asset={asset} />
       {document && (
         <>
           <p>标注尺寸 {document.images[0].width} × {document.images[0].height} 像素</p>

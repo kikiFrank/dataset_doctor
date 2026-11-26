@@ -125,6 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(workspace)
         .manage(media)
         .manage(imports)
+        .manage(workspace_commands::geometry::GeometryRunner::configured())
         .manage(RuntimeMode {
             smoke_root,
             smoke_workspace,
@@ -158,6 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset_import::dataset_import_inspect,
             workspace_commands::dataset_import::dataset_import_external,
             workspace_commands::dataset_import::task_get,
+            workspace_commands::geometry::annotation_geometry_submit,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

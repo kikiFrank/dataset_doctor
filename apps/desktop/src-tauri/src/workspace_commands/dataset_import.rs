@@ -196,14 +196,19 @@ impl Commands {
                     error_code: task.error_code,
                     registration: None,
                     preview,
+                    geometry_report: None,
                 })
             }
             Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
                 TaskStoreError::UnknownTask,
             ))) => {
-                let task = imports
-                    .confirmation_task(session, id, now)
-                    .map_err(|error| self.import_error(error))?;
+                let task = match imports.confirmation_task(session, id, now) {
+                    Ok(task) => task,
+                    Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
+                        TaskStoreError::UnknownTask,
+                    ))) => return self.geometry_task(session, id),
+                    Err(error) => return Err(self.import_error(error)),
+                };
                 let registration = task
                     .registration
                     .map(|value| -> Result<DatasetImportRegistration, AppError> {
@@ -222,13 +227,17 @@ impl Commands {
                     error_code: task.error_code,
                     registration,
                     preview: None,
+                    geometry_report: None,
                 })
             }
             Err(error) => Err(self.import_error(error)),
         }
     }
 
-    fn import_identity(&self, context: CommandContext) -> Result<(Uuid, Uuid, Uuid), AppError> {
+    pub(super) fn import_identity(
+        &self,
+        context: CommandContext,
+    ) -> Result<(Uuid, Uuid, Uuid), AppError> {
         let request_id = self.parse_uuid(context.request_id.clone())?;
         let key = context
             .idempotency_key
@@ -246,7 +255,7 @@ impl Commands {
         .map_err(|_| self.error("INTERNAL", "无法获取导入时间。"))
     }
 
-    fn import_operation(
+    pub(super) fn import_operation(
         &self,
         operation_kind: ImportOperationKind,
         id: Uuid,
