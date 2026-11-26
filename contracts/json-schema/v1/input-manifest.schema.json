@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/input-manifest.schema.json",
+  "title": "Dataset Doctor InputManifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_id",
+    "label_schema_digest",
+    "assets",
+    "resolved_config",
+    "capability_id",
+    "implementation_version",
+    "model_identity",
+    "input_fingerprint"
+  ],
+  "properties": {
+    "dataset_id": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "label_schema_digest": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id",
+          "media_digest",
+          "annotation_digest",
+          "source_metadata_digest"
+        ],
+        "properties": {
+          "asset_id": {
+            "$ref": "common.schema.json#/$defs/uuid"
+          },
+          "media_digest": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          },
+          "annotation_digest": {
+            "anyOf": [
+              {
+                "$ref": "common.schema.json#/$defs/sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_metadata_digest": {
+            "anyOf": [
+              {
+                "$ref": "common.schema.json#/$defs/sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "resolved_config": {
+      "type": "object"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "implementation_version": {
+      "type": "string"
+    },
+    "model_identity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "model_id",
+        "revision"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "input_fingerprint": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    }
+  }
+}

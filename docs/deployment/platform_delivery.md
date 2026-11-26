@@ -20,3 +20,18 @@
 PyInstaller 的 `COPYING.txt` 将 Bootloader Exception 用于编译后的 bootloader 和一同嵌入组合产物的相关 loader 文件，涵盖链接、嵌入和分发该组合的情形。文件修改和单独分发仍由该文件列出的 GPL 条款覆盖。运行时 hooks 的 Apache-2.0 来自各自许可条款。
 
 未来对外发布时，依据实际交付目录核对 bootloader、运行时 hooks、CPython、Pillow 携带的原生库和其他随附组件，并记录相应许可证和版权声明。随附原生库和其他嵌入组件的逐项许可及需随包提供的材料仍待发布审核确认。
+
+## P01-01 InputManifest
+
+以下依赖用于 Windows x64、CPython 3.12.12 上的 InputManifest v1 离线验收环境。Windows PowerShell 5.1 使用 uv 0.9.26 从本地缓存锁定同步后，通过严格 JSON 解析、Draft 2020-12 和本地引用检查。生产发行包的随附组件按实际交付内容单独审核。
+
+版本和发行文件哈希见 [验收依赖锁](../../tests/contracts/json-schema/uv.lock)。许可取自本次实际安装的 wheel，表中证据文件相对于该包的 `.dist-info/` 目录。
+
+| 依赖 | 锁定版本 | 验收用途 | 许可 | wheel 证据 |
+| --- | --- | --- | --- | --- |
+| jsonschema | 4.26.0 | 验证 Draft 2020-12 Schema 和实例 | `MIT` | `METADATA`、`licenses/COPYING` |
+| attrs | 26.1.0 | 验证依赖使用的数据类工具 | `MIT` | `METADATA`、`licenses/LICENSE` |
+| jsonschema-specifications | 2025.9.1 | 为验证器提供本地规范资源 | `MIT` | `METADATA`、`licenses/COPYING` |
+| referencing | 0.37.0 | 提供封闭的本地引用注册表 | `MIT` | `METADATA`、`licenses/COPYING` |
+| rpds-py | 2026.9.1 | 支撑引用注册表的持久数据结构 | `MIT` | `METADATA`、`licenses/LICENSE` |
+| typing-extensions | 4.16.0 | 为验证依赖提供 Python 类型兼容支持 | `PSF-2.0` | `METADATA`、`licenses/LICENSE` |

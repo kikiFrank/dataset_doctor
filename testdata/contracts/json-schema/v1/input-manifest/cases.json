@@ -1,0 +1,234 @@
+[
+  {
+    "id": "dataset_input",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "non_dataset_explicit_nulls",
+    "raw": "{\"dataset_id\":null,\"label_schema_digest\":null,\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":null}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"video_probe\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "dataset_without_work_json",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":null,\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "model_identity_with_revision",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":{\"provider\":\"synthetic\",\"model_id\":\"fixture-model\",\"revision\":\"v1\"},\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "model_identity_unknown_revision",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":{\"provider\":\"synthetic\",\"model_id\":\"fixture-model\",\"revision\":null},\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "control_operation_empty_assets",
+    "raw": "{\"dataset_id\":null,\"label_schema_digest\":null,\"assets\":[],\"resolved_config\":{},\"capability_id\":\"synthetic_control\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "duplicate_root_key",
+    "raw": "{\"dataset_id\":null,\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "duplicate_key"
+    }
+  },
+  {
+    "id": "duplicate_nested_key",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true,\"\\u0065nabled\":false},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "duplicate_key"
+    }
+  },
+  {
+    "id": "nan",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":NaN},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "non_finite_number"
+    }
+  },
+  {
+    "id": "positive_infinity",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":Infinity},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "non_finite_number"
+    }
+  },
+  {
+    "id": "negative_infinity",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":-Infinity},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "non_finite_number"
+    }
+  },
+  {
+    "id": "float_overflow",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":1e400},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "parse",
+      "category": "non_finite_number"
+    }
+  },
+  {
+    "id": "truncated_json",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"",
+    "expected": {
+      "stage": "parse",
+      "category": "invalid_json"
+    }
+  },
+  {
+    "id": "malformed_asset_uuid",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"not-a-uuid\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "format"
+    }
+  },
+  {
+    "id": "malformed_dataset_uuid",
+    "raw": "{\"dataset_id\":\"urn:uuid:11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "anyOf"
+    }
+  },
+  {
+    "id": "prefixed_sha256",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "maxLength"
+    }
+  },
+  {
+    "id": "uppercase_sha256",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "pattern"
+    }
+  },
+  {
+    "id": "short_sha256",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "minLength"
+    }
+  },
+  {
+    "id": "sha256_trailing_newline",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\\n\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "maxLength"
+    }
+  },
+  {
+    "id": "missing_nullable_dataset_id",
+    "raw": "{\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "missing_nullable_annotation_digest",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "missing_nullable_model_revision",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":{\"provider\":\"synthetic\",\"model_id\":\"fixture-model\"},\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "missing_input_fingerprint",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "config_not_object",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":[],\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "assets_not_array",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":{},\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "asset_media_digest_null",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":null,\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "unknown_root_field",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"schema_id\":\"datasetdoctor.input-manifest.v1\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "unknown_asset_field",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"path\":\"fixture.bin\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "model_rejects_plaintext_secret_field",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":{\"provider\":\"synthetic\",\"model_id\":\"fixture-model\",\"revision\":null,\"api_key\":\"synthetic-placeholder\"},\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  }
+]

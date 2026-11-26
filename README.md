@@ -42,6 +42,21 @@ $LASTEXITCODE
 
 依赖许可见 [Windows Worker PoC 依赖许可记录](docs/deployment/platform_delivery.md#p00-02-windows-worker-poc)。
 
+## Windows InputManifest 结构检查（P01-01）
+
+在仓库根目录运行。使用 Windows x64 上实际安装的 CPython 3.12.12、仓库里的验证依赖锁和已预填的 P01-01 专用 uv 缓存。
+
+```powershell
+$py312 = '<CPython 3.12.12 x64 的 python.exe 绝对路径>'
+$offlineCache = (Resolve-Path -LiteralPath '.\dist\p01-01\uv-cache').Path
+powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-json-schema.ps1 -PythonExe $py312 -UvCacheDir $offlineCache
+$LASTEXITCODE
+```
+
+入口锁定离线同步验证环境，执行严格 UTF-8 JSON 解析、Draft 2020-12 结构和 UUID 格式检查，并用封闭本地注册表解析引用。输出记录在 `dist/p01-01/logs/check.log`。通过表示结构和合成向量符合契约。操作输入前提、授权与摘要真实性由后续 Core 工作验证。
+
+查看 [InputManifest v1 Schema](contracts/json-schema/v1/input-manifest.schema.json)、[共享向量](testdata/contracts/json-schema/v1/input-manifest/cases.json) 和 [验收依赖及许可](docs/deployment/platform_delivery.md#p01-01-inputmanifest)。
+
 ## 已有可执行验证
 
 ```sh
