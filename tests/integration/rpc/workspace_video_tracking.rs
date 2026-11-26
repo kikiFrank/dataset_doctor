@@ -1,126 +1,37 @@
 use std::{fs, sync::Arc};
 
-use dd_infra::frame_runtime::{
-    FrameResolveRuntime, FrameService, FrameSubmission, FrameTarget, SeekPolicy,
-};
-use dd_infra::video_annotation_store::{VideoFrameReference, VideoKeyframe};
 use dd_infra::video_keyframes::{
-    KeyframeDraftRequest, SegmentRequest, VideoAnnotationService, VideoSamplingMode,
-    VideoSamplingPurpose, VideoSamplingRequest,
+    SegmentRequest, VideoAnnotationService, VideoSamplingMode, VideoSamplingRequest,
 };
 use dd_infra::video_tracking_runtime::{
-    TRANSLATION_PROFILE_ID, VideoTrackingRuntime, VideoTrackingService, VideoTrackingSubmission,
+    VideoTrackingRuntime, VideoTrackingService, VideoTrackingSubmission,
 };
 use rusqlite::Connection;
-use serde_json::json;
 use uuid::Uuid;
 
 #[allow(dead_code)]
-#[path = "support/workspace_video.rs"]
-mod workspace_video;
-use workspace_video::Fixture;
-
-#[path = "support/tracking_video_fixture.rs"]
-mod tracking_video_fixture;
+#[path = "support/tracking_workspace_fixture.rs"]
+mod tracking_workspace_fixture;
+use tracking_workspace_fixture::TrackingWorkspace;
 
 #[tokio::test]
 async fn a_tracking_task_uses_a_frozen_workspace_plan_and_reads_the_sealed_candidates_after_reopen()
 {
-    let fixture = Fixture::create_with(
-        "Workspace tracking.mkv",
-        tracking_video_fixture::make_motion_clip,
-    )
-    .await;
+    let setup = TrackingWorkspace::create().await;
+    let request = setup.tracking_request();
+    let TrackingWorkspace {
+        fixture,
+        dataset,
+        head,
+        segment,
+    } = setup;
     let root = &fixture.root;
     let owner = &fixture.owner;
     let video = fixture.video_id;
     let session = fixture.session;
-    let dataset = Uuid::new_v4();
     let connection = Connection::open(root.join("workspace.db")).unwrap();
-    connection
-        .execute(
-            r#"INSERT INTO datasets(dataset_id,name,categories_json,created_at_ms,updated_at_ms)
-         VALUES (?1,'Tracked','[{"id":3,"name":"signal"}]',100,100)"#,
-            [dataset.to_string()],
-        )
-        .unwrap();
-    let resolve = FrameService::new(Arc::clone(owner)).unwrap();
-    let (frame_task, job) = resolve
-        .submit(
-            session,
-            FrameSubmission {
-                request_id: Uuid::new_v4(),
-                idempotency_key: Uuid::new_v4(),
-                video_id: video,
-                target: FrameTarget::Index(0),
-                policy: SeekPolicy::Nearest,
-            },
-            230,
-        )
-        .unwrap();
-    let mut frame_worker = FrameResolveRuntime::launch(
-        Arc::clone(owner),
-        session,
-        fixture.python.clone(),
-        fixture.entry.clone(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        frame_worker.run(job.unwrap()).await.unwrap().status,
-        "SUCCEEDED"
-    );
-    frame_worker.shutdown().await.unwrap();
-    let frame = resolve
-        .snapshot(session, frame_task.task_id)
-        .unwrap()
-        .frame
-        .unwrap();
-    let reference = VideoFrameReference::from_resolved(frame_task.task_id, &frame).unwrap();
     let work = VideoAnnotationService::new(Arc::clone(owner)).unwrap();
-    let draft = work.save(session,KeyframeDraftRequest {
-        source_video_id:video, target_dataset_id:dataset, frame_ref:reference.clone(),
-        expected_video_revision:0,
-        coco_document:serde_json::to_vec(&json!({
-            "images":[{"id":1,"file_name":"frame.png","width":34,"height":26}],
-            "categories":[{"id":3,"name":"signal"}],
-            "annotations":[{"id":7,"image_id":1,"category_id":3,"bbox":[8,8,5,5],"area":25,"iscrowd":0}],
-        })).unwrap(),
-    },231).unwrap();
-    let head = VideoKeyframe {
-        frame_ref: reference,
-        annotation_ref: draft.annotation_ref,
-    };
-    let segment = work
-        .save_segment(
-            session,
-            SegmentRequest {
-                source_video_id: video,
-                target_dataset_id: dataset,
-                segment_id: None,
-                start_us: 0,
-                end_us: 600_000,
-                keyframes: vec![head.clone()],
-                expected_revision: 0,
-            },
-            232,
-        )
-        .unwrap();
     let service = VideoTrackingService::new(Arc::clone(owner)).unwrap();
-    let request = VideoTrackingSubmission {
-        request_id: Uuid::new_v4(),
-        idempotency_key: Uuid::new_v4(),
-        tracker_profile_id: TRANSLATION_PROFILE_ID,
-        selection: VideoSamplingRequest {
-            source_video_id: video,
-            segment_id: segment.segment_id,
-            target_dataset_id: dataset,
-            mode: VideoSamplingMode::EveryNFrames { every_n: 2 },
-            purpose: VideoSamplingPurpose::Tracking {
-                supports_time_interval: true,
-            },
-        },
-    };
     let (queued, job) = service.submit(session, request, 233).unwrap();
     assert_eq!(queued.status, "QUEUED");
     assert!(queued.bundle.is_none());

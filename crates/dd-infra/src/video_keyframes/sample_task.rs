@@ -22,6 +22,7 @@ use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::{TaskStoreError, TaskSubmission, format_digest};
+use crate::video_annotation_store::VideoArtifactReference;
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
 use crate::worker_runtime::now_ms;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
@@ -41,6 +42,7 @@ pub struct VideoSampleJob {
     task_id: Uuid,
     plan: ResolvedVideoSampling,
     input: FrozenInputManifest,
+    tracking_ref: Option<VideoArtifactReference>,
 }
 
 impl VideoSampleJob {
@@ -85,12 +87,35 @@ impl VideoSampleService {
         submission: VideoSampleSubmission,
         now: i64,
     ) -> Result<(VideoSampleSnapshot, Option<VideoSampleJob>), VideoAnnotationError> {
+        self.submit_scoped(session, submission, None, now)
+    }
+
+    pub fn submit_with_tracking(
+        &self,
+        session: Uuid,
+        submission: VideoSampleSubmission,
+        tracking: VideoArtifactReference,
+        now: i64,
+    ) -> Result<(VideoSampleSnapshot, Option<VideoSampleJob>), VideoAnnotationError> {
+        self.submit_scoped(session, submission, Some(tracking), now)
+    }
+
+    fn submit_scoped(
+        &self,
+        session: Uuid,
+        submission: VideoSampleSubmission,
+        tracking_ref: Option<VideoArtifactReference>,
+        now: i64,
+    ) -> Result<(VideoSampleSnapshot, Option<VideoSampleJob>), VideoAnnotationError> {
         if submission.request_id.is_nil() || submission.idempotency_key.is_nil() {
             return Err(VideoAnnotationError::InvalidInput);
         }
         let owner = &self.annotation.owner;
         let _guard = owner.lock_final_operations()?;
-        let selection = selection_config(submission.selection)?;
+        let mut selection = selection_config(submission.selection)?;
+        if let Some(reference) = &tracking_ref {
+            selection["tracking_result_ref"] = json!(reference);
+        }
         let request_fingerprint: [u8; 32] = Sha256::digest(selection.to_string().as_bytes()).into();
         let key = submission.idempotency_key.to_string();
         let existing = owner.workspace_action(session, move |workspace| {
@@ -111,6 +136,9 @@ impl VideoSampleService {
         let plan = self
             .annotation
             .resolve_sampling_locked(session, submission.selection)?;
+        if let Some(reference) = &tracking_ref {
+            super::tracking_samples::candidate_frames(owner, session, &plan, reference)?;
+        }
         let input = self.freeze(&plan, selection)?;
         let root = owner.storage_root(session)?;
         let path = PathBuf::from(input_path(&input));
@@ -141,6 +169,7 @@ impl VideoSampleService {
                 task_id: task.task_id,
                 plan,
                 input,
+                tracking_ref,
             }),
         ))
     }
@@ -168,7 +197,7 @@ impl VideoSampleService {
             let request = job.plan.request;
             let revision = job.plan.segment_revision;
             let config = job.plan.sampling_config_id;
-            service.stage_dataset_samples_with(session, &job.plan, &frame_tasks, finish, move |tx, root, items| {
+            service.stage_dataset_samples_with(session, &job.plan, &frame_tasks, job.tracking_ref.as_ref(), finish, move |tx, root, items| {
                 let payload = json!({
                     "source_video_id":request.source_video_id, "target_dataset_id":request.target_dataset_id,
                     "segment_id":request.segment_id, "segment_revision":revision,
@@ -199,6 +228,9 @@ impl VideoSampleService {
             Ok(_) => Ok(()),
             Err(VideoAnnotationError::RevisionConflict) => {
                 self.fail(session, task, "INPUT_CHANGED")
+            }
+            Err(VideoAnnotationError::TrackingEvidenceInvalid) => {
+                self.fail(session, task, "TRACKING_EVIDENCE_INVALID")
             }
             Err(_) => self.fail(session, task, "STAGING_PUBLICATION_FAILED"),
         }

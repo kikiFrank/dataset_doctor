@@ -180,6 +180,9 @@ impl Commands {
             VideoAnnotationError::InvalidInput => {
                 self.error("INVALID_ARGUMENT", "请核对帧、片段区间和目标数据集。")
             }
+            VideoAnnotationError::TrackingEvidenceInvalid => {
+                self.error("FAILED_PRECONDITION", "请选择当前片段已核验的追踪结果。")
+            }
             VideoAnnotationError::Io(_) => self.error("FILE_IO_FAILED", "无法读写视频工作文件。"),
             VideoAnnotationError::Evidence(error) => {
                 match error.downcast_ref::<ReviewValidationError>() {

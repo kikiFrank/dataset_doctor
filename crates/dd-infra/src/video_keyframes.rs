@@ -32,6 +32,7 @@ mod sample_task;
 mod sampling;
 mod segments;
 mod staging;
+mod tracking_samples;
 pub use sample_task::{
     VideoSampleJob, VideoSampleReceipt, VideoSampleService, VideoSampleSnapshot,
     VideoSampleSubmission,
@@ -73,6 +74,7 @@ pub enum VideoAnnotationError {
     Io(io::Error),
     InvalidInput,
     RevisionConflict,
+    TrackingEvidenceInvalid,
     Evidence(Box<dyn Error + Send + Sync>),
 }
 impl Display for VideoAnnotationError {
@@ -82,6 +84,7 @@ impl Display for VideoAnnotationError {
             Self::Io(e) => Display::fmt(e, f),
             Self::InvalidInput => f.write_str("Invalid video keyframe or target context"),
             Self::RevisionConflict => f.write_str("Video work or Dataset categories changed"),
+            Self::TrackingEvidenceInvalid => f.write_str("Tracking evidence is unavailable or does not match the sampling scope"),
             Self::Evidence(e) => Display::fmt(e, f),
         }
     }

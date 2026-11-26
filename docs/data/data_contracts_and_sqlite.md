@@ -151,7 +151,7 @@ source_metadata_json 使用带 kind 的结构。video_frame 的最小形状为�
 
 frame_index、pts_us、底层 pts 用十进制整数字符串避免前端整数精度损失；time_base_den 必须为正。frame_index 是选定视频流按展示顺序排列的帧索引，不是压缩包或解码到达次序；timestamp_ms 仅用于展示，不通过秒数乘 FPS 反推正式帧号。两种 sampling 分别有 sampling_config_id，记录实际生效值。mode 只能是 EVERY_N_FRAMES 或 TIME_INTERVAL；前者记录正整数 every_n，后者记录正整数 interval_ms，实际来源记录不混入未激活模式的偏好。源视频列与来源 JSON 中的 source_video_id 必须一致。
 
-Core 使用 `videos/<source_video_id>/<source_digest>/stream-<stream_index>/frame-<frame_index>.png` 保存抽样帧。SQLite 登记同一受管路径前核对现有 Asset 的来源和目标，重复采样返回现有 Asset。实际选中的人工关键帧保存已校验的单图 JSON，并改用受管图片的文件名。无候选的帧保持无标注。新 Asset 和 Staging 行在同一事务登记，只有实际生成标注时才填写 annotation_path；源视频保持引用，不形成新 Dataset 成员或 Final。
+Core 使用 `videos/<source_video_id>/<source_digest>/stream-<stream_index>/frame-<frame_index>.png` 保存抽样帧。SQLite 登记同一受管路径前核对现有 Asset 的来源和目标，重复采样返回现有 Asset。实际选中的人工关键帧保存已校验的单图 JSON，并改用受管图片的文件名。已核验的追踪结果仅在有实际追踪框的采样帧上登记来源字段 `tracking_candidate_ref`。该字段是封存 TrackBundle 的无路径引用，有人工标注的帧继续使用人工标注。无候选的帧保持无标注。新 Asset 和 Staging 行在同一事务登记，只有实际生成标注时才填写 annotation_path；源视频保持引用，不形成新 Dataset 成员或 Final。
 
 普通导入图片使用 kind=imported_image；源视频使用 kind=source_video。未标注图片没有 JSON 时，来源仍由 assets 保存，不强迫先创建空标签文件。
 

@@ -18,7 +18,7 @@ use crate::frame_runtime::FrameService;
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::format_digest;
-use crate::video_annotation_store::{VideoFrameReference, read_keyframe};
+use crate::video_annotation_store::{VideoArtifactReference, VideoFrameReference, read_keyframe};
 use crate::video_index::ResolvedVideoFrame;
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
 use crate::workspace_thread::WorkspaceThreadError;
@@ -40,7 +40,7 @@ struct PreparedSample {
     target_relative: String,
     filename: String,
     annotation: Option<PreparedAnnotation>,
-    source_metadata: String,
+    source_metadata: Value,
 }
 
 struct PreparedAnnotation {
@@ -58,7 +58,7 @@ impl VideoAnnotationService {
         frame_tasks: &[Uuid],
         now_ms: i64,
     ) -> Result<Vec<StagedVideoSample>, VideoAnnotationError> {
-        self.stage_dataset_samples_with(session, plan, frame_tasks, now_ms, |_, _, _| Ok(()))
+        self.stage_dataset_samples_with(session, plan, frame_tasks, None, now_ms, |_, _, _| Ok(()))
     }
 
     pub(super) fn stage_dataset_samples_with(
@@ -66,6 +66,7 @@ impl VideoAnnotationService {
         session: Uuid,
         plan: &ResolvedVideoSampling,
         frame_tasks: &[Uuid],
+        tracking_ref: Option<&VideoArtifactReference>,
         now_ms: i64,
         finish: impl FnOnce(
             &Transaction<'_>,
@@ -90,6 +91,11 @@ impl VideoAnnotationService {
             .time_base
             .ok_or(VideoAnnotationError::InvalidInput)?;
         let _guard = self.owner.lock_final_operations()?;
+        let candidates = tracking_ref
+            .map(|reference| {
+                super::tracking_samples::candidate_frames(&self.owner, session, plan, reference)
+            })
+            .transpose()?;
         let video = plan.request.source_video_id;
         let dataset = plan.request.target_dataset_id;
         let binding = self.owner.dataset_detail(session, dataset)?;
@@ -137,7 +143,7 @@ impl VideoAnnotationService {
             {
                 return Err(VideoAnnotationError::InvalidInput);
             }
-            let sample = PreparedSample::new(
+            let mut sample = PreparedSample::new(
                 &snapshot.root,
                 resolved,
                 plan,
@@ -146,6 +152,13 @@ impl VideoAnnotationService {
                 time_base,
                 &config,
             )?;
+            if sample.annotation.is_none()
+                && candidates
+                    .as_ref()
+                    .is_some_and(|frames| frames.contains(&frame.frame_index))
+            {
+                sample.source_metadata["tracking_candidate_ref"] = json!(tracking_ref);
+            }
             prepared.push(sample);
         }
         for sample in &prepared {
@@ -259,8 +272,7 @@ impl PreparedSample {
             "extraction_method":"frame_resolve.v1",
             "extraction_task_id":task,
             "extraction_attempt_id":attempt,
-        })
-        .to_string();
+        });
         Ok(Self {
             frame,
             image_relative: resolved.relative_path,
@@ -324,6 +336,19 @@ impl PreparedSample {
             {
                 return Err(invalid_storage());
             }
+            if same_target
+                && let Some(reference) = self.source_metadata.get("tracking_candidate_ref")
+            {
+                tx.execute(
+                    "UPDATE assets SET source_metadata_json=json_set(source_metadata_json,'$.tracking_candidate_ref',json(?2)),
+                         row_revision=row_revision+1,updated_at_ms=max(updated_at_ms,?3)
+                     WHERE asset_id=?1 AND annotation_path IS NULL
+                       AND json_type(source_metadata_json,'$.tracking_candidate_ref') IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM review_sessions WHERE asset_id=?1
+                           AND status IN ('OPEN','COMMITTING','CONFLICT'))",
+                    params![asset_id.to_string(), reference.to_string(), now],
+                ).map_err(database)?;
+            }
             return Ok(StagedVideoSample {
                 asset_id,
                 frame_index: self.frame.frame_index,
@@ -341,7 +366,7 @@ impl PreparedSample {
                 annotation.map(|value|value.relative_path.as_str()),annotation.map(|_|"COCO_IMAGE_BBOX"),
                 if annotation.is_some() {"APP_CREATED"} else {"NONE"},
                 annotation.map(|value|value.local_image_id),annotation.map(|value|value.sha256.as_str()),
-                video.to_string(),self.source_metadata,now],
+                video.to_string(),self.source_metadata.to_string(),now],
         ).map_err(database)?;
         tx.execute(
             "INSERT INTO staging_items(asset_id,target_dataset_id,created_at_ms) VALUES(?1,?2,?3)",

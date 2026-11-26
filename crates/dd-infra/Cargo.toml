@@ -265,3 +265,8 @@ required-features = ["execution-rpc"]
 name = "workspace_video_tracking"
 path = "../../tests/integration/rpc/workspace_video_tracking.rs"
 required-features = ["execution-rpc"]
+
+[[test]]
+name = "video_tracking_sample_task"
+path = "../../tests/integration/rpc/video_tracking_sample_task.rs"
+required-features = ["execution-rpc"]
