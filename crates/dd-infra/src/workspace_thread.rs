@@ -19,7 +19,7 @@ use crate::dataset_query::{
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
-use crate::task_store::{StoredTask, TaskStoreError, TaskSubmission};
+use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission};
 use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError};
 
 const QUEUE_CAPACITY: usize = 8;
@@ -234,6 +234,19 @@ impl WorkspaceThread {
         self.task(task.workspace_session, move |workspace| {
             workspace.enqueue_task(&task, now_ms)
         })
+    }
+
+    pub fn task_outcome(
+        &self,
+        session: Uuid,
+        task: Uuid,
+    ) -> Result<TaskOutcome, WorkspaceThreadError> {
+        self.task(session, move |workspace| workspace.task_outcome(task))
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn storage_root(&self, session: Uuid) -> Result<PathBuf, WorkspaceThreadError> {
+        self.workspace_action(session, |workspace| Ok(workspace.root().to_owned()))
     }
 
     pub fn record_dispatch(

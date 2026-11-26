@@ -22,6 +22,7 @@ use crate::workspace::OpenedWorkspace;
 #[derive(Clone, Debug)]
 pub struct TaskSubmission {
     pub workspace_session: Uuid,
+    pub dataset_id: Option<Uuid>,
     pub request_id: Uuid,
     pub idempotency_key: Uuid,
     pub operation_kind: String,
@@ -40,9 +41,18 @@ pub struct StoredTask {
     pub created_at_ms: i64,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct TaskOutcome {
+    pub task_id: Uuid,
+    pub status: String,
+    pub output_manifest_path: Option<String>,
+    pub error_code: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum TaskStoreError {
     AttemptConflict,
+    UnknownTask,
     IdempotencyConflict,
     InvalidManifestPath,
     InvalidTimestamp,
@@ -54,6 +64,7 @@ impl Display for TaskStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AttemptConflict => formatter.write_str("Task attempt or execution state changed"),
+            Self::UnknownTask => formatter.write_str("Task is not in the current Workspace"),
             Self::IdempotencyConflict => {
                 formatter.write_str("Task idempotency key has a different request fingerprint")
             }
@@ -129,8 +140,8 @@ impl OpenedWorkspace {
             "INSERT INTO tasks
                 (task_id, workspace_session_id, capability_id, status, request_id, operation_kind,
                  idempotency_key, request_fingerprint, input_manifest_path, input_fingerprint,
-                 created_at_ms, updated_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)",
+                 created_at_ms, updated_at_ms, dataset_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
             params![
                 task.task_id.to_string(),
                 task.workspace_session.to_string(),
@@ -142,11 +153,30 @@ impl OpenedWorkspace {
                 fingerprint,
                 manifest,
                 format_digest(&request.input_fingerprint),
-                now_ms
+                now_ms,
+                request.dataset_id.map(|id| id.to_string())
             ],
         )?;
         tx.commit()?;
         Ok(task)
+    }
+
+    pub(crate) fn task_outcome(&self, task_id: Uuid) -> Result<TaskOutcome, TaskStoreError> {
+        self.connection
+            .query_row(
+                "SELECT status, output_manifest_path, error_code FROM tasks WHERE task_id=?1",
+                [task_id.to_string()],
+                |row| {
+                    Ok(TaskOutcome {
+                        task_id,
+                        status: row.get(0)?,
+                        output_manifest_path: row.get(1)?,
+                        error_code: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or(TaskStoreError::UnknownTask)
     }
 
     /// Persist this attempt and its reservation before sending Start to the executor.

@@ -74,6 +74,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let task = thread
         .enqueue_task(
             TaskSubmission {
+                dataset_id: None,
                 workspace_session: session,
                 request_id: Uuid::new_v4(),
                 idempotency_key: Uuid::new_v4(),
@@ -570,6 +571,7 @@ fn prepare_changed_source(
     let task = thread
         .enqueue_task(
             TaskSubmission {
+                dataset_id: None,
                 workspace_session: session,
                 request_id: Uuid::new_v4(),
                 idempotency_key: Uuid::new_v4(),
@@ -637,6 +639,7 @@ async fn prepare_report_fixture(
     let queued = thread
         .enqueue_task(
             TaskSubmission {
+                dataset_id: None,
                 workspace_session: session,
                 request_id: Uuid::new_v4(),
                 idempotency_key: Uuid::new_v4(),

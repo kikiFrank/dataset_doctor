@@ -55,6 +55,7 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
     let task = thread
         .enqueue_task(
             TaskSubmission {
+                dataset_id: None,
                 workspace_session: workspace,
                 request_id: Uuid::new_v4(),
                 idempotency_key: Uuid::new_v4(),
@@ -197,7 +198,11 @@ async fn actual_grpc_claim_uses_authenticated_executor_and_returns_the_original_
     thread.close(workspace).unwrap();
     claim.worker_execution_id = replay.worker_execution_id.clone();
     assert_eq!(
-        client.claim_grant(request(claim, Some(credential))).await.unwrap_err().code(),
+        client
+            .claim_grant(request(claim, Some(credential)))
+            .await
+            .unwrap_err()
+            .code(),
         Code::FailedPrecondition,
     );
 

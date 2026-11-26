@@ -19,6 +19,7 @@ const OLD_SESSION: &str = "76afdb2d-0900-4528-b303-0fca0f864235";
 fn submission(workspace_session: Uuid) -> TaskSubmission {
     TaskSubmission {
         workspace_session,
+        dataset_id: None,
         request_id: Uuid::new_v4(),
         idempotency_key: Uuid::new_v4(),
         operation_kind: "ANNOTATION_AUDIT".into(),

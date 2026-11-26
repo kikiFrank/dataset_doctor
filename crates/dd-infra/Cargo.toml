@@ -6,20 +6,22 @@ rust-version.workspace = true
 publish = false
 
 [features]
-execution-rpc = ["dep:dd-protocol", "dep:subtle", "dep:time", "dep:tokio", "dep:tonic"]
+execution-rpc = ["dep:dd-protocol", "dep:prost", "dep:subtle", "dep:time", "dep:tokio", "dep:tokio-stream", "dep:tonic"]
 
 [dependencies]
 dd-core = { path = "../dd-core" }
 dd-protocol = { path = "../dd-protocol", optional = true }
 rusqlite.workspace = true
 jsonschema = { version = "=0.63.1", default-features = false, features = ["arbitrary-precision"] }
+prost = { version = "=0.14.6", optional = true }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["raw_value"] }
 sha2 = "=0.10.9"
 subtle = { version = "=2.6.1", optional = true }
 tempfile = "=3.27.0"
 time = { version = "=0.3.55", features = ["formatting", "parsing"], optional = true }
-tokio = { version = "=1.54.1", features = ["io-util", "process", "rt", "time"], optional = true }
+tokio = { version = "=1.54.1", features = ["io-util", "net", "process", "rt", "sync", "time"], optional = true }
+tokio-stream = { version = "=0.1.19", features = ["net"], optional = true }
 tonic = { version = "=0.14.9", optional = true }
 uuid = "=1.29.3"
 
@@ -100,6 +102,11 @@ required-features = ["execution-rpc"]
 [[test]]
 name = "worker_process"
 path = "../../tests/integration/rpc/worker_process.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
+name = "workspace_geometry"
+path = "../../tests/integration/rpc/workspace_geometry.rs"
 required-features = ["execution-rpc"]
 
 [[test]]

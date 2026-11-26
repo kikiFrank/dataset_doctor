@@ -175,6 +175,14 @@ impl GrantBook {
         self.remove(id)
     }
 
+    /// Remove a staged grant that could not be persisted or sent to the executor.
+    pub fn revoke_unclaimed(&mut self, id: Uuid) -> Option<Uuid> {
+        if self.grants.get(&id)?.receipt.is_some() {
+            return None;
+        }
+        self.remove(id)
+    }
+
     /// Call only after the executor has stopped and Core has accepted its end.
     pub fn release_finished(
         &mut self,
