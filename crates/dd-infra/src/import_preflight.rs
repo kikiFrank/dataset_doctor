@@ -3,12 +3,13 @@
 use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Read};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use crate::json::{JsonContracts, JsonProfile};
+use crate::paths::is_portable_relative_file;
 use crate::workspace::{ordinary_file, prevent_replacement};
 
 const MAX_SELECTION: usize = 1000;
@@ -90,7 +91,7 @@ pub fn inspect_single_image_coco(
     }
     let mut unique = BTreeSet::new();
     for path in selected {
-        if !relative_source_path(path) || !is_supported_image(path) || !unique.insert(path) {
+        if !is_portable_relative_file(path) || !is_supported_image(path) || !unique.insert(path) {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
                 "Invalid or duplicate image selection",
@@ -180,7 +181,7 @@ fn inspect_annotation(
     let references: CocoReferences = serde_json::from_value(document)
         .map_err(|error| ImportProblem::UnsupportedAnnotation(error.to_string()))?;
     let named = Path::new(&references.images[0].file_name);
-    if !relative_source_path(named)
+    if !is_portable_relative_file(named)
         || (named != image && named.as_os_str() != image.file_name().unwrap())
     {
         return Err(ImportProblem::WrongImage);
@@ -292,15 +293,6 @@ fn media_digest(mut file: File) -> io::Result<String> {
     let mut hash = Sha256::new();
     io::copy(&mut file, &mut hash)?;
     Ok(format!("{:x}", hash.finalize()))
-}
-
-fn relative_source_path(path: &Path) -> bool {
-    path.file_name().is_some()
-        && path.components().all(|component| {
-            matches!(component, Component::Normal(name) if name.to_str().is_some_and(|name| {
-                !name.contains([':', '\\']) && !name.ends_with(['.', ' '])
-            }))
-        })
 }
 
 fn count_image_stems(directory: &Path) -> io::Result<HashMap<String, usize>> {
