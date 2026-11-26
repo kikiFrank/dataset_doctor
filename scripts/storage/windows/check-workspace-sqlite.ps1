@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
+    [string]$OfflineCargoHome,
     [ValidateSet('All', 'Connection', 'Migration', 'AppMigration')][string]$Suite = 'All'
 )
 
@@ -16,7 +17,8 @@ if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64' -or -not $env:VCToolsInstallDir -or
     throw 'Initialize x64 VS Developer PowerShell before running this check.'
 }
 
-$cache = (Resolve-Path -LiteralPath (Join-Path $repo 'target\p00-03\cargo-home')).Path
+if (-not $OfflineCargoHome) { $OfflineCargoHome = Join-Path $repo 'target\dev\cargo-home' }
+$cache = (Resolve-Path -LiteralPath $OfflineCargoHome).Path
 foreach ($variable in Get-ChildItem Env:) {
     if ($variable.Name -match '^(CARGO($|_)|RUST|VCPKG|PKG_CONFIG|BINDGEN|CL$|_CL_$|LINK$|_LINK_$|((HOST|TARGET)_)?(CC|CXX|AR|CFLAGS|CPPFLAGS|CXXFLAGS|ARFLAGS)($|_))|SQLITE|SQLCIPHER') {
         [Environment]::SetEnvironmentVariable($variable.Name, $null, 'Process')
@@ -52,7 +54,7 @@ switch ($Suite) {
     'Connection' { $cargoArgs += @('-p', 'dd-sqlite-connection-init-tests', '--test', 'workspace_connection') }
     'Migration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_migration') }
     'AppMigration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'app_migration') }
-    'All' { $cargoArgs += @('--workspace', '--all-targets') }
+    'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')
 

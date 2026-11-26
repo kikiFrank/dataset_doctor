@@ -141,7 +141,7 @@ Windows x64 MSVC 上 6 项合成测试全部通过。`dd_infra::sqlite::initiali
 
 ## Windows Workspace SQLite 空库迁移（P01-04）
 
-在 x64 VS Developer PowerShell 中使用 P00-03 的本机 Cargo 缓存和 Rust/Cargo 1.97.1。默认执行根 Cargo workspace 的全部测试，包括 P01-03 连接初始化和 P01-04 空库迁移。可用 `-Suite Migration` 或 `-Suite Connection` 单独复现。
+在 x64 VS Developer PowerShell 中使用 Rust/Cargo 1.97.1。入口默认从 `target/dev/cargo-home` 离线运行基础设施测试，也可指定 `-OfflineCargoHome`。首次准备该缓存时，先在同一个 Cargo home 执行 `cargo fetch --locked --target x86_64-pc-windows-msvc`。`-Suite Migration` 和 `-Suite Connection` 可单独复现。
 
 ```powershell
 $rustBin = '<Rust 1.97.1 x86_64-pc-windows-msvc 工具链的 bin 绝对路径>'
@@ -152,6 +152,8 @@ $LASTEXITCODE
 迁移入口复用写连接初始化，并在同一事务里应用 [Workspace v1 SQL](migrations/workspace/0001_initial.sql)、写入带版本的 Workspace 身份及时间戳、执行完整性与外键检查。合成库验证 8 张业务表、12 个显式索引、重开保留数据、拒绝身份或版本不符，以及校验阶段故障时回滚到空 schema 并可重试。验收要求 `integrity_check` 返回唯一的 `ok`，`foreign_key_check` 返回零行。构建、迁移样本和本次日志位于 `target/p01-04/`，P01-03 的连接样本仍位于 `target/p01-03/runs/`。
 
 同一入口还运行 `app.db` 的 3 项迁移用例。用 `-Suite AppMigration` 单独运行。全局库使用独立的 `main.user_version`，初始化 Workspace 注册表和非秘密设置，故障回滚后可重新迁移。[全局库 v1 SQL](migrations/app/0001_initial.sql)
+
+Rust 的 JSON 验收可单独运行 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --test json_contracts`。它与 Python 读取相同的 75 个合成向量，并额外检查无效 UTF-8、过长整数和原样保留的扩展配置。Schema 随程序嵌入，解析引用时使用本地注册表。
 
 ## 已有可执行验证
 

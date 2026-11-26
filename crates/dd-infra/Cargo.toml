@@ -7,6 +7,9 @@ publish = false
 
 [dependencies]
 rusqlite.workspace = true
+jsonschema = { version = "=0.63.1", default-features = false, features = ["arbitrary-precision"] }
+serde = "=1.0.229"
+serde_json = { version = "=1.0.154", features = ["raw_value"] }
 
 [[test]]
 name = "workspace_migration"
@@ -15,3 +18,7 @@ path = "../../tests/storage/sqlite/migration/workspace_migration.rs"
 [[test]]
 name = "app_migration"
 path = "../../tests/storage/sqlite/migration/app_migration.rs"
+
+[[test]]
+name = "json_contracts"
+path = "../../tests/contracts/rust/json_contracts.rs"

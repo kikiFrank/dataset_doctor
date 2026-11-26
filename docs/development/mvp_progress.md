@@ -18,7 +18,8 @@
 | P01 JSON 与 Protobuf | `163c72e`、`2f04e29`、`6d40194`。本机 `scripts/contracts/windows/check-json-schema.ps1` 运行 InputManifest 与 Workspace 配置共 8 项测试。使用 protoc 29.3 运行 `scripts/contracts/windows/check-protobuf.ps1`，验证 ArtifactRef 描述符与线格式。 |
 | P01 Workspace SQLite | `870b5fb`、`e2238fe`。Windows x64 MSVC 运行 `scripts/storage/windows/check-workspace-sqlite.ps1 -RustBin <bin>`，连接 6 项与初始迁移 5 项通过。 |
 | P01 全局 SQLite | `c90afcb`。增加 `-Suite AppMigration`，3 项通过。验证独立版本、设置重开保留、错库和高版本拒绝、校验失败回滚及重试。累计 SQLite 14 项通过。红测和绿测日志分别在 `target/p01-04/logs/fd41180807764a1daedb7d15e2aeb7b3.log`、`target/p01-04/logs/f4498d8472dc4a7ab9a49f2c92857e7e.log`。 |
-| P01 单图 COCO bbox | 本页所在提交。`scripts/contracts/windows/check-json-schema.ps1 -Suite CocoSingleImage` 使用共享的 20 个结构和解析向量。红测因 Schema 缺失失败，绿测 2 项通过。累计 Python Schema 10 项通过。日志 `dist/p01-01/logs/coco-single-image-red.log`、`dist/p01-01/logs/check.log`。 |
+| P01 单图 COCO bbox | `d5a00c7`。`scripts/contracts/windows/check-json-schema.ps1 -Suite CocoSingleImage` 使用共享的 20 个结构和解析向量。红测因 Schema 缺失失败，绿测 2 项通过。累计 Python Schema 10 项通过。日志 `dist/p01-01/logs/coco-single-image-red.log`、`dist/p01-01/logs/check.log`。 |
+| P01 Rust JSON 校验 | 本页所在提交。在 Windows x64 MSVC 执行 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --test json_contracts`。3 项通过，覆盖 Python 同用的 75 个向量及整数和 UTF-8 边界。红测日志 `target/dev/logs/json-rust-red.log`，基础设施累计回归日志 `target/p01-04/logs/2481219801994f458cfc1c1bba8b84f9.log`。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -26,5 +27,5 @@
 ## 未验证与接续点
 
 - P00 还需真实 WebView2 启动、生产依赖锁及实际生产 Worker 依赖和打包链验证。Windows 以外的产品还没有本轮实测。
-- P01 还需 Rust/Python 共用 JSON 校验、生成后的 Rust/Python/TypeScript 互通与漂移检查。旧发布库升级验收等待实际发布基线。
-- 下一条可执行切片是 Rust 校验端的共同 JSON 向量。使用 `testdata/contracts/json-schema/v1/*/cases.json` 对照 Python 的结构和解析结果。之后生成真实 gRPC 和 TypeScript 边界。
+- P01 还需生成后的 Rust/Python/TypeScript 互通与漂移检查，以及首切片其余专用契约。旧发布库升级验收等待实际发布基线。
+- 下一条切片从 Rust 客户端和 Python Worker 的真实 loopback gRPC 验收开始。先测启动、身份、版本、认证失败、能力如实报告和正常退出，再扩展 StartX。
