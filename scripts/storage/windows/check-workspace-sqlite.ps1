@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'ReviewValidation', 'ReviewSession', 'AnnotationView', 'MediaDisplay', 'TaskStore', 'WorkflowPlan')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,7 +42,7 @@ if ($Suite -in @('All', 'Connection')) {
     $env:DD_SQLITE_INIT_RUN_DIR = Join-Path $repo "target\p01-03\runs\$run"
     $directories += $env:DD_SQLITE_INIT_RUN_DIR
 }
-if ($Suite -in @('All', 'Migration', 'AppMigration')) {
+if ($Suite -in @('All', 'Migration', 'AppMigration', 'WorkflowPlan')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
@@ -85,6 +85,7 @@ switch ($Suite) {
     'MediaDisplay' { $cargoArgs += @('-p', 'dd-infra', '--test', 'media_display') }
     'AnnotationView' { $cargoArgs += @('-p', 'dd-infra', '--test', 'annotation_view') }
     'TaskStore' { $cargoArgs += @('-p', 'dd-infra', '--test', 'task_store') }
+    'WorkflowPlan' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workflow_plan') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')

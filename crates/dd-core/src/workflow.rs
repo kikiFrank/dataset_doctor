@@ -11,25 +11,29 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 const MAX_SAMPLE_LIMIT: u32 = 100_000;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ScopeKind {
     Dataset,
     VideoSegment,
     RepairCandidate,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalGate {
     FinalAnnotation,
     StagingInjection,
     RepairApplication,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Step {
     DatasetProfile,
     AnnotationGeometry,
@@ -43,7 +47,8 @@ pub enum Step {
     Recheck,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "step", rename_all = "SCREAMING_SNAKE_CASE", deny_unknown_fields)]
 pub enum EnabledStep {
     DatasetProfile {
         sample_limit: u32,
@@ -101,7 +106,8 @@ impl EnabledStep {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Fallback {
     RetrySafeStep,
     RequestHumanReview,

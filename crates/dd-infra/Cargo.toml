@@ -106,6 +106,10 @@ name = "review_session"
 path = "../../tests/storage/review/session.rs"
 
 [[test]]
+name = "workflow_plan"
+path = "../../tests/storage/workflow/plans.rs"
+
+[[test]]
 name = "core_claim_loopback"
 path = "../../tests/integration/rpc/core_claim_loopback.rs"
 required-features = ["execution-rpc"]

@@ -40,6 +40,7 @@ pub enum WorkspaceThreadError {
     Import(ImportRegistrationError),
     Dataset(DatasetQueryError),
     Review(ReviewStoreError),
+    WorkflowDatabase(rusqlite::Error),
     Busy,
     Stopped,
 }
@@ -53,6 +54,9 @@ impl Display for WorkspaceThreadError {
             Self::Import(error) => Display::fmt(error, formatter),
             Self::Dataset(error) => Display::fmt(error, formatter),
             Self::Review(error) => Display::fmt(error, formatter),
+            Self::WorkflowDatabase(error) => {
+                write!(formatter, "Workspace workflow persistence: {error}")
+            }
             Self::Busy => write!(formatter, "Workspace request queue is full"),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
@@ -68,6 +72,7 @@ impl Error for WorkspaceThreadError {
             Self::Import(error) => Some(error),
             Self::Dataset(error) => Some(error),
             Self::Review(error) => Some(error),
+            Self::WorkflowDatabase(error) => Some(error),
             _ => None,
         }
     }
