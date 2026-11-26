@@ -1,11 +1,13 @@
 //! Core validation for the registered workflow templates.
 
 mod adjustment;
+mod defaults;
 
 pub use adjustment::{
     AcceptedPlan, AdjustmentAction, AdjustmentEffect, AdjustmentError, AdjustmentRecord,
     PlanAdjustment,
 };
+pub use defaults::{DefaultPlan, DefaultSkipReason, local_default_plan};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;

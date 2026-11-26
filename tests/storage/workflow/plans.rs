@@ -7,13 +7,14 @@ use std::{
 };
 
 use dd_core::workflow::{
-    ApprovalGate, EnabledStep, PlanPolicy, ScopeKind, Step, TemplatePlan, WorkflowInput,
+    ApprovalGate, DefaultSkipReason, EnabledStep, PlanPolicy, ScopeKind, Step, TemplatePlan,
+    WorkflowInput,
 };
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::input_fingerprint::freeze_input_manifest;
 use dd_infra::json::JsonContracts;
 use dd_infra::workflow_store::{
-    WorkflowDraftRequest, WorkflowError, WorkflowStatus, WorkflowStore,
+    PlanSource, WorkflowDraftRequest, WorkflowError, WorkflowStatus, WorkflowStore,
 };
 use dd_infra::workspace_thread::WorkspaceThread;
 use rusqlite::Connection;
@@ -208,13 +209,45 @@ fn plans_bind_the_current_input_and_reopen_the_same_accepted_run() {
     let reference = ready.plan_ref.unwrap();
     assert_eq!(reference.plan_revision, 1);
     assert_eq!(reference.input_fingerprint, input.fingerprint);
+    let local_request = WorkflowDraftRequest {
+        idempotency_key: Uuid::new_v4(),
+        ..request()
+    };
+    let local_draft = store.admit(session, local_request, 7).unwrap();
+    let default = store
+        .accept_default(
+            session,
+            local_draft.run_id,
+            local_draft.row_revision,
+            &policy,
+            1,
+            8,
+        )
+        .unwrap();
+    assert_eq!(default.status, WorkflowStatus::Ready);
+    assert_eq!(default.plan_source, Some(PlanSource::LocalDefault));
+    assert_eq!(
+        default.not_executed.get(&Step::VisualReview),
+        Some(&DefaultSkipReason::ModelNotConfigured)
+    );
+    assert_eq!(
+        owner
+            .task_outcome(session, default.planning_task_id)
+            .unwrap()
+            .status,
+        "SUCCEEDED"
+    );
     owner.close(session).unwrap();
     let grant = owner.grant_selected_directory(workspace.clone()).unwrap();
     let session = owner.open(grant.grant_id).unwrap().workspace_session_id;
     let recovered = store.get(session, draft.run_id).unwrap();
     assert_eq!(recovered.status, WorkflowStatus::Ready);
+    assert_eq!(recovered.plan_source, Some(PlanSource::Proposed));
     assert_eq!(recovered.plan_ref.as_ref(), Some(&reference));
     assert!(store.validate_ready(session, &reference, &policy).is_ok());
+    let local = store.get(session, local_draft.run_id).unwrap();
+    assert_eq!(local.plan_source, Some(PlanSource::LocalDefault));
+    assert_eq!(local.not_executed, default.not_executed);
     let live = source.join("frame.png");
     let before = fs::read(&live).unwrap();
     fs::write(&live, b"changed media").unwrap();

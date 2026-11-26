@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dd_core::workflow::{
-    ApprovalGate, EnabledStep, Fallback, PlanError, PlanPolicy, ScopeKind, Step, TemplatePlan,
-    WorkflowInput, template, validate_plan,
+    ApprovalGate, DefaultSkipReason, EnabledStep, Fallback, PlanError, PlanPolicy, ScopeKind, Step,
+    TemplatePlan, WorkflowInput, local_default_plan, template, validate_plan,
 };
 use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,13 @@ pub enum WorkflowStatus {
     Ready,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PlanSource {
+    Proposed,
+    LocalDefault,
+}
+
 #[derive(Debug)]
 pub struct WorkflowSnapshot {
     pub run_id: Uuid,
@@ -58,6 +65,8 @@ pub struct WorkflowSnapshot {
     pub status: WorkflowStatus,
     pub row_revision: u64,
     pub plan_ref: Option<PlanRef>,
+    pub plan_source: Option<PlanSource>,
+    pub not_executed: BTreeMap<Step, DefaultSkipReason>,
 }
 
 #[derive(Debug)]
@@ -118,6 +127,16 @@ struct StoredPlan {
     adjustment_count: u8,
     adjustments: Vec<serde_json::Value>,
     input: InputProof,
+    #[serde(default)]
+    plan_source: Option<PlanSource>,
+    #[serde(default)]
+    not_executed: BTreeMap<Step, DefaultSkipReason>,
+}
+
+struct PlanResolution {
+    proposal: TemplatePlan,
+    source: PlanSource,
+    not_executed: BTreeMap<Step, DefaultSkipReason>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -187,6 +206,8 @@ impl WorkflowStore {
             plan: None,
             adjustment_count: 0,
             adjustments: Vec::new(),
+            plan_source: None,
+            not_executed: BTreeMap::new(),
             input: InputProof {
                 scope: request.source.kind,
                 manifest_id: request.source.manifest_id,
@@ -268,6 +289,58 @@ impl WorkflowStore {
         proposal: TemplatePlan,
         now_ms: i64,
     ) -> Result<WorkflowSnapshot, WorkflowError> {
+        self.resolve_draft(
+            session,
+            run,
+            expected_row_revision,
+            policy,
+            now_ms,
+            move |_, _| {
+                Ok(PlanResolution {
+                    proposal,
+                    source: PlanSource::Proposed,
+                    not_executed: BTreeMap::new(),
+                })
+            },
+        )
+    }
+
+    pub fn accept_default(
+        &self,
+        session: Uuid,
+        run: Uuid,
+        expected_row_revision: u64,
+        policy: &PlanPolicy,
+        suggested_limit: u32,
+        now_ms: i64,
+    ) -> Result<WorkflowSnapshot, WorkflowError> {
+        self.resolve_draft(
+            session,
+            run,
+            expected_row_revision,
+            policy,
+            now_ms,
+            |input, template_id| {
+                let default = local_default_plan(template_id, input, policy, suggested_limit)
+                    .map_err(WorkflowError::Plan)?;
+                Ok(PlanResolution {
+                    proposal: default.plan,
+                    source: PlanSource::LocalDefault,
+                    not_executed: default.not_executed,
+                })
+            },
+        )
+    }
+
+    fn resolve_draft(
+        &self,
+        session: Uuid,
+        run: Uuid,
+        expected_row_revision: u64,
+        policy: &PlanPolicy,
+        now_ms: i64,
+        resolve: impl FnOnce(&WorkflowInput, &str) -> Result<PlanResolution, WorkflowError>,
+    ) -> Result<WorkflowSnapshot, WorkflowError> {
         let row = self.read_row(session, run)?;
         let mut stored = row.plan()?;
         if row.status != "DRAFT"
@@ -276,16 +349,20 @@ impl WorkflowStore {
         {
             return Err(WorkflowError::RevisionConflict);
         }
-        if proposal.template_id != row.template_key {
+        let input = self.verify_input(session, row.dataset_id, &row.input_path, &stored.input)?;
+        let resolution = resolve(&input, &row.template_key)?;
+        if resolution.proposal.template_id != row.template_key {
             return Err(WorkflowError::Plan(PlanError::UnregisteredTemplate));
         }
-        let input = self.verify_input(session, row.dataset_id, &row.input_path, &stored.input)?;
-        validate_plan(&input, policy, &proposal).map_err(WorkflowError::Plan)?;
-        stored.plan = Some(PlanBody::from(proposal));
+        validate_plan(&input, policy, &resolution.proposal).map_err(WorkflowError::Plan)?;
+        stored.plan = Some(PlanBody::from(resolution.proposal));
+        stored.plan_source = Some(resolution.source);
+        stored.not_executed = resolution.not_executed;
         stored.plan_revision = 1;
         let encoded = serde_json::to_string(&stored).map_err(WorkflowError::Json)?;
         let receipt = serde_json::json!({
             "workflow_run_id": run, "plan_revision": "1", "input_fingerprint": stored.input.input_fingerprint,
+            "plan_source": resolution.source,
         }).to_string();
         let updated = self.owner.workspace_action(session, move |owner| {
             let transaction = owner.connection.transaction().map_err(database)?;
@@ -334,6 +411,9 @@ impl WorkflowStore {
             status,
             row_revision: row.revision()?,
             plan_ref,
+            plan_source: (status == WorkflowStatus::Ready)
+                .then(|| plan.plan_source.unwrap_or(PlanSource::Proposed)),
+            not_executed: plan.not_executed,
         })
     }
 

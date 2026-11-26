@@ -21,3 +21,7 @@ path = "../../tests/workflow/template_plan.rs"
 [[test]]
 name = "plan_adjustment"
 path = "../../tests/workflow/plan_adjustment.rs"
+
+[[test]]
+name = "local_default"
+path = "../../tests/workflow/local_default.rs"
