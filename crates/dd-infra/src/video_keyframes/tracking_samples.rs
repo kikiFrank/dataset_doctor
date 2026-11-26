@@ -17,6 +17,7 @@ use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 #[derive(Debug)]
 pub struct StagingTrackCandidates {
     pub reference: VideoArtifactReference,
+    pub tracking_attempt_id: Uuid,
     pub frame_index: u64,
     pub observations: Vec<TrackObservation>,
 }
@@ -107,6 +108,7 @@ impl VideoAnnotationService {
         }
         Ok(Some(StagingTrackCandidates {
             reference,
+            tracking_attempt_id: bundle.attempt_id,
             frame_index: source.frame_index,
             observations,
         }))

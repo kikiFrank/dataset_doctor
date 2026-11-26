@@ -22,6 +22,7 @@ const BUNDLE_LIMIT: u64 = 32 * 1024 * 1024;
 #[derive(Debug)]
 pub struct VideoTrackBundle {
     pub reference: ArtifactReference,
+    pub attempt_id: Uuid,
     pub target_dataset_id: Uuid,
     pub segment_revision: u64,
     pub label_schema_digest: String,
@@ -142,6 +143,7 @@ pub(super) fn read_bundle(
         schema_id: entry.schema_id.clone(),
     };
     Ok(VideoTrackBundle {
+        attempt_id: attempt,
         reference,
         target_dataset_id: loaded.record.dataset,
         segment_revision: loaded.segment_revision,

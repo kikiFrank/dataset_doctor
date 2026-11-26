@@ -17,6 +17,21 @@
       "anyOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
     },
     "base_label_schema_digest": { "$ref": "common.schema.json#/$defs/sha256" },
-    "coco_document": { "$ref": "coco-single-image.schema.json" }
+    "coco_document": { "$ref": "coco-single-image.schema.json" },
+    "track_bindings": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["local_annotation_id", "track_id", "tracking_task_id", "tracking_attempt_id"],
+        "properties": {
+          "local_annotation_id": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "track_id": { "$ref": "common.schema.json#/$defs/uuid" },
+          "tracking_task_id": { "$ref": "common.schema.json#/$defs/uuid" },
+          "tracking_attempt_id": { "$ref": "common.schema.json#/$defs/uuid" }
+        }
+      }
+    }
   }
 }

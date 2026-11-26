@@ -1,5 +1,6 @@
 //! Store one recoverable, validated human draft at a time.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::{self, Read};
@@ -12,12 +13,14 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::artifact_reference::ArtifactOwner;
 use crate::geometry_runtime::{ReviewImageEvidenceError, read_review_image};
 use crate::import_preflight::LocalCategory;
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::review_store::{ReviewSession, ReviewStatus, ReviewStoreError};
 use crate::review_validation::{ReviewImage, ReviewValidationError, validate_review_document};
+use crate::video_keyframes::VideoAnnotationService;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const DRAFT_LIMIT: u64 = 16 * 1024 * 1024;
@@ -29,6 +32,21 @@ pub struct ReviewDraftRequest {
     pub expected_review_revision: u64,
     pub expected_draft_revision: Option<u64>,
     pub coco_document: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ReviewTrackSelection {
+    pub local_annotation_id: u64,
+    pub track_id: Uuid,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewTrackBinding {
+    pub local_annotation_id: u64,
+    pub track_id: Uuid,
+    pub tracking_task_id: Uuid,
+    pub tracking_attempt_id: Uuid,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -44,6 +62,7 @@ pub struct StoredDraft {
     pub receipt: DraftReceipt,
     pub source_task_id: Uuid,
     pub coco_document: Value,
+    pub track_bindings: Vec<ReviewTrackBinding>,
 }
 
 pub struct ReviewEditorState {
@@ -63,6 +82,7 @@ pub enum ReviewDraftError {
     Io(io::Error),
     RevisionConflict,
     InvalidArtifact,
+    InvalidTrackingSelection,
 }
 
 impl Display for ReviewDraftError {
@@ -80,6 +100,9 @@ impl Display for ReviewDraftError {
             }
             Self::InvalidArtifact => {
                 formatter.write_str("Draft file does not match the recorded review")
+            }
+            Self::InvalidTrackingSelection => {
+                formatter.write_str("Selected track is unavailable for this annotation and frame")
             }
         }
     }
@@ -116,6 +139,8 @@ struct DraftArtifact {
     base_annotation_digest: Option<String>,
     base_label_schema_digest: String,
     coco_document: Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    track_bindings: Vec<ReviewTrackBinding>,
 }
 
 impl ReviewDraftService {
@@ -160,6 +185,26 @@ impl ReviewDraftService {
         request: ReviewDraftRequest,
         now_ms: i64,
     ) -> Result<DraftReceipt, ReviewDraftError> {
+        self.save_scoped(session, request, None, now_ms)
+    }
+
+    pub fn save_with_tracks(
+        &self,
+        session: Uuid,
+        request: ReviewDraftRequest,
+        tracks: &[ReviewTrackSelection],
+        now_ms: i64,
+    ) -> Result<DraftReceipt, ReviewDraftError> {
+        self.save_scoped(session, request, Some(tracks), now_ms)
+    }
+
+    fn save_scoped(
+        &self,
+        session: Uuid,
+        request: ReviewDraftRequest,
+        tracks: Option<&[ReviewTrackSelection]>,
+        now_ms: i64,
+    ) -> Result<DraftReceipt, ReviewDraftError> {
         let snapshot = self.snapshot(session, request.review_id)?;
         let current = &snapshot.session;
         if current.status != ReviewStatus::Open
@@ -198,6 +243,13 @@ impl ReviewDraftService {
             &categories,
         )
         .map_err(ReviewDraftError::Validation)?;
+        let coco_document = document.into_coco();
+        let track_bindings = match tracks {
+            Some(tracks) => self.bind_tracks(session, current, &coco_document, tracks)?,
+            None => draft
+                .as_ref()
+                .map_or_else(Vec::new, |old| retain_tracks(old, &coco_document)),
+        };
         let draft_revision = old_revision
             .unwrap_or_default()
             .checked_add(1)
@@ -216,7 +268,8 @@ impl ReviewDraftService {
             image_digest: current.base_image_digest.clone(),
             base_annotation_digest: current.base_annotation_digest.clone(),
             base_label_schema_digest: current.base_label_schema_digest.clone(),
-            coco_document: document.into_coco(),
+            coco_document,
+            track_bindings,
         };
         let bytes = serde_json::to_vec(&artifact).map_err(ReviewDraftError::Json)?;
         if bytes.len() as u64 > DRAFT_LIMIT {
@@ -275,6 +328,63 @@ impl ReviewDraftService {
         }).map_err(ReviewDraftError::Storage)
     }
 
+    fn bind_tracks(
+        &self,
+        session: Uuid,
+        review: &ReviewSession,
+        document: &Value,
+        selected: &[ReviewTrackSelection],
+    ) -> Result<Vec<ReviewTrackBinding>, ReviewDraftError> {
+        if selected.is_empty() {
+            return Ok(Vec::new());
+        }
+        let invalid = || ReviewDraftError::InvalidTrackingSelection;
+        let work = VideoAnnotationService::new(Arc::clone(&self.owner)).map_err(|_| invalid())?;
+        let candidates = work
+            .staging_tracking_candidates(session, review.dataset_id, review.asset_id)
+            .map_err(|_| invalid())?
+            .ok_or_else(invalid)?;
+        let ArtifactOwner::Task(tracking_task_id) = candidates.reference.owner else {
+            return Err(invalid());
+        };
+        let categories = annotation_categories(document);
+        if selected.len() > categories.len() || selected.len() > candidates.observations.len() {
+            return Err(invalid());
+        }
+        let track_categories: BTreeMap<_, _> = candidates
+            .observations
+            .iter()
+            .filter_map(|candidate| {
+                Some((
+                    candidate.track_id,
+                    candidate.category_id.parse::<u64>().ok()?,
+                ))
+            })
+            .collect();
+        let mut annotation_ids = BTreeSet::new();
+        let mut track_ids = BTreeSet::new();
+        let mut bindings = Vec::with_capacity(selected.len());
+        for choice in selected {
+            let category = categories
+                .get(&choice.local_annotation_id)
+                .ok_or_else(invalid)?;
+            if track_categories.get(&choice.track_id) != Some(category)
+                || !annotation_ids.insert(choice.local_annotation_id)
+                || !track_ids.insert(choice.track_id)
+            {
+                return Err(invalid());
+            }
+            bindings.push(ReviewTrackBinding {
+                local_annotation_id: choice.local_annotation_id,
+                track_id: choice.track_id,
+                tracking_task_id,
+                tracking_attempt_id: candidates.tracking_attempt_id,
+            });
+        }
+        bindings.sort_unstable_by_key(|binding| binding.local_annotation_id);
+        Ok(bindings)
+    }
+
     fn load(&self, snapshot: &DraftSnapshot) -> Result<Option<StoredDraft>, ReviewDraftError> {
         let Some(path) = &snapshot.path else {
             return Ok(None);
@@ -315,8 +425,42 @@ impl ReviewDraftService {
             source_task_id: Uuid::parse_str(&artifact.source_task_id)
                 .map_err(|_| ReviewDraftError::InvalidArtifact)?,
             coco_document: artifact.coco_document,
+            track_bindings: artifact.track_bindings,
         }))
     }
+}
+
+fn annotation_categories(document: &Value) -> BTreeMap<u64, u64> {
+    document["annotations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|annotation| {
+            Some((
+                annotation["id"].as_u64()?,
+                annotation["category_id"].as_u64()?,
+            ))
+        })
+        .collect()
+}
+
+fn retain_tracks(old: &StoredDraft, next: &Value) -> Vec<ReviewTrackBinding> {
+    if old.track_bindings.is_empty() {
+        return Vec::new();
+    }
+    let old_categories = annotation_categories(&old.coco_document);
+    let next_categories = annotation_categories(next);
+    old.track_bindings
+        .iter()
+        .filter(|binding| {
+            old_categories
+                .get(&binding.local_annotation_id)
+                .is_some_and(|category| {
+                    next_categories.get(&binding.local_annotation_id) == Some(category)
+                })
+        })
+        .cloned()
+        .collect()
 }
 
 pub(crate) fn draft_path(review: Uuid, digest: &str) -> String {
