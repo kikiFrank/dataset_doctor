@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ use dd_infra::color_preview::{
     ColorPreviewError, ColorPreviewJob, ColorPreviewRuntime, ColorPreviewService,
 };
 use dd_infra::task_store::TaskStoreError;
+use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::ArtifactOwner;
 use dd_ui_contracts::color::{
@@ -25,21 +27,24 @@ use uuid::Uuid;
 use super::{Commands, run};
 
 pub(crate) struct ColorRunner {
-    interpreter: PathBuf,
-    entrypoint: PathBuf,
+    program: WorkerProgram,
 }
 
 impl ColorRunner {
+    #[cfg(test)]
     pub(crate) fn new(interpreter: PathBuf, entrypoint: PathBuf) -> Arc<Self> {
-        Arc::new(Self {
+        Self::from_program(WorkerProgram::Script {
             interpreter,
             entrypoint,
         })
     }
 
-    pub(crate) fn configured() -> Option<Arc<Self>> {
-        let (interpreter, entrypoint) = super::configured_worker_script()?;
-        Some(Self::new(interpreter, entrypoint))
+    fn from_program(program: WorkerProgram) -> Arc<Self> {
+        Arc::new(Self { program })
+    }
+
+    pub(crate) fn configured(program: Option<WorkerProgram>) -> Option<Arc<Self>> {
+        program.map(Self::from_program)
     }
 
     async fn execute(
@@ -49,11 +54,10 @@ impl ColorRunner {
         job: ColorPreviewJob,
     ) {
         let task = job.task_id();
-        let startup_failed = match ColorPreviewRuntime::launch(
+        let startup_failed = match ColorPreviewRuntime::launch_with_program(
             Arc::clone(&owner),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await
         {

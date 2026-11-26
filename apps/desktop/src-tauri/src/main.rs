@@ -216,7 +216,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&workspace),
         workspace_commands::GRANT_LIFETIME,
     ));
-    let workflow = workspace_commands::workflow::configured(Arc::clone(&workspace));
     tauri::Builder::default()
         .register_uri_scheme_protocol("dd-media", |context, request| {
             let service = context.app_handle().state::<Arc<MediaDisplayService>>();
@@ -226,8 +225,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(workspace)
         .manage(media)
         .manage(imports)
-        .manage(workflow)
-        .manage(workspace_commands::color::ColorRunner::configured())
         .manage(workspace_commands::video::VideoRunner::configured())
         .manage(RuntimeMode {
             smoke_root,
@@ -239,9 +236,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_report_export,
         })
         .setup(|app| {
+            let worker =
+                workspace_commands::configured_worker_program(app.path().resource_dir().ok());
             app.manage(workspace_commands::geometry::GeometryRunner::configured(
-                app.path().resource_dir().ok(),
+                worker.clone(),
             ));
+            app.manage(workspace_commands::color::ColorRunner::configured(
+                worker.clone(),
+            ));
+            let owner = Arc::clone(app.state::<Arc<WorkspaceThread>>().inner());
+            app.manage(workspace_commands::workflow::configured(owner, worker));
             let runtime = app.state::<RuntimeMode>();
             let mut window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))

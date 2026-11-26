@@ -21,6 +21,7 @@ use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
 use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission, format_digest};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -86,6 +87,22 @@ impl DatasetProfileRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, DatasetProfileError> {
+        Self::launch_with_program(
+            workspace,
+            session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        workspace: Arc<WorkspaceThread>,
+        session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, DatasetProfileError> {
         let now = now_ms()?;
         let owner = Arc::clone(&workspace);
         tokio::task::spawn_blocking(move || {
@@ -107,7 +124,7 @@ impl DatasetProfileRuntime {
         .await
         .map_err(|_| DatasetProfileError::CoreStopped)??;
         let runtime =
-            WorkerRuntime::launch(workspace, session, interpreter, entrypoint, CAPABILITY).await?;
+            WorkerRuntime::launch_with_program(workspace, session, program, CAPABILITY).await?;
         Ok(Self { runtime })
     }
 

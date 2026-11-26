@@ -38,7 +38,7 @@ pub(crate) mod video_sampling;
 pub(crate) mod video_tracking;
 pub(crate) mod workflow;
 
-fn configured_worker_program(resource_dir: Option<PathBuf>) -> Option<WorkerProgram> {
+pub(crate) fn configured_worker_program(resource_dir: Option<PathBuf>) -> Option<WorkerProgram> {
     let packaged = resource_dir.and_then(|directory| {
         let root = directory.canonicalize().ok()?;
         let name = if cfg!(windows) {

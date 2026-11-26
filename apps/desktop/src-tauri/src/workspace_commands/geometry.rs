@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -42,8 +43,8 @@ impl GeometryRunner {
         })
     }
 
-    pub(crate) fn configured(resource_dir: Option<PathBuf>) -> Option<Arc<Self>> {
-        super::configured_worker_program(resource_dir).map(Self::from_program)
+    pub(crate) fn configured(program: Option<WorkerProgram>) -> Option<Arc<Self>> {
+        program.map(Self::from_program)
     }
 
     pub(crate) fn wait_for_idle(&self, timeout: std::time::Duration) -> bool {

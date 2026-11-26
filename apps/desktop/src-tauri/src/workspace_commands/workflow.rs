@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workflow_store::{
     LocalHealthcheckRequest, LocalHealthcheckRuntime, PlanSource, WorkflowError, WorkflowSnapshot,
     WorkflowStatus, WorkflowStore,
@@ -14,9 +15,11 @@ use tauri::State;
 
 use super::{Commands, WorkspaceThread, run};
 
-pub(crate) fn configured(owner: Arc<WorkspaceThread>) -> Option<Arc<LocalHealthcheckRuntime>> {
-    let (interpreter, entrypoint) = super::configured_worker_script()?;
-    LocalHealthcheckRuntime::new(owner, interpreter, entrypoint)
+pub(crate) fn configured(
+    owner: Arc<WorkspaceThread>,
+    program: Option<WorkerProgram>,
+) -> Option<Arc<LocalHealthcheckRuntime>> {
+    LocalHealthcheckRuntime::with_program(owner, program?)
         .ok()
         .map(Arc::new)
 }

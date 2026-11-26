@@ -17,6 +17,7 @@ use super::{
 };
 use crate::dataset_profile_runtime::{DatasetProfileJob, DatasetProfileRuntime};
 use crate::geometry_runtime::GeometryRuntime;
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::now_ms;
 use crate::workspace_thread::WorkspaceThread;
 
@@ -45,8 +46,7 @@ pub struct LocalHealthcheckJob {
 
 pub struct LocalHealthcheckRuntime {
     store: Arc<WorkflowStore>,
-    interpreter: PathBuf,
-    entrypoint: PathBuf,
+    program: WorkerProgram,
 }
 
 impl LocalHealthcheckRuntime {
@@ -59,10 +59,22 @@ impl LocalHealthcheckRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, WorkflowError> {
+        Self::with_program(
+            owner,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+    }
+
+    pub fn with_program(
+        owner: Arc<WorkspaceThread>,
+        program: WorkerProgram,
+    ) -> Result<Self, WorkflowError> {
         Ok(Self {
             store: Arc::new(WorkflowStore::new(owner)?),
-            interpreter,
-            entrypoint,
+            program,
         })
     }
 
@@ -151,11 +163,10 @@ impl LocalHealthcheckRuntime {
 
     async fn execute(&self, job: LocalHealthcheckJob) -> Result<WorkflowReport, RunFailure> {
         let session = job.session;
-        let mut profile = DatasetProfileRuntime::launch(
+        let mut profile = DatasetProfileRuntime::launch_with_program(
             Arc::clone(&self.store.owner),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await
         .map_err(|error| RunFailure::worker(error, "WORKER_START_FAILED"))?;
@@ -190,11 +201,10 @@ impl LocalHealthcheckRuntime {
         .map_err(|error| RunFailure::workflow(execution(error)))?
         .map_err(RunFailure::workflow)?;
         if !checked.jobs.is_empty() {
-            let mut geometry = GeometryRuntime::launch(
+            let mut geometry = GeometryRuntime::launch_with_program(
                 Arc::clone(&self.store.owner),
                 session,
-                self.interpreter.clone(),
-                self.entrypoint.clone(),
+                self.program.clone(),
             )
             .await
             .map_err(|error| RunFailure::worker(error, "WORKER_START_FAILED"))?;

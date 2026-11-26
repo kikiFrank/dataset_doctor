@@ -23,7 +23,9 @@ try {
     $start.RedirectStandardError = $true
     $start.EnvironmentVariables['DD_DESKTOP_SMOKE_ROOT'] = $run
     if ($PackagedWorkerExe) {
-        if ($Suite -ne 'WorkspaceBusiness') { throw 'Packaged Worker layout requires WorkspaceBusiness.' }
+        if ($Suite -notin @('WorkspaceBusiness', 'WorkspaceReportExport', 'WorkspaceColor')) {
+            throw 'Packaged Worker layout requires WorkspaceBusiness, WorkspaceReportExport, or WorkspaceColor.'
+        }
         $product = (Resolve-Path -LiteralPath $PackagedWorkerExe).Path
         if ((Split-Path -Leaf $product) -ne 'dd-worker.exe') { throw 'Expected the packaged dd-worker.exe.' }
         $appFolder = Join-Path $run 'Packaged desktop'

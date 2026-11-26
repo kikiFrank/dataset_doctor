@@ -27,6 +27,7 @@ use crate::media_display::{MediaDisplayService, MediaLocator};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::{TaskOutcome, TaskStoreError, TaskSubmission, format_digest};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -375,8 +376,24 @@ impl ColorPreviewRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, ColorPreviewError> {
+        Self::launch_with_program(
+            owner,
+            session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        owner: Arc<WorkspaceThread>,
+        session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, ColorPreviewError> {
         Ok(Self {
-            runtime: WorkerRuntime::launch(owner, session, interpreter, entrypoint, CAPABILITY)
+            runtime: WorkerRuntime::launch_with_program(owner, session, program, CAPABILITY)
                 .await?,
         })
     }
