@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { VideoFramePanel } from "./video-frame-panel";
+import type { VideoEditGuard } from "./video-annotation-panel";
 
 import type { VideoDetail } from "./api/generated/wire-primitives";
 import { getVideo } from "./api/video";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 
-export function VideoDetailPanel({ workspace, sourceVideoId }: {
-  workspace: OpenWorkspace; sourceVideoId: string;
+export function VideoDetailPanel({ workspace, sourceVideoId, editGuard, importRunning }: {
+  workspace: OpenWorkspace; sourceVideoId: string; editGuard: VideoEditGuard; importRunning: boolean;
 }) {
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +19,6 @@ export function VideoDetailPanel({ workspace, sourceVideoId }: {
     let active = true;
     setBusy(true);
     setError(null);
-    setDetail(null);
     void getVideo(workspace, sourceVideoId).then((loaded) => {
       if (active) setDetail(loaded);
     }).catch((failure: unknown) => {
@@ -29,7 +29,7 @@ export function VideoDetailPanel({ workspace, sourceVideoId }: {
 
   return (
     <section aria-label="视频信息">
-      <button type="button" disabled={busy} onClick={() => setRevision((value) => value + 1)}>刷新视频信息</button>
+      <button type="button" disabled={busy || editGuard.blocked} onClick={() => setRevision((value) => value + 1)}>刷新视频信息</button>
       {busy && <p role="status">正在核验视频来源…</p>}
       {error && <p role="alert">{error}</p>}
       {detail && <>
@@ -50,7 +50,9 @@ export function VideoDetailPanel({ workspace, sourceVideoId }: {
           </tr>)}</tbody>
         </table>}
         <VideoFramePanel key={detail.source_video_id + detail.source_digest} workspace={workspace}
-          sourceVideoId={sourceVideoId} enabled={detail.source_availability === "ONLINE" && detail.probe_status === "SUCCEEDED"} />
+          detail={detail} enabled={!error && detail.source_availability === "ONLINE" && detail.probe_status === "SUCCEEDED"}
+          verifying={busy || importRunning} editGuard={editGuard}
+          onAnnotationsChanged={() => setRevision((value) => value + 1)} />
       </>}
     </section>
   );

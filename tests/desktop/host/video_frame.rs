@@ -6,7 +6,10 @@ use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::media_display::MediaDisplayService;
 use dd_ui_contracts::annotation::MediaGetLocatorRequest;
 use dd_ui_contracts::dataset_import::{ImportOperationKind, TaskGetRequest};
-use dd_ui_contracts::video::{FrameResolution, VideoImportRequest, VideoResolveFrameRequest};
+use dd_ui_contracts::video::{
+    FrameResolution, VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest,
+    VideoResolveFrameRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+};
 use tauri::http::Request;
 
 use super::{video::VideoRunner, *};
@@ -183,6 +186,103 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         .args(["-I","-B","-c","import sys; from PIL import Image; im=Image.open(sys.argv[1]); im.load(); r,g,b=im.getpixel((20,12)); assert b>240 and max(r,g)<12"])
         .arg(displayed).status().unwrap();
     assert!(pixels.success());
+    let input = run.join("Desktop video annotation dataset");
+    fs::create_dir(&input).unwrap();
+    fs::write(
+        input.join("image.png"),
+        include_bytes!("../../../testdata/image_io/p00-worker-rgb.png"),
+    )
+    .unwrap();
+    fs::write(input.join("image.json"), br#"{"images":[{"id":1,"file_name":"image.png","width":2,"height":1}],"annotations":[],"categories":[{"id":2,"name":"signal"}]}"#).unwrap();
+    let target = owner.grant_import_directory(session, input).unwrap();
+    let preview = imports
+        .inspect_directory(session, target.grant_id, "Video labels".into())
+        .unwrap();
+    let registered = imports
+        .confirm(session, preview.plan_id, preview.fingerprint, 200)
+        .unwrap();
+    let dataset_id = registered.dataset_id.to_string();
+    let dataset_detail = commands
+        .dataset_detail(dd_ui_contracts::dataset::DatasetGetRequest {
+            context: context(session),
+            dataset_id: uuid(dataset_id.clone()),
+        })
+        .unwrap();
+    assert_eq!(dataset_detail.categories[0].name, "signal");
+    assert_eq!(dataset_detail.categories[0].id, 1);
+    let source_id = String::from(imported.source_video_id.clone());
+    let detail = |session| {
+        commands
+            .video_detail(VideoGetRequest {
+                context: context(session),
+                source_video_id: imported.source_video_id.clone(),
+            })
+            .unwrap()
+    };
+    assert!(detail(session).video_annotation_manifest.is_none());
+    let wire_context = || {
+        serde_json::json!({
+            "request_id": Uuid::new_v4(), "workspace_id": workspace.workspace_id,
+            "workspace_session_id": session,
+        })
+    };
+    let keyframe_request = |bbox| {
+        serde_json::from_value::<VideoSaveKeyframeDraftRequest>(serde_json::json!({
+        "context": wire_context(), "source_video_id": source_id, "target_dataset_id": dataset_id,
+        "frame_ref": frame, "expected_video_revision": detail(session).row_revision,
+        "coco_document": {
+            "images":[{"id":1,"file_name":"frame.png","width":48,"height":32}],
+            "categories":[{"id":1,"name":"signal"}],
+            "annotations":[{"id":1,"image_id":1,"category_id":1,"bbox":bbox,"area":16,"iscrowd":0}]
+        }
+    })).unwrap()
+    };
+    assert!(
+        commands
+            .save_video_keyframe(keyframe_request([47, 0, 4, 4]))
+            .is_err()
+    );
+    let saved = commands
+        .save_video_keyframe(keyframe_request([1, 2, 4, 4]))
+        .unwrap();
+    let mut excessive = keyframe_request([1, 2, 4, 4]);
+    excessive.coco_document.annotations = (0..10_001)
+        .map(|index| dd_ui_contracts::annotation::CocoBox {
+            id: index + 1,
+            image_id: 1,
+            category_id: 1,
+            bbox: [1.0, 2.0, 4.0, 4.0],
+            area: 16.0,
+            iscrowd: 0,
+        })
+        .collect();
+    assert_eq!(
+        commands.save_video_keyframe(excessive).unwrap_err().code,
+        "PAYLOAD_TOO_LARGE"
+    );
+    let current = detail(session);
+    assert_eq!(current.row_revision, saved.video_revision);
+    assert!(matches!(
+        saved.annotation_ref.owner,
+        dd_ui_contracts::ArtifactOwner::Asset(_)
+    ));
+    let segment_request = |end| {
+        serde_json::from_value::<VideoSaveSegmentRequest>(serde_json::json!({
+        "context": wire_context(), "source_video_id": source_id, "target_dataset_id": dataset_id,
+        "start_us": "600000", "end_us": end, "expected_revision": "0",
+        "keyframes":[{"frame_ref": saved.frame_ref,"annotation_ref":saved.annotation_ref}]
+    })).unwrap()
+    };
+    assert!(
+        commands
+            .save_video_segment(segment_request("600000"))
+            .is_err()
+    );
+    let segment = commands
+        .save_video_segment(segment_request("600001"))
+        .unwrap();
+    assert_eq!(String::from(segment.revision), "1");
+    let reopened_segment_id = segment.segment_id;
     owner.close(session).unwrap();
     let response = annotation::media_response(
         &media,
@@ -194,6 +294,29 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert_eq!(response.status(), 403);
     let grant = owner.grant_selected_directory(root).unwrap();
     let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let restored = detail(reopened);
+    let work = restored.video_annotation_manifest.unwrap();
+    assert_eq!(work.segments.len(), 1);
+    assert_eq!(work.segments[0].segment_id, reopened_segment_id);
+    assert!(work.unassigned_keyframe_drafts.is_empty());
+    assert_eq!(
+        work.segments[0].keyframes[0].annotation_ref.artifact_id,
+        saved.annotation_ref.artifact_id
+    );
+    let draft = commands
+        .get_video_keyframe(
+            serde_json::from_value::<VideoGetKeyframeDraftRequest>(serde_json::json!({
+                "context": {
+                    "request_id": Uuid::new_v4(), "workspace_id": workspace.workspace_id,
+                    "workspace_session_id": reopened,
+                },
+                "source_video_id": source_id,
+                "annotation_ref": saved.annotation_ref,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(draft.annotations[0].bbox, [1.0, 2.0, 4.0, 4.0]);
     let cached = commands
         .resolve_video_frame(
             None,

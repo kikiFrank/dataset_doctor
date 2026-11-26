@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { DisplayLocator, VideoFrame, VideoSeekPolicy } from "./api/generated/wire-primitives";
+import type { DisplayLocator, VideoDetail, VideoFrame, VideoSeekPolicy } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
 import { getFrameImageLocator, resolveVideoFrame } from "./api/video";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
+import { VideoAnnotationPanel, type VideoEditGuard } from "./video-annotation-panel";
 
 const pendingStates = new Set(["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"]);
 const errors: Record<string, string> = {
@@ -15,9 +16,12 @@ const errors: Record<string, string> = {
   SESSION_ENDED: "原帧任务会话已结束，请重新请求。",
 };
 
-export function VideoFramePanel({ workspace, sourceVideoId, enabled }: {
-  workspace: OpenWorkspace; sourceVideoId: string; enabled: boolean;
+export function VideoFramePanel({ workspace, detail, enabled, verifying, editGuard, onAnnotationsChanged }: {
+  workspace: OpenWorkspace; detail: VideoDetail; enabled: boolean; verifying: boolean;
+  editGuard: VideoEditGuard;
+  onAnnotationsChanged: () => void;
 }) {
+  const sourceVideoId = detail.source_video_id;
   const [mode, setMode] = useState<"time" | "index">("time");
   const [value, setValue] = useState("0");
   const [policy, setPolicy] = useState<VideoSeekPolicy>("NEAREST");
@@ -76,7 +80,7 @@ export function VideoFramePanel({ workspace, sourceVideoId, enabled }: {
   const disabled = busy || taskId !== null;
 
   async function submit() {
-    if (!enabled || disabled || !valid) return;
+    if (!enabled || disabled || !valid || editGuard.blocked) return;
     key.current ??= crypto.randomUUID();
     setBusy(true);
     setError(null);
@@ -110,7 +114,7 @@ export function VideoFramePanel({ workspace, sourceVideoId, enabled }: {
         {mode === "time" && <label>定位规则 <select value={policy} disabled={disabled} onChange={(event) => {
           setPolicy(event.target.value as VideoSeekPolicy); key.current = null;
         }}><option value="NEAREST">最近一帧</option><option value="AT_OR_AFTER">该时间或之后</option></select></label>}
-        <button type="submit" disabled={!enabled || disabled || !valid}>读取视频帧</button>
+        <button type="submit" disabled={!enabled || disabled || !valid || editGuard.blocked}>读取视频帧</button>
       </form>
       {!enabled && <p>视频来源可用且探测成功后可以读取帧。</p>}
       {(busy || taskId) && !error && <p role="status">正在解析视频帧…</p>}
@@ -120,10 +124,12 @@ export function VideoFramePanel({ workspace, sourceVideoId, enabled }: {
       {error && <p role="alert">{error}</p>}
       {frame && <>
         <p>显示帧序号 {frame.frame_index}，实际时间 {frame.pts_us === null ? "未知" : frame.pts_us + " 微秒"}</p>
-        {image && <img src={image.locator} width={frame.width} height={frame.height} alt={"视频帧 " + frame.frame_index}
-          onError={() => setError("帧图像无法显示，请刷新帧显示。")} />}
-        <button type="button" onClick={() => { setError(null); setImageRevision((revision) => revision + 1); }}>刷新帧显示</button>
+        <button type="button" disabled={editGuard.blocked}
+          onClick={() => { setError(null); setImageRevision((revision) => revision + 1); }}>刷新帧显示</button>
       </>}
+      <VideoAnnotationPanel workspace={workspace} detail={detail} frame={frame} image={image}
+        disabled={!enabled || disabled || verifying} editGuard={editGuard} onChanged={onAnnotationsChanged}
+        onImageError={() => setError("帧图像无法显示，请刷新帧显示。")} />
     </section>
   );
 }

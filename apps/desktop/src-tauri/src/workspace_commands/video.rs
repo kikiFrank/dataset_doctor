@@ -310,10 +310,14 @@ impl Commands {
             ),
             None => (None, None, Vec::new()),
         };
+        let work = self
+            .video_annotations()?
+            .read(session, source)
+            .map_err(|error| self.video_annotation_error(error))?;
         Ok(VideoDetail {
             source_video_id: self.uuid_text(detail.video_id.to_string())?,
             display_name: detail.display_name,
-            row_revision: detail.revision.into(),
+            row_revision: work.video_revision.into(),
             source_digest: detail.source_digest,
             source_availability: match detail.source_availability {
                 VideoSourceAvailability::Online => VideoAvailability::Online,
@@ -325,6 +329,8 @@ impl Commands {
             streams,
             rotation_ccw: detail.rotation_ccw,
             variable_frame_rate,
+            video_annotation_manifest_ref: self.video_wire(work.manifest_ref)?,
+            video_annotation_manifest: self.video_wire(work.manifest)?,
         })
     }
 }

@@ -9,6 +9,7 @@ use rusqlite::{OptionalExtension, Row, params};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::import_preflight::LocalCategory;
 use crate::paths::{is_portable_relative_file, open_registered_file};
 use crate::sqlite::{decode_uuid, row_uuid};
 use crate::workspace::OpenedWorkspace;
@@ -22,6 +23,7 @@ pub enum DatasetQueryError {
     UnknownAsset,
     UnavailableImage,
     InvalidImageBinding,
+    InvalidCategories(serde_json::Error),
     Database(rusqlite::Error),
 }
 
@@ -37,6 +39,7 @@ impl Display for DatasetQueryError {
             Self::InvalidImageBinding => {
                 formatter.write_str("Registered image or annotation binding is incomplete")
             }
+            Self::InvalidCategories(error) => write!(formatter, "Read Dataset categories: {error}"),
             Self::Database(error) => write!(formatter, "Read Workspace Dataset entries: {error}"),
         }
     }
@@ -46,6 +49,7 @@ impl Error for DatasetQueryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Database(error) => Some(error),
+            Self::InvalidCategories(error) => Some(error),
             _ => None,
         }
     }
@@ -72,6 +76,11 @@ pub struct DatasetSummary {
     pub row_revision: u64,
     pub schema_fingerprint: String,
     pub updated_at_ms: i64,
+}
+
+pub struct DatasetDetail {
+    pub summary: DatasetSummary,
+    pub categories: Vec<LocalCategory>,
 }
 
 #[derive(Debug)]
@@ -239,6 +248,23 @@ impl OpenedWorkspace {
         Ok(RegisteredInputFile { path, sha256 })
     }
 
+    pub(crate) fn dataset_detail(&self, dataset: Uuid) -> Result<DatasetDetail, DatasetQueryError> {
+        let (summary, categories) = self.connection.query_row(
+            "SELECT d.dataset_id, d.name, d.row_revision, d.categories_json, d.updated_at_ms,
+                    (SELECT count(*) FROM dataset_assets m WHERE m.dataset_id=d.dataset_id),
+                    (SELECT count(*) FROM dataset_assets m WHERE m.dataset_id=d.dataset_id AND m.final_review_id IS NULL)
+             FROM datasets d WHERE d.dataset_id=?1",
+            [dataset.to_string()],
+            dataset_row,
+        ).optional()?.ok_or(DatasetQueryError::UnknownDataset)?;
+        let categories =
+            serde_json::from_str(&categories).map_err(DatasetQueryError::InvalidCategories)?;
+        Ok(DatasetDetail {
+            summary,
+            categories,
+        })
+    }
+
     pub(crate) fn list_datasets(
         &self,
         after: Option<Uuid>,
@@ -254,16 +280,7 @@ impl OpenedWorkspace {
         )?;
         let rows = statement
             .query_map(params![after.map(|id| id.to_string()), limit], |row| {
-                let categories: String = row.get(3)?;
-                Ok(DatasetSummary {
-                    dataset_id: row_uuid(row, 0)?,
-                    name: row.get(1)?,
-                    row_revision: unsigned(row, 2)?,
-                    schema_fingerprint: format!("{:x}", Sha256::digest(categories.as_bytes())),
-                    updated_at_ms: row.get(4)?,
-                    asset_count: unsigned(row, 5)?,
-                    unconfirmed_count: unsigned(row, 6)?,
-                })
+                dataset_row(row).map(|(summary, _)| summary)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(page(rows, size, |item| item.dataset_id))
@@ -378,6 +395,20 @@ impl OpenedWorkspace {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(page(rows, size, |item| item.asset_id))
     }
+}
+
+fn dataset_row(row: &Row<'_>) -> rusqlite::Result<(DatasetSummary, String)> {
+    let categories: String = row.get(3)?;
+    let summary = DatasetSummary {
+        dataset_id: row_uuid(row, 0)?,
+        name: row.get(1)?,
+        row_revision: unsigned(row, 2)?,
+        schema_fingerprint: format!("{:x}", Sha256::digest(categories.as_bytes())),
+        updated_at_ms: row.get(4)?,
+        asset_count: unsigned(row, 5)?,
+        unconfirmed_count: unsigned(row, 6)?,
+    };
+    Ok((summary, categories))
 }
 
 fn checked_limit(size: u16) -> Result<i64, DatasetQueryError> {

@@ -341,6 +341,18 @@ impl WorkspaceThread {
         self.request(Request::Current)
     }
 
+    pub fn dataset_detail(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+    ) -> Result<crate::dataset_query::DatasetDetail, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .dataset_detail(dataset)
+                .map_err(WorkspaceThreadError::Dataset)
+        })
+    }
+
     pub fn list_datasets(
         &self,
         session: Uuid,

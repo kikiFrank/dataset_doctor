@@ -1,8 +1,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail, AssetListRequest, AssetPage } from "./generated/wire-primitives";
 import type { DisplayLocator, FrameResolution, MediaGetLocatorRequest, VideoFrame, VideoFrameTarget, VideoResolveFrameRequest, VideoSeekPolicy } from "./generated/wire-primitives";
+import type {
+  ArtifactReference, CocoDocument, KeyframeDraftReceipt, SegmentReceipt,
+  VideoGetKeyframeDraftRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+} from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
+
+export function getKeyframeDraft(workspace: OpenWorkspace, video: string, annotation: ArtifactReference): Promise<CocoDocument> {
+  const request: VideoGetKeyframeDraftRequest = {
+    context: context(workspace, crypto.randomUUID()), source_video_id: video, annotation_ref: annotation,
+  };
+  return invoke("video_get_keyframe_draft", { request });
+}
+
+export function saveKeyframeDraft(workspace: OpenWorkspace, fields: Omit<VideoSaveKeyframeDraftRequest, "context">): Promise<KeyframeDraftReceipt> {
+  const request: VideoSaveKeyframeDraftRequest = { ...fields, context: context(workspace, crypto.randomUUID()) };
+  return invoke("video_save_keyframe_draft", { request });
+}
+
+export function saveSegment(workspace: OpenWorkspace, fields: Omit<VideoSaveSegmentRequest, "context">): Promise<SegmentReceipt> {
+  const request: VideoSaveSegmentRequest = { ...fields, context: context(workspace, crypto.randomUUID()) };
+  return invoke("video_save_segment", { request });
+}
 
 export function pickVideoFile(workspace: OpenWorkspace): Promise<PathGrant | null> {
   const requestId = crypto.randomUUID();

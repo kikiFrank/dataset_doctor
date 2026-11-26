@@ -30,6 +30,19 @@ pub struct DatasetPage {
 }
 
 #[derive(Deserialize, TS)]
+pub struct DatasetGetRequest {
+    pub context: CommandContext,
+    pub dataset_id: UuidText,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct DatasetDetail {
+    #[serde(flatten)]
+    pub summary: DatasetSummary,
+    pub categories: Vec<crate::annotation::CocoCategory>,
+}
+
+#[derive(Deserialize, TS)]
 pub struct AssetListRequest {
     pub context: CommandContext,
     #[serde(default)]

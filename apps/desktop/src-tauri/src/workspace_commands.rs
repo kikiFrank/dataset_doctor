@@ -28,6 +28,7 @@ pub(crate) mod geometry;
 pub(crate) mod review;
 pub(crate) mod review_commit;
 pub(crate) mod video;
+pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {

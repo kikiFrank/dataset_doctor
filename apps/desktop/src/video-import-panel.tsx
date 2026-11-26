@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { VideoLibraryPanel } from "./video-library-panel";
+import type { VideoEditGuard } from "./video-annotation-panel";
 import type { PathGrant, VideoImportView } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
 import { importVideo, pickVideoFile } from "./api/video";
@@ -16,7 +17,7 @@ const errors: Record<string, string> = {
 
 const pending = new Set(["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"]);
 
-export function VideoImportPanel({ workspace }: { workspace: OpenWorkspace }) {
+export function VideoImportPanel({ workspace, editGuard }: { workspace: OpenWorkspace; editGuard: VideoEditGuard }) {
   const [selection, setSelection] = useState<PathGrant | null>(null);
   const [receipt, setReceipt] = useState<VideoImportView | null>(null);
   const [taskStatus, setTaskStatus] = useState("");
@@ -91,7 +92,7 @@ export function VideoImportPanel({ workspace }: { workspace: OpenWorkspace }) {
   const validStream = streamIndex === "" || (/^\d+$/.test(streamIndex) && Number(streamIndex) <= 4_294_967_295);
   return (
     <section className="video-import" aria-label="视频导入">
-      <button type="button" disabled={busy || running} onClick={() => void choose()}>选择视频</button>
+      <button type="button" disabled={busy || running || editGuard.blocked} onClick={() => void choose()}>选择视频</button>
       {selection && <>
         <p className="import-path">{selection.display_path}</p>
         <label htmlFor="video-stream">视频流编号（可选）</label>
@@ -100,12 +101,13 @@ export function VideoImportPanel({ workspace }: { workspace: OpenWorkspace }) {
             idempotencyKey.current = crypto.randomUUID();
             setStreamIndex(event.target.value);
           }} />
-        <button type="button" disabled={busy || receipt !== null || !validStream}
+        <button type="button" disabled={busy || receipt !== null || !validStream || editGuard.blocked}
           onClick={() => void submit()}>登记并探测</button>
       </>}
       {running && !error && <p role="status">正在探测视频帧…</p>}
       {status && <p role="status">{status}</p>}
-      <VideoLibraryPanel workspace={workspace} refreshKey={(receipt?.operation.task_id ?? "") + taskStatus} />
+      <VideoLibraryPanel workspace={workspace} refreshKey={(receipt?.operation.task_id ?? "") + taskStatus}
+        editGuard={editGuard} importRunning={running || busy} />
       {error && <p role="alert">{error}</p>}
       {running && error && <button type="button" onClick={() => {
         setError(null);

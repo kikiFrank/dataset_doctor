@@ -77,7 +77,7 @@ pub struct WorkspaceBackupView {
     pub asset_file_count: DecimalU64,
 }
 
-#[derive(Clone, Deserialize, TS)]
+#[derive(Clone, Deserialize, Serialize, TS)]
 pub struct CommandContext {
     pub request_id: UuidText,
     pub workspace_id: UuidText,

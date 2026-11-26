@@ -1,8 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { DatasetDetail, DatasetGetRequest } from "./generated/wire-primitives";
 
 import type { AnnotationGetRequest, AnnotationView, AssetListRequest, AssetPage, DatasetListRequest, DatasetPage, DisplayLocator, MediaGetLocatorRequest } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
+
+export function getDataset(workspace: OpenWorkspace, datasetId: string): Promise<DatasetDetail> {
+  const request: DatasetGetRequest = { context: context(workspace, crypto.randomUUID()), dataset_id: datasetId };
+  return invoke("dataset_get", { request });
+}
 
 export function listDatasets(workspace: OpenWorkspace, cursor?: string): Promise<DatasetPage> {
   const request: DatasetListRequest = {

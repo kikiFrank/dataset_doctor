@@ -69,6 +69,12 @@ impl From<i64> for DecimalI64 {
     }
 }
 
+impl From<DecimalI64> for i64 {
+    fn from(value: DecimalI64) -> Self {
+        value.0
+    }
+}
+
 fn parse_decimal<T: FromStr + Display>(encoded: &str) -> Result<T, &'static str> {
     let value: T = encoded
         .parse()
@@ -119,7 +125,8 @@ pub enum ArtifactOwner {
     Review(UuidText),
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactReference {
     pub artifact_id: UuidText,
     pub owner: ArtifactOwner,
@@ -160,6 +167,8 @@ pub fn wire_primitives_typescript() -> String {
         dataset::DatasetListRequest::decl(&config),
         dataset::DatasetSummary::decl(&config),
         dataset::DatasetPage::decl(&config),
+        dataset::DatasetGetRequest::decl(&config),
+        dataset::DatasetDetail::decl(&config),
         dataset::AssetKind::decl(&config),
         dataset::AssetListRequest::decl(&config),
         dataset::AnnotationState::decl(&config),
@@ -192,6 +201,16 @@ pub fn wire_primitives_typescript() -> String {
         video::VideoResolveFrameRequest::decl(&config),
         video::VideoFrame::decl(&config),
         video::FrameResolution::decl(&config),
+        video::VideoSaveKeyframeDraftRequest::decl(&config),
+        video::VideoGetKeyframeDraftRequest::decl(&config),
+        video::KeyframeDraftReceipt::decl(&config),
+        video::VideoSaveSegmentRequest::decl(&config),
+        video::SegmentReceipt::decl(&config),
+        video::VideoKeyframe::decl(&config),
+        video::UnassignedVideoKeyframe::decl(&config),
+        video::VideoSegment::decl(&config),
+        video::VideoAnnotationManifest::decl(&config),
+        video::VideoTargetContext::decl(&config),
         dataset_import::GeometryFindingView::decl(&config),
         dataset_import::GeometryReportView::decl(&config),
         annotation::CocoImage::decl(&config),

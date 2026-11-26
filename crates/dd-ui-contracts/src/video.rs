@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{DecimalU64, UuidText, dataset_import::ImportOperationRef, workspace::CommandContext};
+use crate::{
+    ArtifactReference, DecimalI64, DecimalU64, UuidText, annotation::CocoDocument,
+    dataset_import::ImportOperationRef, workspace::CommandContext,
+};
 
 #[derive(Deserialize, TS)]
 pub struct VideoImportRequest {
@@ -52,6 +55,8 @@ pub struct VideoDetail {
     pub streams: Vec<VideoStreamView>,
     pub rotation_ccw: Option<u16>,
     pub variable_frame_rate: Option<bool>,
+    pub video_annotation_manifest_ref: Option<ArtifactReference>,
+    pub video_annotation_manifest: Option<VideoAnnotationManifest>,
 }
 
 #[derive(Deserialize, TS)]
@@ -76,7 +81,8 @@ pub struct VideoResolveFrameRequest {
     pub seek_policy: VideoSeekPolicy,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct VideoFrame {
     pub source_video_id: UuidText,
     pub source_digest: String,
@@ -87,6 +93,98 @@ pub struct VideoFrame {
     pub width: u32,
     pub height: u32,
     pub image_ref: crate::ArtifactReference,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoSaveKeyframeDraftRequest {
+    pub context: CommandContext,
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    pub frame_ref: VideoFrame,
+    pub coco_document: CocoDocument,
+    pub expected_video_revision: DecimalU64,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoGetKeyframeDraftRequest {
+    pub context: CommandContext,
+    pub source_video_id: UuidText,
+    pub annotation_ref: ArtifactReference,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct KeyframeDraftReceipt {
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    pub frame_ref: VideoFrame,
+    pub annotation_ref: ArtifactReference,
+    pub draft_digest: String,
+    pub video_revision: DecimalU64,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoSaveSegmentRequest {
+    pub context: CommandContext,
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    #[ts(optional)]
+    pub segment_id: Option<UuidText>,
+    pub start_us: DecimalI64,
+    pub end_us: DecimalI64,
+    pub keyframes: Vec<VideoKeyframe>,
+    pub expected_revision: DecimalU64,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct SegmentReceipt {
+    pub segment_id: UuidText,
+    pub revision: DecimalU64,
+    pub video_annotation_manifest_ref: ArtifactReference,
+    pub validation_warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoKeyframe {
+    pub frame_ref: VideoFrame,
+    pub annotation_ref: ArtifactReference,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+pub struct UnassignedVideoKeyframe {
+    pub target_dataset_id: UuidText,
+    pub frame_ref: VideoFrame,
+    pub annotation_ref: ArtifactReference,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+pub struct VideoSegment {
+    pub segment_id: UuidText,
+    pub source_video_id: UuidText,
+    pub source_digest: String,
+    pub start_us: DecimalI64,
+    pub end_us: DecimalI64,
+    pub keyframes: Vec<VideoKeyframe>,
+    pub target_dataset_id: UuidText,
+    pub revision: DecimalU64,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+pub struct VideoAnnotationManifest {
+    pub contract_version: u8,
+    pub source_video_id: UuidText,
+    pub source_digest: String,
+    pub target_contexts: std::collections::BTreeMap<String, VideoTargetContext>,
+    pub segments: Vec<VideoSegment>,
+    pub unassigned_keyframe_drafts: Vec<UnassignedVideoKeyframe>,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+pub struct VideoTargetContext {
+    pub label_schema_digest: String,
 }
 
 #[derive(Debug, Serialize, TS)]

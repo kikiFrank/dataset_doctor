@@ -5,9 +5,10 @@ import { listVideos } from "./api/video";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 import { VideoDetailPanel } from "./video-detail-panel";
+import type { VideoEditGuard } from "./video-annotation-panel";
 
-export function VideoLibraryPanel({ workspace, refreshKey }: {
-  workspace: OpenWorkspace; refreshKey: string;
+export function VideoLibraryPanel({ workspace, refreshKey, editGuard, importRunning }: {
+  workspace: OpenWorkspace; refreshKey: string; editGuard: VideoEditGuard; importRunning: boolean;
 }) {
   const [page, setPage] = useState<AssetPage | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -51,16 +52,17 @@ export function VideoLibraryPanel({ workspace, refreshKey }: {
   return (
     <section aria-label="工作区视频">
       <h2>已登记视频</h2>
-      <button type="button" disabled={busy} onClick={() => setRevision((value) => value + 1)}>刷新列表</button>
+      <button type="button" disabled={busy || editGuard.blocked} onClick={() => setRevision((value) => value + 1)}>刷新列表</button>
       {busy && <p role="status">正在读取视频列表…</p>}
       {error && <p role="alert">{error}</p>}
       {page?.items.length === 0 && <p>当前工作区尚未登记视频。</p>}
       <ul>{page?.items.map((video) => <li key={video.asset_id}>
-        <button type="button" aria-pressed={selected === video.asset_id}
+        <button type="button" disabled={editGuard.blocked} aria-pressed={selected === video.asset_id}
           onClick={() => setSelected(video.asset_id)}>{video.display_name}</button>
       </li>)}</ul>
       {page?.next_cursor && <button type="button" disabled={busy} onClick={() => void more()}>加载更多视频</button>}
-      {selected && <VideoDetailPanel key={selected} workspace={workspace} sourceVideoId={selected} />}
+      {selected && <VideoDetailPanel key={selected} workspace={workspace} sourceVideoId={selected}
+        editGuard={editGuard} importRunning={importRunning} />}
     </section>
   );
 }

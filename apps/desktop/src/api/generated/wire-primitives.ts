@@ -52,6 +52,10 @@ export type DatasetSummary = { dataset_id: UuidText, name: string, asset_count: 
 
 export type DatasetPage = { items: Array<DatasetSummary>, next_cursor: UuidText | null, };
 
+export type DatasetGetRequest = { context: CommandContext, dataset_id: UuidText, };
+
+export type DatasetDetail = { categories: Array<CocoCategory>, dataset_id: UuidText, name: string, asset_count: DecimalU64, unconfirmed_count: DecimalU64, row_revision: DecimalU64, label_schema_digest: string, updated_at_ms: DecimalI64, };
+
 export type AssetKind = "IMAGE" | "VIDEO";
 
 export type AssetListRequest = { context: CommandContext, dataset_id?: UuidText, kind?: AssetKind, cursor?: UuidText, page_size: number, };
@@ -104,7 +108,7 @@ export type VideoAvailability = "ONLINE" | "OFFLINE" | "CHANGED";
 
 export type VideoStreamView = { stream_index: number, codec: string | null, width: number | null, height: number | null, duration_ms: DecimalU64 | null, };
 
-export type VideoDetail = { source_video_id: UuidText, display_name: string, row_revision: DecimalU64, source_digest: string, source_availability: VideoAvailability, probe_status: string | null, duration_ms: DecimalU64 | null, streams: Array<VideoStreamView>, rotation_ccw: number | null, variable_frame_rate: boolean | null, };
+export type VideoDetail = { source_video_id: UuidText, display_name: string, row_revision: DecimalU64, source_digest: string, source_availability: VideoAvailability, probe_status: string | null, duration_ms: DecimalU64 | null, streams: Array<VideoStreamView>, rotation_ccw: number | null, variable_frame_rate: boolean | null, video_annotation_manifest_ref: ArtifactReference | null, video_annotation_manifest: VideoAnnotationManifest | null, };
 
 export type VideoFrameTarget = { frame_index: DecimalU64, } | { timestamp_ms: DecimalU64, };
 
@@ -115,6 +119,26 @@ export type VideoResolveFrameRequest = { context: CommandContext, source_video_i
 export type VideoFrame = { source_video_id: UuidText, source_digest: string, stream_index: number, frame_index: DecimalU64, pts_us: DecimalI64 | null, timestamp_ms: DecimalU64 | null, width: number, height: number, image_ref: ArtifactReference, };
 
 export type FrameResolution = { "kind": "ready", frame: VideoFrame, } | { "kind": "accepted", operation: ImportOperationRef, };
+
+export type VideoSaveKeyframeDraftRequest = { context: CommandContext, source_video_id: UuidText, target_dataset_id: UuidText, frame_ref: VideoFrame, coco_document: CocoDocument, expected_video_revision: DecimalU64, };
+
+export type VideoGetKeyframeDraftRequest = { context: CommandContext, source_video_id: UuidText, annotation_ref: ArtifactReference, };
+
+export type KeyframeDraftReceipt = { source_video_id: UuidText, target_dataset_id: UuidText, frame_ref: VideoFrame, annotation_ref: ArtifactReference, draft_digest: string, video_revision: DecimalU64, };
+
+export type VideoSaveSegmentRequest = { context: CommandContext, source_video_id: UuidText, target_dataset_id: UuidText, segment_id?: UuidText, start_us: DecimalI64, end_us: DecimalI64, keyframes: Array<VideoKeyframe>, expected_revision: DecimalU64, };
+
+export type SegmentReceipt = { segment_id: UuidText, revision: DecimalU64, video_annotation_manifest_ref: ArtifactReference, validation_warnings: Array<string>, };
+
+export type VideoKeyframe = { frame_ref: VideoFrame, annotation_ref: ArtifactReference, };
+
+export type UnassignedVideoKeyframe = { target_dataset_id: UuidText, frame_ref: VideoFrame, annotation_ref: ArtifactReference, };
+
+export type VideoSegment = { segment_id: UuidText, source_video_id: UuidText, source_digest: string, start_us: DecimalI64, end_us: DecimalI64, keyframes: Array<VideoKeyframe>, target_dataset_id: UuidText, revision: DecimalU64, };
+
+export type VideoAnnotationManifest = { contract_version: number, source_video_id: UuidText, source_digest: string, target_contexts: { [key in string]: VideoTargetContext }, segments: Array<VideoSegment>, unassigned_keyframe_drafts: Array<UnassignedVideoKeyframe>, };
+
+export type VideoTargetContext = { label_schema_digest: string, };
 
 export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
 

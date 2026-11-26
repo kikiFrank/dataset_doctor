@@ -2,14 +2,28 @@ use std::sync::Arc;
 
 use dd_infra::dataset_query::{AssetAnnotationState, DatasetQueryError};
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
+use dd_ui_contracts::annotation::CocoCategory;
 use dd_ui_contracts::dataset::{
-    AnnotationState, AssetKind, AssetListRequest, AssetPage, AssetSummary, DatasetListRequest,
-    DatasetPage, DatasetSummary,
+    AnnotationState, AssetKind, AssetListRequest, AssetPage, AssetSummary, DatasetDetail,
+    DatasetGetRequest, DatasetListRequest, DatasetPage, DatasetSummary,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
 
 use super::{Commands, run};
+
+#[tauri::command]
+pub async fn dataset_get(
+    request: DatasetGetRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<DatasetDetail, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.dataset_detail(request),
+    )
+    .await
+}
 
 #[tauri::command]
 pub async fn dataset_list(
@@ -38,6 +52,43 @@ pub async fn asset_list(
 }
 
 impl Commands {
+    pub(super) fn dataset_detail(
+        &self,
+        request: DatasetGetRequest,
+    ) -> Result<DatasetDetail, AppError> {
+        let session = self.session(request.context)?;
+        let detail = self
+            .thread
+            .dataset_detail(session, self.parse_uuid(request.dataset_id)?)
+            .map_err(|error| self.dataset_error(error))?;
+        Ok(DatasetDetail {
+            summary: self.dataset_summary(detail.summary)?,
+            categories: detail
+                .categories
+                .into_iter()
+                .map(|category| CocoCategory {
+                    id: category.id,
+                    name: category.name,
+                })
+                .collect(),
+        })
+    }
+
+    fn dataset_summary(
+        &self,
+        item: dd_infra::dataset_query::DatasetSummary,
+    ) -> Result<DatasetSummary, AppError> {
+        Ok(DatasetSummary {
+            dataset_id: self.uuid_text(item.dataset_id.to_string())?,
+            name: item.name,
+            asset_count: item.asset_count.into(),
+            unconfirmed_count: item.unconfirmed_count.into(),
+            row_revision: item.row_revision.into(),
+            label_schema_digest: item.schema_fingerprint,
+            updated_at_ms: item.updated_at_ms.into(),
+        })
+    }
+
     pub(super) fn list_datasets(
         &self,
         request: DatasetListRequest,
@@ -54,17 +105,7 @@ impl Commands {
         let items = page
             .items
             .into_iter()
-            .map(|item| {
-                Ok(DatasetSummary {
-                    dataset_id: self.uuid_text(item.dataset_id.to_string())?,
-                    name: item.name,
-                    asset_count: item.asset_count.into(),
-                    unconfirmed_count: item.unconfirmed_count.into(),
-                    row_revision: item.row_revision.into(),
-                    label_schema_digest: item.schema_fingerprint,
-                    updated_at_ms: item.updated_at_ms.into(),
-                })
-            })
+            .map(|item| self.dataset_summary(item))
             .collect::<Result<Vec<_>, AppError>>()?;
         let next_cursor = page
             .next_cursor

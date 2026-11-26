@@ -217,6 +217,7 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 | video_import | file_grant_id、display_name? | 异步 | 注册视频 Asset、解析流与时间基准；外部原视频继续被引用 |
 | video_get | source_video_id | VideoDetail | 媒体信息、来源状态、标注片段、采样配置引用 |
 | video_resolve_frame | source_video_id、target={timestamp_ms 或 frame_index}、seek_policy=NEAREST/AT_OR_AFTER | 异步或命中缓存后 FrameRef | 未命中时返回 OperationRef；返回 resolved timestamp 和精确 FrameRef，不承诺请求时间必有同一帧 |
+| video_get_keyframe_draft | source_video_id、annotation_ref | 单图 COCO | 只读取该视频当前工作清单仍引用的人工草稿，核验产物摘要和真实帧；不返回内部路径 |
 | video_save_keyframe_draft | source_video_id、target_dataset_id、frame_ref、coco_document、expected_video_revision | KeyframeDraftReceipt | Core 保存当前人工关键帧草稿，返回 ASSET 所属的 annotation_ref；不生成 Final 或 Dataset 成员 |
 | video_save_segment | source_video_id、target_dataset_id、segment_id?、start_us、end_us、keyframes:[{frame_ref,annotation_ref}]、expected_revision | SegmentReceipt | 区间为 [start_us,end_us)；关键帧引用已保存草稿；全部落在区间内且属于同一源视频摘要与目标类别上下文 |
 | video_track_submit | source_video_id、segment_id、tracking_sampling_config、tracker_profile、input_fingerprint | 异步 | 输出逐帧候选轨迹与低置信区间；不直接产生成员关系 |
@@ -224,6 +225,8 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 | staging_list | target_dataset_id?、status?、cursor | Page<StagingItem> | 显示标注/检查/审核状态以及来源帧 |
 | staging_commit | asset_ids[]、target_dataset_id、quality_report_ref、acknowledged_findings[]、expected_schema_fingerprint | 异步 | 用户明确确认；核对当前摘要、Final 与报告新鲜度；更新关系不复制帧 |
 | staging_remove_submit | asset_ids[]、delete_generated_files | 异步 | 删除关系和明确指定的已生成文件；不删除源视频 |
+
+video_get 的 video_annotation_manifest_ref 和 video_annotation_manifest 公开已核验的当前工作引用与内容，未建立时为空。video_get_keyframe_draft 以已保存的 annotation_ref 读取编辑器所需的单图 COCO。画布的类别来自 dataset_get 的当前类别字典。目录和产物文件路径由 Core 管理。
 
 帧解析的 accepted 返回持久 Task，成功后通过 task_get 的 video_frame 读取精确 FrameRef。已核验的缓存直接返回 ready。帧图像使用 media_get_locator 的 artifact_id 与 owner_task_id 申请当前会话显示授权，Core 核对已接纳的帧任务和实际图像摘要。旧 asset_id 图片请求继续兼容。混用两种定位范围返回 INVALID_ARGUMENT。
 
