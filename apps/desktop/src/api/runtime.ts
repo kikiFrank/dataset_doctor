@@ -4,6 +4,7 @@ interface RuntimeStatus {
   version: string;
   verify_workspace: boolean;
   verify_workspace_create: boolean;
+  verify_workspace_business: boolean;
 }
 
 export function acknowledgeDesktopRuntime(): Promise<RuntimeStatus> {
@@ -13,6 +14,6 @@ export function acknowledgeDesktopRuntime(): Promise<RuntimeStatus> {
   });
 }
 
-export function acknowledgeWorkspaceVerification(): Promise<void> {
-  return invoke("desktop_workspace_verified");
+export function acknowledgeWorkspaceVerification(failure?: string): Promise<void> {
+  return invoke("desktop_workspace_verified", { failure });
 }

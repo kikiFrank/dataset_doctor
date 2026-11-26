@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness')][string]$Suite = 'Runtime',
     [string]$PythonExe
 )
 
@@ -36,12 +36,22 @@ try {
         $start.Arguments += ' --workspace-create-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
+    } elseif ($Suite -eq 'WorkspaceBusiness') {
+        $python = (Resolve-Path -LiteralPath $PythonExe).Path
+        $business = Join-Path $run 'Synthetic business'
+        & $python -I -B (Join-Path $PSScriptRoot 'seed_business_fixture.py') $business
+        if ($LASTEXITCODE -ne 0) { throw 'Synthetic business fixture initialization failed.' }
+        $start.Arguments += ' --workspace-business-smoke'
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_ROOT'] = $business
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = Join-Path $business 'Workspace'
+        $expected = 'DESKTOP_WORKSPACE_BUSINESS_VERIFIED'
     }
     $process = [Diagnostics.Process]::Start($start)
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(25000)) {
+        $timeout = if ($Suite -eq 'WorkspaceBusiness') { 45000 } else { 25000 }
+        if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
         }
@@ -56,6 +66,12 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.json') -PathType Leaf) -or
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
             throw 'The native application did not publish both Workspace files.'
+        }
+        if ($Suite -eq 'WorkspaceBusiness') {
+            $packages = @(Get-ChildItem -LiteralPath (Join-Path $business 'Exports') -Directory)
+            if ($packages.Count -ne 1) { throw 'Expected exactly one published COCO package.' }
+            & $python -I -B (Join-Path $PSScriptRoot 'verify_business_fixture.py') $business $packages[0].FullName
+            if ($LASTEXITCODE -ne 0) { throw 'The target COCO reader rejected the exported business fixture.' }
         }
         "Native desktop $Suite completed Tauri IPC and exited: $log"
     } finally {

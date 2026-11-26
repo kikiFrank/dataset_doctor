@@ -109,10 +109,11 @@ pub async fn path_select(
     thread: State<'_, Arc<WorkspaceThread>>,
     runtime: State<'_, RuntimeMode>,
 ) -> Result<Option<PathGrant>, AppError> {
-    let selected_fixture = if matches!(request.purpose, PathPurpose::Workspace) {
-        runtime.smoke_workspace.clone()
-    } else {
-        None
+    let selected_fixture = match (&request.purpose, &request.kind) {
+        (PathPurpose::Workspace, PathKind::Directory) => runtime.smoke_workspace.clone(),
+        (PathPurpose::Import, PathKind::Directory) => runtime.smoke_business_directories.as_ref().map(|paths| paths.0.clone()),
+        (PathPurpose::Export, PathKind::Directory) => runtime.smoke_business_directories.as_ref().map(|paths| paths.1.clone()),
+        _ => None,
     };
     run(thread, request.request_id, move |commands| {
         match (

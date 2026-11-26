@@ -5,6 +5,7 @@ import { acknowledgeDesktopRuntime } from "./api/runtime";
 import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, selectAndRestoreWorkspace, workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
+import { verifyWorkspaceBusinessIpc } from "./api/workspace-business-smoke";
 import { DatasetBrowser } from "./dataset-browser";
 import { VideoImportPanel } from "./video-import-panel";
 import { WorkspaceBackupPanel } from "./workspace-backup-panel";
@@ -27,6 +28,7 @@ function App() {
       setRuntimeConnected(true);
       if (runtime.verify_workspace) await verifyWorkspaceIpc();
       if (runtime.verify_workspace_create) await verifyWorkspaceCreationIpc();
+      if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc();
     }).catch((failure: unknown) => setError(workspaceCommandError(failure)));
   }, []);
 

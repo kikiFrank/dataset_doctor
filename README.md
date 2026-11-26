@@ -30,6 +30,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Desktop launch smoke failed.' }
 
 冒烟测试在独立 WebView2 数据目录加载内嵌的 React 前端，经真实 Tauri IPC 握手后退出。普通启动后可用 Windows 文件夹选择器创建或打开工作区，查看离线资源数，再关闭工作区。传入 `-Suite Workspace -PythonExe $py312` 复跑已有工作区的打开、查询、关闭、重开和旧会话拒绝。传入 `-Suite WorkspaceCreate` 复跑空目录创建、拒绝重复创建和重开。完整业务和安装器另有验收。详见 [MVP 进度与证据](docs/development/mvp_progress.md)。
 
+Windows 开发版的自动化业务验收使用 `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceBusiness -PythonExe $readerPython`。读取器环境需安装 Pillow 和 pycocotools 2.0.11，开发版需能启动本机 Worker。隐藏的 WebView2 通过真实 IPC 创建合成工作区、导入、检查、修正 Final、导出 COCO 和重开工作区。脚本使用专用夹具目录提供选择路径，并用目标读取器复核导出文件。系统选择器与画布鼠标操作有单独的原生窗口验收。
+
 打开已有 Workspace 后可分页浏览 Dataset 和样本，查看正式标注与受限的本地图像。命令宿主验收使用 `tests/desktop/windows/check-command-handlers.ps1 -RustBin $rustBin`，图像授权和标注读取可用 `scripts/storage/windows/check-workspace-sqlite.ps1 -RustBin $rustBin -Suite MediaDisplay` 或 `-Suite AnnotationView` 单独复跑。这些命令均可在命令行执行。样本页面的新交互与自定义图像协议仍需实际 WebView2 验收。
 
 在宿主验收附加 `-CocoReaderPythonExe $reader` 可用装有 `pycocotools 2.0.11` 和 Pillow 的本机 Python 重新读取测试生成的 COCO 包。该用例通过宿主完成合成样本导入、检查、审核、Final 确认和导出，产物保存在 `target/desktop-commands/runs/`。

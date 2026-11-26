@@ -16,6 +16,7 @@ struct RuntimeMode {
     smoke_root: Option<PathBuf>,
     smoke_workspace: Option<PathBuf>,
     smoke_workspace_create: bool,
+    smoke_business_directories: Option<(PathBuf, PathBuf)>,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +29,7 @@ struct DesktopReadyResponse {
     version: String,
     verify_workspace: bool,
     verify_workspace_create: bool,
+    verify_workspace_business: bool,
 }
 
 #[tauri::command]
@@ -46,22 +48,41 @@ fn desktop_ready(
             finish_smoke(&app, "DESKTOP_WEBVIEW2_READY")?;
         }
     }
+    let business = runtime.smoke_business_directories.is_some();
     Ok(DesktopReadyResponse {
         version,
-        verify_workspace: runtime.smoke_workspace.is_some() && !runtime.smoke_workspace_create,
+        verify_workspace: runtime.smoke_workspace.is_some()
+            && !runtime.smoke_workspace_create
+            && !business,
         verify_workspace_create: runtime.smoke_workspace_create,
+        verify_workspace_business: business,
     })
 }
 
 #[tauri::command]
 fn desktop_workspace_verified(
+    failure: Option<String>,
     runtime: State<'_, RuntimeMode>,
     app: AppHandle,
 ) -> Result<(), String> {
     if runtime.smoke_workspace.is_none() {
         return Err("Workspace verification mode is inactive".into());
     }
-    let marker = if runtime.smoke_workspace_create {
+    let business = runtime.smoke_business_directories.is_some();
+    if let Some(failure) = failure {
+        if !business {
+            return Err("Business verification mode is inactive".into());
+        }
+        eprintln!("DESKTOP_WORKSPACE_BUSINESS_FAILED {failure}");
+        std::io::stderr()
+            .flush()
+            .map_err(|error| error.to_string())?;
+        app.exit(2);
+        return Ok(());
+    }
+    let marker = if business {
+        "DESKTOP_WORKSPACE_BUSINESS_VERIFIED"
+    } else if runtime.smoke_workspace_create {
         "DESKTOP_WORKSPACE_CREATE_VERIFIED"
     } else {
         "DESKTOP_WORKSPACE_VERIFIED"
@@ -89,18 +110,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let smoke_workspace_create = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-create-smoke");
-    let smoke_workspace = if cfg!(debug_assertions)
-        && (smoke_workspace_create
-            || std::env::args_os().any(|argument| argument == "--workspace-smoke"))
+    let smoke_workspace_business = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-business-smoke");
+    let smoke_workspace_open = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-smoke");
+    if [
+        smoke_workspace_create,
+        smoke_workspace_business,
+        smoke_workspace_open,
+    ]
+    .into_iter()
+    .filter(|enabled| *enabled)
+    .count()
+        > 1
     {
-        let path = PathBuf::from(
-            std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
-        )
-        .canonicalize()?;
-        if path.parent() != smoke_root.as_deref() {
-            return Err("Workspace fixture must be in the desktop smoke run".into());
+        return Err("Choose one Workspace smoke mode".into());
+    }
+    let smoke_workspace =
+        if smoke_workspace_create || smoke_workspace_open || smoke_workspace_business {
+            let path = PathBuf::from(
+                std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE")
+                    .ok_or("missing Workspace fixture")?,
+            )
+            .canonicalize()?;
+            if path.parent() != smoke_root.as_deref() {
+                return Err("Workspace fixture must be in the desktop smoke run".into());
+            }
+            Some(path)
+        } else {
+            None
+        };
+    let smoke_business_directories = if smoke_workspace_business {
+        let root = smoke_root
+            .as_deref()
+            .ok_or("Business verification requires a dedicated run")?;
+        let selected = |name: &str| -> Result<PathBuf, Box<dyn std::error::Error>> {
+            let expected = root.join(name);
+            let resolved = expected.canonicalize()?;
+            if resolved != expected || !resolved.is_dir() {
+                return Err(
+                    "Business fixture directory must be a direct child of the smoke run".into(),
+                );
+            }
+            Ok(resolved)
+        };
+        if smoke_workspace.as_ref() != Some(&selected("Workspace")?) {
+            return Err("Business verification requires the fixture Workspace directory".into());
         }
-        Some(path)
+        Some((selected("Inputs")?, selected("Exports")?))
     } else {
         None
     };
@@ -131,6 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_root,
             smoke_workspace,
             smoke_workspace_create,
+            smoke_business_directories,
         })
         .setup(|app| {
             let runtime = app.state::<RuntimeMode>();
