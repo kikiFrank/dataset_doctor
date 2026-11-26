@@ -103,6 +103,26 @@ pub async fn video_import(
 }
 
 impl Commands {
+    pub(super) fn resume_pending_video_probes(
+        &self,
+        runner: Arc<VideoRunner>,
+        session: Uuid,
+    ) -> Result<(), AppError> {
+        let registry = VideoRegistry::new(Arc::clone(&self.thread))
+            .map_err(|error| self.video_import_error(error))?;
+        let pending = registry
+            .pending_probes(session, self.now_ms()?)
+            .map_err(|error| self.video_import_error(error))?;
+        for receipt in pending {
+            async_runtime::spawn(Arc::clone(&runner).execute(
+                Arc::clone(&self.thread),
+                session,
+                receipt,
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn video_file(
         &self,
         context: CommandContext,

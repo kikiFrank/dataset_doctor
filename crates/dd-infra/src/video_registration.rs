@@ -169,6 +169,73 @@ impl VideoRegistry {
             })
             .map_err(VideoImportError::Storage)?
     }
+
+    pub fn pending_probes(
+        &self,
+        session: Uuid,
+        now_ms: i64,
+    ) -> Result<Vec<VideoImportReceipt>, VideoImportError> {
+        self.owner
+            .workspace_action(session, move |workspace| {
+                Ok(rebind_pending_probes(workspace, session, now_ms))
+            })
+            .map_err(VideoImportError::Storage)?
+    }
+}
+
+fn rebind_pending_probes(
+    workspace: &mut OpenedWorkspace,
+    session: Uuid,
+    now_ms: i64,
+) -> Result<Vec<VideoImportReceipt>, VideoImportError> {
+    let root = workspace.root().to_owned();
+    let tx = workspace
+        .connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let pending = {
+        let mut query = tx.prepare(
+            "SELECT task_id, input_manifest_path, created_at_ms FROM main.tasks
+             WHERE operation_kind = ?1 AND capability_id = ?2 AND status = 'QUEUED'
+             ORDER BY created_at_ms, task_id",
+        )?;
+        query
+            .query_map(params![ACTION, CAPABILITY], |row| {
+                Ok((
+                    row_uuid(row, 0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let mut receipts = Vec::with_capacity(pending.len());
+    for (task_id, path, accepted_at_ms) in pending {
+        match read_video_id(&root, Path::new(&path)) {
+            Ok(video_id) => {
+                tx.execute(
+                    "UPDATE main.tasks SET workspace_session_id = ?2, updated_at_ms = ?3,
+                            row_revision = row_revision + 1
+                     WHERE task_id = ?1 AND status = 'QUEUED' AND workspace_session_id <> ?2",
+                    params![task_id.to_string(), session.to_string(), now_ms],
+                )?;
+                receipts.push(VideoImportReceipt {
+                    video_id,
+                    task_id,
+                    accepted_at_ms,
+                });
+            }
+            Err(_) => {
+                tx.execute(
+                    "UPDATE main.tasks SET status = 'FAILED', error_code = 'INPUT_MANIFEST_INVALID',
+                            finished_at_ms = ?2, updated_at_ms = ?2, row_revision = row_revision + 1
+                     WHERE task_id = ?1 AND status = 'QUEUED'",
+                    params![task_id.to_string(), now_ms],
+                )?;
+            }
+        }
+    }
+    tx.commit()?;
+    Ok(receipts)
 }
 
 struct PreparedVideo {
@@ -275,7 +342,14 @@ fn find_existing(
     if stored != format_digest(&fingerprint) {
         return Err(VideoImportError::IdempotencyConflict);
     }
-    let relative = Path::new(&relative);
+    Ok(Some(VideoImportReceipt {
+        video_id: read_video_id(root, Path::new(&relative))?,
+        task_id,
+        accepted_at_ms,
+    }))
+}
+
+fn read_video_id(root: &Path, relative: &Path) -> Result<Uuid, VideoImportError> {
     let mut bytes = Vec::new();
     open_scoped_file(root, relative)?
         .take(MANIFEST_LIMIT + 1)
@@ -291,13 +365,8 @@ fn find_existing(
     }
     let manifest: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|_| VideoImportError::InvalidManifest)?;
-    let video_id = manifest["assets"][0]["asset_id"]
+    manifest["assets"][0]["asset_id"]
         .as_str()
         .and_then(|id| Uuid::parse_str(id).ok())
-        .ok_or(VideoImportError::InvalidManifest)?;
-    Ok(Some(VideoImportReceipt {
-        video_id,
-        task_id,
-        accepted_at_ms,
-    }))
+        .ok_or(VideoImportError::InvalidManifest)
 }

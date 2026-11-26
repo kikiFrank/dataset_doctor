@@ -77,6 +77,10 @@ mod geometry_tests;
 mod video_import_tests;
 
 #[cfg(test)]
+#[path = "../../../../tests/desktop/host/video_resume.rs"]
+mod video_resume_tests;
+
+#[cfg(test)]
 #[path = "../../../../tests/desktop/host/review.rs"]
 mod review_tests;
 
@@ -170,7 +174,9 @@ pub async fn path_select(
 pub async fn workspace_open(
     request: WorkspaceOpenRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
+    video: State<'_, Option<Arc<video::VideoRunner>>>,
 ) -> Result<WorkspaceSnapshot, AppError> {
+    let video = video.inner().clone();
     run(thread, request.request_id, move |commands| {
         let grant = commands.parse_uuid(request.directory_grant_id)?;
         let opened = commands
@@ -178,6 +184,12 @@ pub async fn workspace_open(
             .open(grant)
             .map_err(|failure| commands.map_error(failure))?;
         commands.resume_pending_finals(opened.workspace_session_id);
+        if let Some(video) = video
+            && let Err(error) =
+                commands.resume_pending_video_probes(video, opened.workspace_session_id)
+        {
+            eprintln!("Resume queued video probes: {}", error.code);
+        }
         commands.snapshot(opened)
     })
     .await
