@@ -245,3 +245,8 @@ path = "../../tests/storage/staging/list.rs"
 name = "staging_review"
 path = "../../tests/integration/rpc/staging_review.rs"
 required-features = ["execution-rpc"]
+
+[[test]]
+name = "staging_report"
+path = "../../tests/integration/rpc/staging_report.rs"
+required-features = ["execution-rpc"]

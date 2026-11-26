@@ -70,6 +70,8 @@ struct AcceptedGeometry {
     artifact_id: String,
     artifact_size: String,
     artifact_sha: String,
+    started_at_ms: Option<i64>,
+    finished_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,17 +116,68 @@ fn accepted_geometry(
                 json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref.artifact_id'),
                 json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref.size_bytes'),
                 json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref.sha256'),
-                dataset_id
+                dataset_id,started_at_ms,finished_at_ms
          FROM tasks WHERE task_id=?1 AND capability_id=?2 AND status='SUCCEEDED' AND dataset_id IS NOT NULL",
         params![task.to_string(), CAPABILITY],
         |row| Ok(AcceptedGeometry {
             workspace_root: owner.root().to_owned(), attempt: row.get(0)?,
             input_path: row.get(1)?, input_fingerprint: row.get(2)?, output_path: row.get(3)?,
             artifact_id: row.get(4)?, artifact_size: row.get(5)?, artifact_sha: row.get(6)?,
-            dataset_id: row.get(7)?,
+            dataset_id: row.get(7)?, started_at_ms: row.get(8)?, finished_at_ms: row.get(9)?,
         }),
     ).optional().map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Database(error)))?
     .ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
+}
+
+pub(crate) struct BoundGeometryReport {
+    pub report: GeometryReport,
+    pub input_fingerprint: String,
+    pub reference: crate::artifact_reference::ArtifactReference,
+    pub started_at_ms: i64,
+    pub finished_at_ms: i64,
+}
+
+pub(crate) fn read_bound_geometry_report(
+    workspace: &WorkspaceThread,
+    session: Uuid,
+    task: Uuid,
+    image: &crate::dataset_query::RegisteredImage,
+) -> Result<BoundGeometryReport, ReviewImageEvidenceError> {
+    use crate::artifact_reference::{ArtifactOwner, ArtifactReference};
+    let accepted = workspace
+        .workspace_action(session, move |owner| accepted_geometry(owner, task))
+        .map_err(ReviewImageEvidenceError::Storage)?;
+    let invalid = || ReviewImageEvidenceError::InvalidEvidence;
+    let input_fingerprint = accepted.input_fingerprint.clone();
+    let started_at_ms = accepted.started_at_ms.ok_or_else(invalid)?;
+    let finished_at_ms = accepted.finished_at_ms.ok_or_else(invalid)?;
+    let reference = ArtifactReference {
+        artifact_id: Uuid::parse_str(&accepted.artifact_id).map_err(|_| invalid())?,
+        owner: ArtifactOwner::Task(task),
+        kind: "TASK_RESULT_MANIFEST".into(),
+        media_type: "application/json".into(),
+        sha256: accepted.artifact_sha.clone(),
+        size_bytes: accepted.artifact_size.clone(),
+        schema_id: None,
+    };
+    let (input, report) = load_geometry(task, accepted)?;
+    if input["dataset_id"] != image.dataset_id.to_string()
+        || input["assets"][0]["asset_id"] != image.asset_id.to_string()
+        || input["label_schema_digest"] != image.label_schema_fingerprint
+        || input["assets"][0]["annotation_digest"].as_str()
+            != image.annotation.as_ref().map(|file| file.sha256.as_str())
+        || report.image.sha256 != image.image.sha256
+        || started_at_ms > finished_at_ms
+    {
+        return Err(invalid());
+    }
+    Ok(BoundGeometryReport {
+        report,
+        input_fingerprint,
+        reference,
+        started_at_ms,
+        finished_at_ms,
+    })
 }
 
 /// Use an accepted Task as evidence for the geometry editor. The result and

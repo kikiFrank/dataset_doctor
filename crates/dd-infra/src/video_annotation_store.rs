@@ -9,35 +9,12 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+pub use crate::artifact_reference::{
+    ArtifactOwner as VideoArtifactOwner, ArtifactReference as VideoArtifactReference,
+};
 use crate::paths::open_scoped_file;
 
 pub(crate) const VIDEO_WORK_LIMIT: u64 = 16 * 1024 * 1024;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(
-    tag = "kind",
-    content = "id",
-    rename_all = "SCREAMING_SNAKE_CASE",
-    deny_unknown_fields
-)]
-pub enum VideoArtifactOwner {
-    Task(Uuid),
-    Asset(Uuid),
-    Review(Uuid),
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct VideoArtifactReference {
-    pub artifact_id: Uuid,
-    pub owner: VideoArtifactOwner,
-    pub kind: String,
-    pub media_type: String,
-    pub sha256: String,
-    pub size_bytes: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema_id: Option<String>,
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -3,6 +3,7 @@
 #[cfg(feature = "execution-rpc")]
 pub mod agent_process;
 pub mod annotation_view;
+pub mod artifact_reference;
 pub mod backup_artifacts;
 pub mod backup_assets;
 pub mod dataset_import;
@@ -17,9 +18,9 @@ pub mod coco_export;
 #[cfg(feature = "execution-rpc")]
 pub mod execution_rpc;
 #[cfg(feature = "execution-rpc")]
-pub mod geometry_runtime;
-#[cfg(feature = "execution-rpc")]
 pub mod frame_runtime;
+#[cfg(feature = "execution-rpc")]
+pub mod geometry_runtime;
 pub mod import_preflight;
 pub mod import_registration;
 pub mod input_fingerprint;
@@ -34,12 +35,14 @@ pub mod review_store;
 pub mod review_validation;
 pub mod sqlite;
 pub mod staging;
+#[cfg(feature = "execution-rpc")]
+pub mod staging_report;
 pub mod task_store;
 pub mod video_annotation_store;
 #[cfg(feature = "execution-rpc")]
-pub mod video_keyframes;
-#[cfg(feature = "execution-rpc")]
 pub mod video_index;
+#[cfg(feature = "execution-rpc")]
+pub mod video_keyframes;
 #[cfg(feature = "execution-rpc")]
 pub mod video_query;
 pub mod video_registration;

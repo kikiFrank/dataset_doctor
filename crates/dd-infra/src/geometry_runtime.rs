@@ -1,6 +1,7 @@
 //! Run a real Worker geometry audit for an image registered in a Workspace.
 
 mod review_image;
+pub(crate) use review_image::{BoundGeometryReport, read_bound_geometry_report};
 
 pub use crate::worker_runtime::WorkerRuntimeError as GeometryRuntimeError;
 pub use review_image::{
