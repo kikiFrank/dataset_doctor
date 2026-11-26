@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/desktop/src-tauri",
     "crates/dd-infra",
     "crates/dd-protocol",
     "crates/dd-ui-contracts",

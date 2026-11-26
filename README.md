@@ -11,6 +11,23 @@ Local-first desktop application for computer-vision dataset quality governance. 
 - [MVP 开发进度与验收证据](docs/development/mvp_progress.md)
 - [Rig SDK 测试报告](docs/testing/rig_sdk_validation.md)
 
+## Windows x64 桌面壳构建与启动
+
+使用 x64 VS Developer PowerShell 和锁定的 Node、pnpm、Rust。初次准备缓存时，设置 `$env:CARGO_HOME` 为仓库下 `target/dev/cargo-home`，执行 `cargo fetch --locked --target x86_64-pc-windows-msvc`。在 `apps/desktop` 执行 `pnpm install --frozen-lockfile --ignore-scripts --store-dir <仓库绝对路径>/target/dev/pnpm-store`。
+
+```powershell
+$rustBin = '<Rust 1.97.1 MSVC 工具链的 bin 绝对路径>'
+$pnpm = '<pnpm 10.18.3 的 pnpm.exe 绝对路径>'
+powershell.exe -NoProfile -NonInteractive -File .\scripts\packaging\windows\build-desktop.ps1 -RustBin $rustBin -PnpmExe $pnpm
+if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed.' }
+$exe = '.\target\dev\cargo-target\x86_64-pc-windows-msvc\debug\dd-desktop.exe'
+powershell.exe -NoProfile -NonInteractive -File .\tests\desktop\windows\verify-runtime.ps1 -DesktopExe $exe
+if ($LASTEXITCODE -ne 0) { throw 'Desktop launch smoke failed.' }
+& $exe
+```
+
+冒烟测试在独立 WebView2 数据目录加载内嵌的 React 前端，经真实 Tauri IPC 握手后退出。普通启动显示桌面窗口及运行时连接状态。当前构建是桌面壳，完整业务和安装器另有验收。详见 [MVP 进度与证据](docs/development/mvp_progress.md)。
+
 ## Windows 工具链预检（P00-01）
 
 在仓库根目录运行以下命令。从其他目录运行时，将脚本参数换成完整路径。

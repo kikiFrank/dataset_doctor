@@ -1,0 +1,17 @@
+[package]
+name = "dd-desktop"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+tauri = "=2.12.7"
+
+[build-dependencies]
+tauri-build = "=2.7.6"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
