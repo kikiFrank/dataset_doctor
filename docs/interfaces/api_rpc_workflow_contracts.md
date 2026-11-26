@@ -175,7 +175,8 @@ Finding 的 explanation 说明证据与理由；uncertainty 说明缺少什么�
 | workspace_get | context | WorkspaceSnapshot | 包含能力、离线资源统计、进行中任务 |
 | workspace_close | mode=WAIT/CANCEL、expected_session_id | CloseReceipt | 停止新任务；等待/取消在途任务；只有实际关闭成功才切换页面 |
 | workspace_restore | request_id、folder_name | WorkspaceSnapshot 或取消 | 仅关闭工作区时可用。原生目录选择器依次选择备份包和现有父目录，校验后发布到该父目录下的新目录并打开。已有目标保留原样。 |
-| workspace_backup_submit | destination_grant_id、include_reports=true | 异步 | 包含登记的外部资源；创建可恢复清单；不能把复制目录视为 SQLite 一致备份 |
+| workspace_backup_submit | destination_grant_id、include_reports=true | 异步 | 使用 BACKUP 目录授权，向目标目录创建备份子目录。包含登记的外部资源、报告与恢复清单，SQLite 以在线快照备份。 |
+| workspace_backup_latest | context | 最近的备份任务快照或空值 | 重开后展示已存结果，遇到发布回执未知时先对账。 |
 | dataset_create | name、category_names[] | ImportPlan | plan_id、input_manifest_ref、plan_fingerprint、source_format、proposed_dataset、file_actions[]、category_mapping、conflicts[]、unsupported_fields[]、requires_explicit_choices[]；file_actions 明确 REFERENCE/CREATE_CONVERTED/WRITE_CONVERTED_TO_SELECTED_ROOT/EXPLICIT_OVERWRITE，不自动选择有损覆盖 |
 | SecretStatus | model_profile_id、configured:boolean、credential_ref?、credential_revision；永远不返回已有 Key；new_secret 为非空字符串，最大 8192 UTF-8 字节，不落普通配置与诊断 |
 | DatasetSummary | 类名唯一、非空；初始化空 Dataset |
@@ -873,7 +874,7 @@ video_annotation_manifest 的当前载荷固定包含 contract_version、source_
 
 #### C13.4 入口、执行控制与限额
 
-补充 path_select 命令：输入 purpose=WORKSPACE/IMPORT/EXPORT/RELINK、kind=FILE/DIRECTORY、access=READ/READ_WRITE；由 Core 打开系统选择对话框，返回 PathGrant {grant_id,display_path,allowed_operations,expires_at}。授权范围由目的与用户选择共同决定；调用者传 access 不能单独获得任意目录写权。创建/打开 Workspace 的引导操作不要求先有 Workspace 会话。
+补充 path_select 命令：输入 purpose=WORKSPACE/IMPORT/EXPORT/RELINK/BACKUP、kind=FILE/DIRECTORY、access=READ/READ_WRITE；由 Core 打开系统选择对话框，返回 PathGrant {grant_id,display_path,allowed_operations,expires_at}。授权范围由目的与用户选择共同决定；调用者传 access 不能单独获得任意目录写权。创建/打开 Workspace 的引导操作不要求先有 Workspace 会话。
 
 WorkflowControlReceipt 固定为 {workflow_run_id,requested,observed_status,revision,blocking_task_ids}。workflow_pause 是“停止派发后续任务并等待当前计算结束”，不强制冻结任意计算；pause_requested 放入 workflow_runs.node_states_json.control，实际进入 PAUSED 后发布状态事件。node_states_json 采用 {nodes,control} 包装，其中 nodes 保存节点控制状态及 Task 引用；Task 的运行事实仍从 tasks 读取。workflow_resume 先核对输入、模板与待恢复任务；不恢复旧 Grant，不能将 CANCELLED run 直接改为 RUNNING。
 

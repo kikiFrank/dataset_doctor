@@ -223,6 +223,29 @@ impl BackupService {
         })
     }
 
+    pub fn latest(
+        &self,
+        session: Uuid,
+        now_ms: i64,
+    ) -> Result<Option<BackupTaskSnapshot>, WorkspaceThreadError> {
+        self.owner.workspace_action(session, move |workspace| {
+            let latest = workspace
+                .connection
+                .query_row(
+                    "SELECT task_id FROM tasks WHERE operation_kind=?1
+                 ORDER BY created_at_ms DESC, rowid DESC LIMIT 1",
+                    [KIND],
+                    |row| row_uuid(row, 0),
+                )
+                .optional()
+                .map_err(database)?;
+            match latest {
+                Some(task) => snapshot(workspace, session, task, now_ms),
+                None => Ok(None),
+            }
+        })
+    }
+
     fn recover_pending(&self, session: Uuid, now_ms: i64) -> Result<(), WorkspaceThreadError> {
         self.owner.workspace_action(session, move |workspace| {
             let pending = {

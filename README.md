@@ -143,6 +143,12 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 
 Rust/TypeScript 公共整数和归属类型的验收使用 `scripts/contracts/windows/check-ui-wire.ps1 -RustBin $rustBin -NodeExe (Get-Command node.exe).Source`。脚本重新生成 TypeScript 声明，检查文件漂移，再用同一组向量运行 Serde 和 Node TypeScript 解析。显式传入 `-Generate` 更新受版本控制的声明。
 
+### 备份和恢复工作区
+
+在打开的工作区展开「备份工作区」，选择工作区之外的本机目录并开始备份。成功回执会显示备份包子目录，重新打开工作区可查看最近一条备份结果。备份包包含 SQLite 快照、已登记的外部与工作区资源、标注及正式产物。
+
+恢复时先关闭当前工作区，填写新目录名。依次选择回执显示的备份包目录和恢复位置的上级目录。验证通过后应用打开恢复出的工作区。恢复要求新目录，已有文件会保留。
+
 ### Windows 生产 Worker 与视频适配验收
 
 使用现有的 `target/dev/uv-cache` 和 `dist/p00-worker-smoke/uv-cache`，从锁文件离线构建实际 Worker 入口。构建输出会打印 `$workerExe` 对应的绝对路径，所在运行目录包含两份锁文件和 EXE 的摘要记录。

@@ -198,6 +198,7 @@ impl Commands {
                     preview,
                     geometry_report: None,
                     coco_export: None,
+                    workspace_backup: None,
                 })
             }
             Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
@@ -213,6 +214,7 @@ impl Commands {
                             Self::review_commit_task,
                             Self::export_task,
                             Self::video_task,
+                            Self::backup_task,
                         ];
                         for query in queries {
                             match query(self, session, id) {
@@ -244,6 +246,7 @@ impl Commands {
                     preview: None,
                     geometry_report: None,
                     coco_export: None,
+                    workspace_backup: None,
                 })
             }
             Err(error) => Err(self.import_error(error)),

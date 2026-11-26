@@ -119,6 +119,7 @@ impl Commands {
             registration: None,
             geometry_report: None,
             coco_export: receipt,
+            workspace_backup: None,
         })
     }
 

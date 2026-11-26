@@ -9,6 +9,7 @@ pub enum PathPurpose {
     Workspace,
     Import,
     Export,
+    Backup,
 }
 
 #[derive(Deserialize, TS)]
@@ -61,6 +62,19 @@ pub struct WorkspaceCreateRequest {
 pub struct WorkspaceRestoreRequest {
     pub request_id: UuidText,
     pub folder_name: String,
+}
+
+#[derive(Deserialize, TS)]
+pub struct WorkspaceBackupSubmitRequest {
+    pub context: CommandContext,
+    pub destination_grant_id: UuidText,
+    pub include_reports: bool,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct WorkspaceBackupView {
+    pub package_path: String,
+    pub asset_file_count: DecimalU64,
 }
 
 #[derive(Clone, Deserialize, TS)]

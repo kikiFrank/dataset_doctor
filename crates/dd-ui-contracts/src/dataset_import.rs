@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{DecimalU64, UuidText, dataset_export::CocoExportView, workspace::CommandContext};
+use crate::{
+    DecimalU64, UuidText,
+    dataset_export::CocoExportView,
+    workspace::{CommandContext, WorkspaceBackupView},
+};
 
 #[derive(Deserialize, TS)]
 pub enum ImportFormat {
@@ -39,6 +43,7 @@ pub enum ImportOperationKind {
     VideoProbe,
     ReviewCommit,
     DatasetExport,
+    WorkspaceBackup,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -85,6 +90,9 @@ pub struct ImportTaskView {
     pub registration: Option<DatasetImportRegistration>,
     pub geometry_report: Option<GeometryReportView>,
     pub coco_export: Option<CocoExportView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_backup: Option<WorkspaceBackupView>,
 }
 
 #[derive(Deserialize, TS)]

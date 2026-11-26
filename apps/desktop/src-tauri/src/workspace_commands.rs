@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_core::workspace::{WorkspaceAccessError, WorkspaceSession};
+use dd_infra::task_store::TaskStoreError;
 use dd_infra::workspace::WorkspaceOpenError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::UuidText;
@@ -66,6 +67,10 @@ mod create_tests;
 mod restore_tests;
 
 #[cfg(test)]
+#[path = "../../../../tests/desktop/host/workspace_backup.rs"]
+mod backup_tests;
+
+#[cfg(test)]
 #[path = "../../../../tests/desktop/host/dataset_browse.rs"]
 mod dataset_tests;
 
@@ -110,7 +115,12 @@ pub async fn path_select(
         ) {
             (PathPurpose::Workspace, PathKind::Directory, PathAccess::ReadWrite, _) => {}
             (PathPurpose::Import, _, PathAccess::Read, Some(context))
-            | (PathPurpose::Export, PathKind::Directory, PathAccess::ReadWrite, Some(context)) => {
+            | (
+                PathPurpose::Export | PathPurpose::Backup,
+                PathKind::Directory,
+                PathAccess::ReadWrite,
+                Some(context),
+            ) => {
                 commands.session(context.clone())?;
             }
             _ => {
@@ -146,11 +156,15 @@ pub async fn path_select(
             }
             .map(Some);
         }
-        if let PathPurpose::Export = request.purpose {
+        if matches!(request.purpose, PathPurpose::Export | PathPurpose::Backup) {
             let context = request
                 .context
                 .ok_or_else(|| commands.error("INVALID_ARGUMENT", "请选择当前工作区。"))?;
-            return commands.export_directory(context, selection).map(Some);
+            return match request.purpose {
+                PathPurpose::Backup => commands.backup_directory(context, selection),
+                _ => commands.export_directory(context, selection),
+            }
+            .map(Some);
         }
         let root = selection
             .canonicalize()
@@ -410,6 +424,9 @@ impl Commands {
                 "INVALID_ARGUMENT",
                 "无法打开工作区，请核对标志文件、数据库身份和使用状态。",
             ),
+            WorkspaceThreadError::Task(TaskStoreError::UnknownTask) => {
+                ("NOT_FOUND", "当前工作区中没有此任务。")
+            }
             WorkspaceThreadError::Busy => ("RESOURCE_BUSY", "工作区请求队列已满。"),
             _ => ("INTERNAL", "工作区服务不可用。"),
         };

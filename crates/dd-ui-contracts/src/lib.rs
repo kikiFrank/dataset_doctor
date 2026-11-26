@@ -135,6 +135,8 @@ pub fn wire_primitives_typescript() -> String {
         workspace::WorkspaceOpenRequest::decl(&config),
         workspace::WorkspaceCreateRequest::decl(&config),
         workspace::WorkspaceRestoreRequest::decl(&config),
+        workspace::WorkspaceBackupSubmitRequest::decl(&config),
+        workspace::WorkspaceBackupView::decl(&config),
         workspace::CommandContext::decl(&config),
         workspace::WorkspaceGetRequest::decl(&config),
         workspace::WorkspaceSnapshot::decl(&config),

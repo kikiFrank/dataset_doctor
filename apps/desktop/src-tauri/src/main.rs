@@ -152,6 +152,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::workspace_open,
             workspace_commands::workspace_create,
             workspace_commands::backup::workspace_restore,
+            workspace_commands::backup::workspace_backup_submit,
+            workspace_commands::backup::workspace_backup_latest,
             workspace_commands::workspace_get,
             workspace_commands::workspace_close,
             workspace_commands::dataset::dataset_list,
