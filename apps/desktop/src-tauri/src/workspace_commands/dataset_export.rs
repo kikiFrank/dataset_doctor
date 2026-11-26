@@ -115,6 +115,7 @@ impl Commands {
             operation_kind: ImportOperationKind::DatasetExport,
             status: task.status,
             error_code: task.error_code,
+            video_sample: None,
             video_frame: None,
             preview: None,
             registration: None,

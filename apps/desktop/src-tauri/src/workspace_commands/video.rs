@@ -82,6 +82,23 @@ impl VideoRunner {
         Some(Self::new(interpreter, entrypoint))
     }
 
+    pub(super) async fn execute_sample(
+        self: Arc<Self>,
+        service: dd_infra::video_keyframes::VideoSampleService,
+        session: Uuid,
+        job: dd_infra::video_keyframes::VideoSampleJob,
+    ) {
+        let _slot = self.slot.lock().await;
+        let _ = service
+            .run(
+                session,
+                job,
+                self.interpreter.clone(),
+                self.entrypoint.clone(),
+            )
+            .await;
+    }
+
     async fn execute(
         self: Arc<Self>,
         workspace: Arc<WorkspaceThread>,
@@ -238,6 +255,7 @@ impl Commands {
             operation_kind: ImportOperationKind::VideoProbe,
             status: outcome.status,
             error_code: outcome.error_code,
+            video_sample: None,
             video_frame: None,
             preview: None,
             registration: None,

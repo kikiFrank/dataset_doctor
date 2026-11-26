@@ -45,6 +45,7 @@ pub enum ImportOperationKind {
     DatasetExport,
     WorkspaceBackup,
     FrameResolve,
+    VideoSample,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -97,6 +98,9 @@ pub struct ImportTaskView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub video_frame: Option<crate::video::VideoFrame>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub video_sample: Option<crate::video::VideoSampleView>,
 }
 
 #[derive(Deserialize, TS)]

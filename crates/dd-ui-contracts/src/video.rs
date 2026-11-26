@@ -187,6 +187,57 @@ pub struct VideoTargetContext {
     pub label_schema_digest: String,
 }
 
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DatasetSamplingMode {
+    EveryNFrames,
+    TimeInterval,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DatasetSamplingConfigInput {
+    pub mode: DatasetSamplingMode,
+    #[ts(optional)]
+    pub every_n: Option<u32>,
+    #[ts(optional)]
+    pub interval_ms: Option<u32>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub include_keyframes: Option<bool>,
+    #[ts(optional)]
+    pub max_frames: Option<u32>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VideoSampleSubmitRequest {
+    pub context: CommandContext,
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    pub segment_id: UuidText,
+    pub dataset_sampling_config: DatasetSamplingConfigInput,
+    #[ts(optional)]
+    pub tracking_result_ref: Option<ArtifactReference>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagedVideoSampleView {
+    pub asset_id: UuidText,
+    pub frame_index: DecimalU64,
+    pub already_in_dataset: bool,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct VideoSampleView {
+    pub source_video_id: UuidText,
+    pub target_dataset_id: UuidText,
+    pub segment_id: UuidText,
+    pub segment_revision: DecimalU64,
+    pub sampling_config_id: UuidText,
+    pub samples: Vec<StagedVideoSampleView>,
+}
+
 #[derive(Debug, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FrameResolution {

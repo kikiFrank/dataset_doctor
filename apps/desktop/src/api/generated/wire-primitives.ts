@@ -84,7 +84,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -94,7 +94,7 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, };
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 
@@ -139,6 +139,16 @@ export type VideoSegment = { segment_id: UuidText, source_video_id: UuidText, so
 export type VideoAnnotationManifest = { contract_version: number, source_video_id: UuidText, source_digest: string, target_contexts: { [key in string]: VideoTargetContext }, segments: Array<VideoSegment>, unassigned_keyframe_drafts: Array<UnassignedVideoKeyframe>, };
 
 export type VideoTargetContext = { label_schema_digest: string, };
+
+export type DatasetSamplingMode = "EVERY_N_FRAMES" | "TIME_INTERVAL";
+
+export type DatasetSamplingConfigInput = { mode: DatasetSamplingMode, every_n?: number, interval_ms?: number, include_keyframes?: boolean, max_frames?: number, };
+
+export type VideoSampleSubmitRequest = { context: CommandContext, source_video_id: UuidText, target_dataset_id: UuidText, segment_id: UuidText, dataset_sampling_config: DatasetSamplingConfigInput, tracking_result_ref?: ArtifactReference, };
+
+export type StagedVideoSampleView = { asset_id: UuidText, frame_index: DecimalU64, already_in_dataset: boolean, };
+
+export type VideoSampleView = { source_video_id: UuidText, target_dataset_id: UuidText, segment_id: UuidText, segment_revision: DecimalU64, sampling_config_id: UuidText, samples: Array<StagedVideoSampleView>, };
 
 export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
 

@@ -204,6 +204,15 @@ impl VideoSampleService {
         }
     }
 
+    pub fn record_worker_unavailable(
+        &self,
+        session: Uuid,
+        job: VideoSampleJob,
+    ) -> Result<(), VideoAnnotationError> {
+        self.start(session, &job)?;
+        self.fail(session, job.task_id, "WORKER_START_FAILED")
+    }
+
     pub fn snapshot(
         &self,
         session: Uuid,

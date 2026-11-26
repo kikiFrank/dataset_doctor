@@ -8,7 +8,8 @@ use dd_ui_contracts::annotation::MediaGetLocatorRequest;
 use dd_ui_contracts::dataset_import::{ImportOperationKind, TaskGetRequest};
 use dd_ui_contracts::video::{
     FrameResolution, VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest,
-    VideoResolveFrameRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+    VideoResolveFrameRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest,
+    VideoSaveSegmentRequest,
 };
 use tauri::http::Request;
 
@@ -283,6 +284,54 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         .unwrap();
     assert_eq!(String::from(segment.revision), "1");
     let reopened_segment_id = segment.segment_id;
+    let sampling_key = Uuid::new_v4();
+    let sample_request = |every_n, interval_ms: Option<u32>| {
+        let mut context = wire_context();
+        context["idempotency_key"] = serde_json::json!(sampling_key);
+        serde_json::from_value::<VideoSampleSubmitRequest>(serde_json::json!({
+            "context":context, "source_video_id":source_id, "segment_id":reopened_segment_id,
+            "target_dataset_id":dataset_id,
+            "dataset_sampling_config":{"mode":"EVERY_N_FRAMES","every_n":every_n,
+                                       "interval_ms":interval_ms,"include_keyframes":true}
+        }))
+        .unwrap()
+    };
+    assert_eq!(
+        commands
+            .start_video_sample(Some(Arc::clone(&runner)), sample_request(1, Some(100)))
+            .unwrap_err()
+            .code,
+        "INVALID_ARGUMENT"
+    );
+    let sample = commands
+        .start_video_sample(Some(Arc::clone(&runner)), sample_request(1, None))
+        .unwrap();
+    let sample_id = sample.task_id.clone();
+    let ready = wait(session, sample.task_id);
+    assert_eq!(ready.status, "SUCCEEDED");
+    assert!(matches!(
+        ready.operation_kind,
+        ImportOperationKind::VideoSample
+    ));
+    let receipt = ready.video_sample.unwrap();
+    assert_eq!(receipt.samples.len(), 1);
+    assert_eq!(String::from(receipt.samples[0].frame_index), "3");
+    let staged = receipt.samples[0].asset_id.clone();
+    assert_eq!(
+        commands
+            .start_video_sample(Some(Arc::clone(&runner)), sample_request(2, None))
+            .unwrap_err()
+            .code,
+        "CONFLICT"
+    );
+    let mut unconfigured = sample_request(1, None);
+    unconfigured.context.idempotency_key = Some(uuid(Uuid::new_v4().to_string()));
+    let failed = commands.start_video_sample(None, unconfigured).unwrap();
+    assert_eq!(failed.status, "FAILED");
+    assert_eq!(
+        wait(session, failed.task_id).error_code.as_deref(),
+        Some("WORKER_START_FAILED")
+    );
     owner.close(session).unwrap();
     let response = annotation::media_response(
         &media,
@@ -295,6 +344,10 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     let grant = owner.grant_selected_directory(root).unwrap();
     let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
     let restored = detail(reopened);
+    assert_eq!(
+        wait(reopened, sample_id).video_sample.unwrap().samples[0].asset_id,
+        staged
+    );
     let work = restored.video_annotation_manifest.unwrap();
     assert_eq!(work.segments.len(), 1);
     assert_eq!(work.segments[0].segment_id, reopened_segment_id);

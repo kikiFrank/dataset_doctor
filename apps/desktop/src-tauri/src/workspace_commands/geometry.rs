@@ -195,6 +195,7 @@ impl Commands {
             operation_kind: ImportOperationKind::AnnotationGeometry,
             status: outcome.status,
             error_code: outcome.error_code,
+            video_sample: None,
             video_frame: None,
             preview: None,
             registration: None,

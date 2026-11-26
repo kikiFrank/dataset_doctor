@@ -2,8 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail, AssetListRequest, AssetPage } from "./generated/wire-primitives";
 import type { DisplayLocator, FrameResolution, MediaGetLocatorRequest, VideoFrame, VideoFrameTarget, VideoResolveFrameRequest, VideoSeekPolicy } from "./generated/wire-primitives";
 import type {
-  ArtifactReference, CocoDocument, KeyframeDraftReceipt, SegmentReceipt,
-  VideoGetKeyframeDraftRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
+  ArtifactReference, CocoDocument, ImportOperationRef, KeyframeDraftReceipt, SegmentReceipt,
+  VideoGetKeyframeDraftRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest, VideoSaveSegmentRequest,
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -23,6 +23,14 @@ export function saveKeyframeDraft(workspace: OpenWorkspace, fields: Omit<VideoSa
 export function saveSegment(workspace: OpenWorkspace, fields: Omit<VideoSaveSegmentRequest, "context">): Promise<SegmentReceipt> {
   const request: VideoSaveSegmentRequest = { ...fields, context: context(workspace, crypto.randomUUID()) };
   return invoke("video_save_segment", { request });
+}
+
+export function submitVideoSamples(workspace: OpenWorkspace, fields: Omit<VideoSampleSubmitRequest, "context">,
+  idempotencyKey: string): Promise<ImportOperationRef> {
+  const request: VideoSampleSubmitRequest = {
+    ...fields, context: { ...context(workspace, crypto.randomUUID()), idempotency_key: idempotencyKey },
+  };
+  return invoke("video_sample_submit", { request });
 }
 
 export function pickVideoFile(workspace: OpenWorkspace): Promise<PathGrant | null> {

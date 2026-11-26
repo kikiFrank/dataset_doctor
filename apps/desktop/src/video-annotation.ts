@@ -1,4 +1,6 @@
-import type { VideoAnnotationManifest, VideoFrame, VideoKeyframe } from "./api/generated/wire-primitives";
+import type {
+  DatasetSamplingConfigInput, DatasetSamplingMode, VideoAnnotationManifest, VideoFrame, VideoKeyframe,
+} from "./api/generated/wire-primitives";
 
 function sameFrame(left: VideoFrame, right: VideoFrame): boolean {
   return left.source_video_id === right.source_video_id && left.source_digest === right.source_digest
@@ -46,4 +48,22 @@ export function segmentInput(start_us: string, end_us: string, keyframes: VideoK
     frames.push(frame_ref);
   }
   return { start_us, end_us, keyframes };
+}
+
+export function datasetSamplingConfig(
+  mode: DatasetSamplingMode, interval: string, include_keyframes: boolean, limit: string,
+): DatasetSamplingConfigInput {
+  const value = Number(interval);
+  if (!/^[1-9][0-9]*$/.test(interval) || value > (mode === "TIME_INTERVAL" ? 3_600_000 : 100_000)) {
+    throw new Error("请输入所选模式支持的正整数采样间隔。");
+  }
+  const max_frames = Number(limit);
+  if (limit !== "" && (!/^[1-9][0-9]*$/.test(limit) || max_frames > 4_294_967_295)) {
+    throw new Error("帧数上限必须是正整数。");
+  }
+  return {
+    mode, include_keyframes,
+    ...(mode === "TIME_INTERVAL" ? { interval_ms: value } : { every_n: value }),
+    ...(limit === "" ? {} : { max_frames }),
+  };
 }

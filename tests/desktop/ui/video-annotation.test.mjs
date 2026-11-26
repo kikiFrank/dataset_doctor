@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { keyframeChoices, locateDraft, segmentInput } from "../../../apps/desktop/src/video-annotation.ts";
+import { datasetSamplingConfig, keyframeChoices, locateDraft, segmentInput } from "../../../apps/desktop/src/video-annotation.ts";
 
 const frame = (index, time, digest = "source") => ({
   source_video_id: "video", source_digest: digest, stream_index: 0,
@@ -32,4 +32,14 @@ test("segment input uses exact integers and excludes the end boundary and duplic
   assert.throws(() => segmentInput("20", "20", []), /结束/);
   const exact = saved("exact", frame("9", "9007199254740993"));
   assert.equal(segmentInput("9007199254740993", "9007199254740994", [exact]).keyframes[0], exact);
+});
+
+test("training sampling submits only the active mode and an optional positive limit", () => {
+  assert.deepEqual(datasetSamplingConfig("TIME_INTERVAL", "1000", true, "20"),
+    { mode: "TIME_INTERVAL", interval_ms: 1000, include_keyframes: true, max_frames: 20 });
+  assert.deepEqual(datasetSamplingConfig("EVERY_N_FRAMES", "3", false, ""),
+    { mode: "EVERY_N_FRAMES", every_n: 3, include_keyframes: false });
+  assert.throws(() => datasetSamplingConfig("TIME_INTERVAL", "3600001", false, ""), /间隔/);
+  assert.throws(() => datasetSamplingConfig("EVERY_N_FRAMES", "01", false, ""), /间隔/);
+  assert.throws(() => datasetSamplingConfig("TIME_INTERVAL", "400", true, "0"), /上限/);
 });

@@ -9,6 +9,7 @@ import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { ReviewCanvas } from "./review-canvas";
 import { makeDraft, seedBoxes, type EditableBox } from "./review-document";
 import { keyframeChoices, locateDraft, segmentInput } from "./video-annotation";
+import { VideoSamplingPanel } from "./video-sampling-panel";
 
 export type VideoEditGuard = { blocked: boolean; onBlocked: (blocked: boolean) => void };
 
@@ -86,6 +87,8 @@ export function VideoAnnotationPanel(props: AnnotationProps) {
       {...props} frame={frame} image={image} dataset={dataset} draft={draft} />}
     {dataset && <SegmentEditor key={target} {...props} dataset={dataset}
       disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} segments={segments} />}
+    {dataset && segments.length > 0 && <VideoSamplingPanel key={"sampling-" + target} workspace={workspace}
+      segments={segments} disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} />}
   </section>;
 }
 

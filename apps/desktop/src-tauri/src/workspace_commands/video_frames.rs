@@ -112,6 +112,7 @@ impl Commands {
             geometry_report: None,
             coco_export: None,
             workspace_backup: None,
+            video_sample: None,
             video_frame: snapshot
                 .frame
                 .map(|frame| self.frame_view(task, frame))

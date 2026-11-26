@@ -30,6 +30,7 @@ pub(crate) mod review_commit;
 pub(crate) mod video;
 pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
+pub(crate) mod video_sampling;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
     if let (Some(python), Some(entrypoint)) = (

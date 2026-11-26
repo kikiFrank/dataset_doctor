@@ -195,6 +195,7 @@ impl Commands {
                     status: task.status,
                     error_code: task.error_code,
                     registration: None,
+                    video_sample: None,
                     video_frame: None,
                     preview,
                     geometry_report: None,
@@ -217,6 +218,7 @@ impl Commands {
                             Self::video_task,
                             Self::backup_task,
                             Self::frame_task,
+                            Self::video_sample_task,
                         ];
                         for query in queries {
                             match query(self, session, id) {
@@ -245,6 +247,7 @@ impl Commands {
                     status: task.status,
                     error_code: task.error_code,
                     registration,
+                    video_sample: None,
                     video_frame: None,
                     preview: None,
                     geometry_report: None,
