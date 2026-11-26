@@ -198,7 +198,7 @@ input_fingerprint 由 Core 对规范化输入计算，排除摘要自身。规�
 
 ### 5. 工作区八业务表与技术元数据 DDL
 
-下面是可评审的 SQLite DDL，不是已执行的迁移。每个数据库连接启用外键；状态值由对应状态机章节统一定义，不在此复制另一套枚举。schema_meta 是技术元数据，不是新增业务域或历史版本表。时间和 UUID 由 Core 注入。JSON 格式、UUID 格式、摘要形状、跨行业务关系由 Core 验证。
+可执行结构以 [Workspace v1 迁移](../../migrations/workspace/0001_initial.sql) 为权威。下面保留设计基线便于评审。写连接在迁移事务前启用外键，迁移器在同一事务中创建表和索引、写入技术元数据并执行完整性和外键检查。时间、已验证的 Workspace UUID 及跨行业务规则由 Core 提供或验证。
 
 ```sql
 PRAGMA foreign_keys = ON;

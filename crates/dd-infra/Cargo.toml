@@ -7,3 +7,7 @@ publish = false
 
 [dependencies]
 rusqlite.workspace = true
+
+[[test]]
+name = "workspace_migration"
+path = "../../tests/storage/sqlite/migration/workspace_migration.rs"

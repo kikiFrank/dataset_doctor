@@ -1,0 +1,71 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$RustBin,
+    [ValidateSet('All', 'Connection', 'Migration')][string]$Suite = 'All'
+)
+
+$ErrorActionPreference = 'Stop'
+$repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
+$cargo = (Resolve-Path -LiteralPath (Join-Path $RustBin 'cargo.exe')).Path
+$rustc = (Resolve-Path -LiteralPath (Join-Path $RustBin 'rustc.exe')).Path
+$cl = (Get-Command cl.exe -CommandType Application | Select-Object -First 1).Source
+$link = (Get-Command link.exe -CommandType Application | Select-Object -First 1).Source
+if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64' -or -not $env:VCToolsInstallDir -or
+    -not $cl.StartsWith($env:VCToolsInstallDir, [StringComparison]::OrdinalIgnoreCase) -or
+    -not $link.StartsWith($env:VCToolsInstallDir, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Initialize x64 VS Developer PowerShell before running this check.'
+}
+
+$cache = (Resolve-Path -LiteralPath (Join-Path $repo 'target\p00-03\cargo-home')).Path
+foreach ($variable in Get-ChildItem Env:) {
+    if ($variable.Name -match '^(CARGO($|_)|RUST|VCPKG|PKG_CONFIG|BINDGEN|CL$|_CL_$|LINK$|_LINK_$|((HOST|TARGET)_)?(CC|CXX|AR|CFLAGS|CPPFLAGS|CXXFLAGS|ARFLAGS)($|_))|SQLITE|SQLCIPHER') {
+        [Environment]::SetEnvironmentVariable($variable.Name, $null, 'Process')
+    }
+}
+$out = Join-Path $repo 'target\p01-04'
+$run = [Guid]::NewGuid().ToString('N')
+$env:RUSTC = $rustc
+$env:CC = $cl
+$env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $link
+$env:CARGO_HOME = $cache
+$env:CARGO_NET_OFFLINE = 'true'
+$env:CARGO_REGISTRIES_CRATES_IO_PROTOCOL = 'sparse'
+$env:CARGO_TERM_COLOR = 'never'
+$env:CARGO_TARGET_DIR = Join-Path $out 'cargo-target'
+$env:TEMP = Join-Path $out 'temp'
+$env:TMP = $env:TEMP
+$logs = Join-Path $out 'logs'
+$directories = @($env:TEMP, $logs)
+if ($Suite -in @('All', 'Connection')) {
+    $env:DD_SQLITE_INIT_RUN_DIR = Join-Path $repo "target\p01-03\runs\$run"
+    $directories += $env:DD_SQLITE_INIT_RUN_DIR
+}
+if ($Suite -in @('All', 'Migration')) {
+    $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
+    $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
+}
+New-Item -ItemType Directory -Path $directories -Force | Out-Null
+$log = Join-Path $logs "$run.log"
+$cargoArgs = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
+    '--target', 'x86_64-pc-windows-msvc')
+switch ($Suite) {
+    'Connection' { $cargoArgs += @('-p', 'dd-sqlite-connection-init-tests', '--test', 'workspace_connection') }
+    'Migration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_migration') }
+    'All' { $cargoArgs += @('--workspace', '--all-targets') }
+}
+$cargoArgs += @('--', '--nocapture')
+
+Push-Location -LiteralPath $repo
+try {
+    "MSVC=$env:VCToolsVersion suite=$Suite log=$log" | Tee-Object -FilePath $log
+    "> $cargo $cargoArgs" | Tee-Object -FilePath $log -Append
+    # Keep native stderr in the test log and use Cargo's exit status.
+    $ErrorActionPreference = 'Continue'
+    $PSNativeCommandUseErrorActionPreference = $false
+    & $cargo @cargoArgs 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+    $result = $LASTEXITCODE
+    "exit_code=$result" | Tee-Object -FilePath $log -Append
+} finally {
+    Pop-Location
+}
+exit $result

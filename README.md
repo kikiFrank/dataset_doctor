@@ -132,6 +132,18 @@ Windows x64 MSVC 上 6 项合成测试全部通过。`dd_infra::sqlite::initiali
 
 根锁文件的 11 个外部依赖与 P00-03 一致，使用 `rusqlite 0.42.0`（`bundled`、`backup`）和 `libsqlite3-sys 0.40.0`。已核对运行时 SQLite 3.54.1 及其 Source ID，检查了静态链接和测试程序的 DLL 导入表。验证范围限于合成 Workspace 写连接初始化。数据库迁移、`app.db`、真实 Workspace 数据和其他平台待独立验收。
 
+## Windows Workspace SQLite 空库迁移（P01-04）
+
+在 x64 VS Developer PowerShell 中使用 P00-03 的本机 Cargo 缓存和 Rust/Cargo 1.97.1。默认执行根 Cargo workspace 的全部测试，包括 P01-03 连接初始化和 P01-04 空库迁移。可用 `-Suite Migration` 或 `-Suite Connection` 单独复现。
+
+```powershell
+$rustBin = '<Rust 1.97.1 x86_64-pc-windows-msvc 工具链的 bin 绝对路径>'
+powershell.exe -NoProfile -NonInteractive -File .\scripts\storage\windows\check-workspace-sqlite.ps1 -RustBin $rustBin
+$LASTEXITCODE
+```
+
+迁移入口复用写连接初始化，并在同一事务里应用 [Workspace v1 SQL](migrations/workspace/0001_initial.sql)、写入带版本的 Workspace 身份及时间戳、执行完整性与外键检查。合成库验证 8 张业务表、12 个显式索引、重开保留数据、拒绝身份或版本不符，以及校验阶段故障时回滚到空 schema 并可重试。验收要求 `integrity_check` 返回唯一的 `ok`，`foreign_key_check` 返回零行。构建、迁移样本和本次日志位于 `target/p01-04/`，P01-03 的连接样本仍位于 `target/p01-03/runs/`。
+
 ## 已有可执行验证
 
 ```sh
