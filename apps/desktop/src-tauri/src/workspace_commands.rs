@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::RuntimeMode;
 
+pub(crate) mod annotation;
 pub(crate) mod dataset;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);

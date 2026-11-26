@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AssetListRequest, AssetPage, DatasetListRequest, DatasetPage } from "./generated/wire-primitives";
+import type { AnnotationGetRequest, AnnotationView, AssetListRequest, AssetPage, DatasetListRequest, DatasetPage, DisplayLocator, MediaGetLocatorRequest } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
 
@@ -16,4 +16,18 @@ export function listAssets(workspace: OpenWorkspace, datasetId: string, cursor?:
     context: context(workspace, crypto.randomUUID()), dataset_id: datasetId, cursor, page_size: 40,
   };
   return invoke("asset_list", { request });
+}
+
+export function getAnnotation(workspace: OpenWorkspace, assetId: string): Promise<AnnotationView> {
+  const request: AnnotationGetRequest = {
+    context: context(workspace, crypto.randomUUID()), asset_id: assetId,
+  };
+  return invoke("annotation_get", { request });
+}
+
+export function getDisplayLocator(workspace: OpenWorkspace, assetId: string): Promise<DisplayLocator> {
+  const request: MediaGetLocatorRequest = {
+    context: context(workspace, crypto.randomUUID()), asset_id: assetId, purpose: "DISPLAY",
+  };
+  return invoke("media_get_locator", { request });
 }

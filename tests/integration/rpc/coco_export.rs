@@ -4,6 +4,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use dd_infra::annotation_view::AnnotationReader;
 use dd_infra::coco_export::{
     CocoExportPolicy, CocoExportRequest, CocoExportService, ExclusionReason,
 };
@@ -200,6 +201,21 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
         AssetAnnotationState::ConfirmedNegative
     );
     assert_eq!(state("unreviewed.png"), AssetAnnotationState::Unreviewed);
+    let reader = AnnotationReader::new(Arc::clone(&owner)).unwrap();
+    assert_eq!(
+        reader
+            .read(session, find("positive.png"))
+            .unwrap()
+            .annotation_state,
+        AssetAnnotationState::ConfirmedPositive
+    );
+    assert_eq!(
+        reader
+            .read(session, find("negative.png"))
+            .unwrap()
+            .annotation_state,
+        AssetAnnotationState::ConfirmedNegative
+    );
 
     let export = CocoExportService::new(Arc::clone(&owner)).unwrap();
     let request = |destination_grant_id, policy| CocoExportRequest {

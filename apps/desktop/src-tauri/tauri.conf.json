@@ -10,7 +10,7 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' dd-media: http://dd-media.localhost"
     }
   },
   "bundle": { "active": false, "icon": ["icons/icon.ico"] }

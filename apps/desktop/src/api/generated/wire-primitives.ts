@@ -51,3 +51,23 @@ export type AnnotationState = "UNANNOTATED" | "UNREVIEWED" | "CONFIRMED_POSITIVE
 export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText, display_name: string, kind: string, availability: string, annotation_state: AnnotationState, active_review: boolean, };
 
 export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };
+
+export type CocoImage = { id: number, file_name: string, width: number, height: number, };
+
+export type CocoBox = { id: number, image_id: number, category_id: number, bbox: [number, number, number, number], area: number, iscrowd: number, };
+
+export type CocoCategory = { id: number, name: string, };
+
+export type CocoDocument = { images: Array<CocoImage>, annotations: Array<CocoBox>, categories: Array<CocoCategory>, };
+
+export type AnnotationGetRequest = { context: CommandContext, asset_id: UuidText, };
+
+export type AnnotationView = { asset_id: UuidText, image_digest: string, annotation_digest: string | null, formal_coco: CocoDocument | null, annotation_state: AnnotationState, active_review: ReviewSession | null, };
+
+export type ReviewSession = { review_id: UuidText, asset_id: UuidText, status: string, row_revision: DecimalU64, base_image_digest: string, base_annotation_digest: string | null, base_label_schema_digest: string, };
+
+export type MediaPurpose = "DISPLAY";
+
+export type MediaGetLocatorRequest = { context: CommandContext, asset_id: UuidText, purpose: MediaPurpose, };
+
+export type DisplayLocator = { locator: string, media_type: string, expires_at: string, resource_digest: string, };

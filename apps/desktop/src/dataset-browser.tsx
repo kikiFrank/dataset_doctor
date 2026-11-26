@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { AnnotationState, AssetPage, DatasetPage, DatasetSummary } from "./api/generated/wire-primitives";
-import { listAssets, listDatasets } from "./api/dataset";
+import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary } from "./api/generated/wire-primitives";
+import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 
@@ -71,6 +71,7 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
 }
 
 function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset: DatasetSummary }) {
+  const [selected, setSelected] = useState<AssetSummary | null>(null);
   const [page, setPage] = useState<AssetPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -111,7 +112,7 @@ function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset:
           <tbody>
             {page.items.map((asset) => (
               <tr key={asset.asset_id}>
-                <td>{asset.display_name}</td>
+                <td><button type="button" className="asset-link" onClick={() => setSelected(asset)}>{asset.display_name}</button></td>
                 <td>{asset.availability === "OFFLINE" ? "文件离线" : annotationLabels[asset.annotation_state]}
                   {asset.active_review && <small> · 审核进行中</small>}
                 </td>
@@ -121,6 +122,63 @@ function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset:
         </table>
       )}
       {page?.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void more()}>更多资源</button>}
+      {selected && <AnnotationDetails key={selected.asset_id} workspace={workspace} asset={selected} />}
     </div>
+  );
+}
+
+function AnnotationDetails({ workspace, asset }: { workspace: OpenWorkspace; asset: AssetSummary }) {
+  const [locator, setLocator] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const [view, setView] = useState<AnnotationView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    setView(null);
+    setError(null);
+    setLocator(null);
+    setImageError(null);
+    getDisplayLocator(workspace, asset.asset_id).then((loaded) => {
+      if (current) setLocator(loaded.locator);
+    }).catch((failure: unknown) => {
+      if (current) setImageError(workspaceCommandError(failure));
+    });
+    getAnnotation(workspace, asset.asset_id).then((loaded) => {
+      if (current) setView(loaded);
+    }).catch((failure: unknown) => {
+      if (current) setError(workspaceCommandError(failure));
+    });
+    return () => { current = false; };
+  }, [workspace, asset.asset_id, refresh]);
+
+  const document = view?.formal_coco;
+  return (
+    <section className="annotation-details" aria-label={asset.display_name + " 的标注"}>
+      <h4>{asset.display_name}</h4>
+      <button type="button" onClick={() => setRefresh((value) => value + 1)}>刷新样本</button>
+      {locator && !imageError && <img className="sample-image" src={locator} alt={asset.display_name} onError={() => setImageError("图像显示授权已失效或文件无法解码，请刷新样本。")} />}
+      {imageError && <p role="alert">{imageError}</p>}
+      {error && <p role="alert">{error}</p>}
+      {!view && !error && <p role="status">正在读取标注…</p>}
+      {view && <p>{annotationLabels[view.annotation_state]}{view.active_review ? " · 审核进行中" : ""}</p>}
+      {view && !document && <p>此样本没有标注文件。</p>}
+      {document && (
+        <>
+          <p>标注尺寸 {document.images[0].width} × {document.images[0].height} 像素</p>
+          {document.annotations.length === 0 ? <p>标注文件中没有框。</p> : (
+            <table>
+              <thead><tr><th scope="col">类别</th><th scope="col">框坐标 x、y、宽、高</th></tr></thead>
+              <tbody>{document.annotations.map((box) => (
+                <tr key={box.id}>
+                  <td>{document.categories.find((category) => category.id === box.category_id)?.name ?? ("未知类别 " + box.category_id)}</td>
+                  <td>{box.bbox.join(", ")}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </>
+      )}
+    </section>
   );
 }

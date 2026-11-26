@@ -10,6 +10,7 @@ dd-core = { path = "../../../crates/dd-core" }
 dd-infra = { path = "../../../crates/dd-infra" }
 dd-ui-contracts = { path = "../../../crates/dd-ui-contracts" }
 serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
 tauri = "=2.12.7"
 tauri-plugin-dialog = "=2.8.4"
 time = { version = "=0.3.55", features = ["formatting"] }

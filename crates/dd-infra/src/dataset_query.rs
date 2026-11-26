@@ -95,7 +95,7 @@ pub enum AssetAnnotationState {
     Stale,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RegisteredInputFile {
     pub path: PathBuf,
     pub sha256: String,

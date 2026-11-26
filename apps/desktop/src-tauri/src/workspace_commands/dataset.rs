@@ -88,13 +88,7 @@ impl Commands {
             .items
             .into_iter()
             .map(|item| {
-                let annotation_state = match item.annotation_state {
-                    AssetAnnotationState::Unannotated => AnnotationState::Unannotated,
-                    AssetAnnotationState::Unreviewed => AnnotationState::Unreviewed,
-                    AssetAnnotationState::ConfirmedPositive => AnnotationState::ConfirmedPositive,
-                    AssetAnnotationState::ConfirmedNegative => AnnotationState::ConfirmedNegative,
-                    AssetAnnotationState::Stale => AnnotationState::Stale,
-                };
+                let annotation_state = annotation_state(item.annotation_state);
                 Ok(AssetSummary {
                     asset_id: self.uuid_text(item.asset_id.to_string())?,
                     dataset_id: request.dataset_id.clone(),
@@ -113,7 +107,7 @@ impl Commands {
         Ok(AssetPage { items, next_cursor })
     }
 
-    fn dataset_error(&self, failure: WorkspaceThreadError) -> AppError {
+    pub(super) fn dataset_error(&self, failure: WorkspaceThreadError) -> AppError {
         match failure {
             WorkspaceThreadError::Dataset(DatasetQueryError::InvalidPageSize) => {
                 self.error("INVALID_ARGUMENT", "每页数量须在 1 至 200 之间。")
@@ -121,7 +115,20 @@ impl Commands {
             WorkspaceThreadError::Dataset(DatasetQueryError::UnknownDataset) => {
                 self.error("NOT_FOUND", "当前工作区中没有这个数据集。")
             }
+            WorkspaceThreadError::Dataset(DatasetQueryError::UnknownAsset) => {
+                self.error("NOT_FOUND", "当前工作区中没有这个样本。")
+            }
             failure => self.map_error(failure),
         }
+    }
+}
+
+pub(super) fn annotation_state(state: AssetAnnotationState) -> AnnotationState {
+    match state {
+        AssetAnnotationState::Unannotated => AnnotationState::Unannotated,
+        AssetAnnotationState::Unreviewed => AnnotationState::Unreviewed,
+        AssetAnnotationState::ConfirmedPositive => AnnotationState::ConfirmedPositive,
+        AssetAnnotationState::ConfirmedNegative => AnnotationState::ConfirmedNegative,
+        AssetAnnotationState::Stale => AnnotationState::Stale,
     }
 }

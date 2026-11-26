@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use dd_infra::media_display::MediaDisplayService;
 use dd_infra::workspace_thread::WorkspaceThread;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -102,10 +103,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let workspace = WorkspaceThread::start(250, workspace_commands::GRANT_LIFETIME)?;
+    let workspace = Arc::new(WorkspaceThread::start(
+        250,
+        workspace_commands::GRANT_LIFETIME,
+    )?);
+    let media = Arc::new(MediaDisplayService::new(
+        Arc::clone(&workspace),
+        workspace_commands::GRANT_LIFETIME,
+    ));
     tauri::Builder::default()
+        .register_uri_scheme_protocol("dd-media", |context, request| {
+            let service = context.app_handle().state::<Arc<MediaDisplayService>>();
+            workspace_commands::annotation::media_response(&service, request)
+        })
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::new(workspace))
+        .manage(workspace)
+        .manage(media)
         .manage(RuntimeMode {
             smoke_root,
             smoke_workspace,
@@ -134,6 +147,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::workspace_close,
             workspace_commands::dataset::dataset_list,
             workspace_commands::dataset::asset_list,
+            workspace_commands::annotation::annotation_get,
+            workspace_commands::annotation::media_get_locator,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

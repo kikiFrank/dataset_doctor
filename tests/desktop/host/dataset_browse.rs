@@ -2,7 +2,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
+use dd_infra::media_display::MediaDisplayService;
+use dd_ui_contracts::annotation::AnnotationGetRequest;
+use dd_ui_contracts::annotation::{MediaGetLocatorRequest, MediaPurpose};
 use dd_ui_contracts::dataset::{AnnotationState, AssetListRequest, DatasetListRequest};
+use tauri::http::Request;
 
 use super::*;
 
@@ -97,5 +101,36 @@ fn commands_page_only_current_workspace_data_and_report_invalid_arguments() {
     let rejected = commands.list_assets(stale).unwrap_err();
     assert_eq!(rejected.code, "STALE_WORKSPACE_SESSION");
     assert_eq!(rejected.request_id, commands.request_id);
+    let view = commands
+        .annotation(AnnotationGetRequest {
+            context: context(),
+            asset_id: first.items[0].asset_id.clone(),
+        })
+        .unwrap();
+    assert!(view.formal_coco.is_none());
+    assert_eq!(view.annotation_state, AnnotationState::Unannotated);
+    let media = MediaDisplayService::new(Arc::clone(&commands.thread), Duration::from_secs(120));
+    let locator = commands
+        .media_locator(
+            &media,
+            MediaGetLocatorRequest {
+                context: context(),
+                asset_id: first.items[0].asset_id.clone(),
+                purpose: MediaPurpose::Display,
+            },
+        )
+        .unwrap();
+    let request = || {
+        Request::builder()
+            .uri(&locator.locator)
+            .body(Vec::new())
+            .unwrap()
+    };
+    let response = annotation::media_response(&media, request());
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["Content-Type"], "image/png");
+    assert_eq!(response.body().as_slice(), image);
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
     commands.thread.close(session).unwrap();
+    assert_eq!(annotation::media_response(&media, request()).status(), 403);
 }

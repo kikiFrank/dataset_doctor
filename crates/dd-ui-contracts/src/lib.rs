@@ -1,5 +1,6 @@
 //! Tauri message contracts shared with the desktop frontend.
 
+pub mod annotation;
 pub mod dataset;
 pub mod workspace;
 
@@ -139,6 +140,16 @@ pub fn wire_primitives_typescript() -> String {
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),
         dataset::AssetPage::decl(&config),
+        annotation::CocoImage::decl(&config),
+        annotation::CocoBox::decl(&config),
+        annotation::CocoCategory::decl(&config),
+        annotation::CocoDocument::decl(&config),
+        annotation::AnnotationGetRequest::decl(&config),
+        annotation::AnnotationView::decl(&config),
+        annotation::ReviewSession::decl(&config),
+        annotation::MediaPurpose::decl(&config),
+        annotation::MediaGetLocatorRequest::decl(&config),
+        annotation::DisplayLocator::decl(&config),
     ] {
         output.push_str("\nexport ");
         output.push_str(&declaration);

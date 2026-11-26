@@ -1,5 +1,6 @@
 //! Dataset Doctor infrastructure adapters.
 
+pub mod annotation_view;
 pub mod dataset_import;
 pub mod dataset_query;
 
@@ -15,6 +16,7 @@ pub mod import_preflight;
 pub mod import_registration;
 pub mod input_fingerprint;
 pub mod json;
+pub mod media_display;
 mod paths;
 #[cfg(feature = "execution-rpc")]
 pub mod review_draft;

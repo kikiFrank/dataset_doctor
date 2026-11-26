@@ -90,6 +90,14 @@ name = "dataset_browse"
 path = "../../tests/storage/dataset/browse.rs"
 
 [[test]]
+name = "annotation_view"
+path = "../../tests/storage/review/annotation_view.rs"
+
+[[test]]
+name = "media_display"
+path = "../../tests/storage/media/display.rs"
+
+[[test]]
 name = "review_validation"
 path = "../../tests/storage/review/validation.rs"
 
