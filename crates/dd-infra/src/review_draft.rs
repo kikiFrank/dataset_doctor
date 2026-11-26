@@ -13,6 +13,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::annotation_view::AnnotationReader;
 use crate::artifact_reference::ArtifactOwner;
 use crate::geometry_runtime::{ReviewImageEvidenceError, read_review_image};
 use crate::import_preflight::LocalCategory;
@@ -21,6 +22,7 @@ use crate::paths::{open_scoped_file, publish_immutable};
 use crate::review_store::{ReviewSession, ReviewStatus, ReviewStoreError};
 use crate::review_validation::{ReviewImage, ReviewValidationError, validate_review_document};
 pub use crate::track_map::ReviewTrackBinding;
+use crate::track_map::{TrackMap, TrackMapEntry};
 use crate::video_keyframes::VideoAnnotationService;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -61,6 +63,7 @@ pub struct ReviewEditorState {
     pub review: ReviewSession,
     pub categories: Vec<LocalCategory>,
     pub draft: Option<StoredDraft>,
+    pub initial_track_bindings: Vec<ReviewTrackBinding>,
 }
 
 #[derive(Debug)]
@@ -162,12 +165,19 @@ impl ReviewDraftService {
             return Err(ReviewDraftError::RevisionConflict);
         }
         let draft = self.load(&snapshot)?;
+        let initial_track_bindings = if draft.is_none() {
+            self.current_track_map(session, &snapshot.session)?
+                .map_or_else(Vec::new, |map| map.bindings)
+        } else {
+            Vec::new()
+        };
         let categories =
             serde_json::from_str(&snapshot.categories).map_err(ReviewDraftError::Json)?;
         Ok(ReviewEditorState {
             review: snapshot.session,
             categories,
             draft,
+            initial_track_bindings,
         })
     }
 
@@ -238,9 +248,17 @@ impl ReviewDraftService {
         let coco_document = document.into_coco();
         let track_bindings = match tracks {
             Some(tracks) => self.bind_tracks(session, current, &coco_document, tracks)?,
-            None => draft
-                .as_ref()
-                .map_or_else(Vec::new, |old| retain_tracks(old, &coco_document)),
+            None => match &draft {
+                Some(old) => retain_tracks(&old.track_bindings, &old.coco_document, &coco_document),
+                None => {
+                    if let Some(map) = self.current_track_map(session, current)? {
+                        let old = self.current_coco(session, current)?;
+                        retain_tracks(&map.bindings, &old, &coco_document)
+                    } else {
+                        Vec::new()
+                    }
+                }
+            },
         };
         let draft_revision = old_revision
             .unwrap_or_default()
@@ -331,6 +349,28 @@ impl ReviewDraftService {
             return Ok(Vec::new());
         }
         let invalid = || ReviewDraftError::InvalidTrackingSelection;
+        if let Some(current) = self.current_track_map(session, review)? {
+            let previous = self.current_coco(session, review)?;
+            let eligible = retain_tracks(&current.bindings, &previous, document);
+            let eligible: BTreeMap<_, _> = eligible
+                .into_iter()
+                .map(|binding| (binding.local_annotation_id, binding))
+                .collect();
+            let mut used = BTreeSet::new();
+            let mut bindings = Vec::with_capacity(selected.len());
+            for choice in selected {
+                let binding = eligible
+                    .get(&choice.local_annotation_id)
+                    .filter(|binding| binding.track_id == choice.track_id)
+                    .ok_or_else(invalid)?;
+                if !used.insert(choice.local_annotation_id) {
+                    return Err(invalid());
+                }
+                bindings.push(binding.clone());
+            }
+            bindings.sort_unstable_by_key(|binding| binding.local_annotation_id);
+            return Ok(bindings);
+        }
         let work = VideoAnnotationService::new(Arc::clone(&self.owner)).map_err(|_| invalid())?;
         let candidates = work
             .staging_tracking_candidates(session, review.dataset_id, review.asset_id)
@@ -375,6 +415,65 @@ impl ReviewDraftService {
         }
         bindings.sort_unstable_by_key(|binding| binding.local_annotation_id);
         Ok(bindings)
+    }
+
+    pub(crate) fn current_track_map(
+        &self,
+        session: Uuid,
+        review: &ReviewSession,
+    ) -> Result<Option<TrackMap>, ReviewDraftError> {
+        let Some(baseline) = &review.base_annotation_digest else {
+            return Ok(None);
+        };
+        let asset = review.asset_id;
+        let (root, digest, metadata) = self
+            .owner
+            .workspace_action(session, move |owner| {
+                owner
+                    .connection
+                    .query_row(
+                        "SELECT annotation_digest, metadata_json FROM assets WHERE asset_id=?1",
+                        [asset.to_string()],
+                        |row| {
+                            Ok((
+                                owner.root().to_owned(),
+                                row.get::<_, Option<String>>(0)?,
+                                row.get::<_, String>(1)?,
+                            ))
+                        },
+                    )
+                    .map_err(review_db)
+            })
+            .map_err(ReviewDraftError::Storage)?;
+        if digest.as_ref() != Some(baseline) {
+            return Err(ReviewDraftError::RevisionConflict);
+        }
+        TrackMapEntry::from_metadata(&metadata)?
+            .map(|entry| {
+                entry
+                    .read(&root, &self.contracts, asset, baseline)
+                    .map_err(ReviewDraftError::Io)
+            })
+            .transpose()
+    }
+
+    fn current_coco(
+        &self,
+        session: Uuid,
+        review: &ReviewSession,
+    ) -> Result<Value, ReviewDraftError> {
+        let reader = AnnotationReader::new(Arc::clone(&self.owner))
+            .map_err(|_| ReviewDraftError::InvalidArtifact)?;
+        let current = reader
+            .read(session, review.asset_id)
+            .map_err(|_| ReviewDraftError::InvalidArtifact)?;
+        if current.dataset_id != review.dataset_id
+            || current.image_digest != review.base_image_digest
+            || current.annotation_digest != review.base_annotation_digest
+        {
+            return Err(ReviewDraftError::RevisionConflict);
+        }
+        current.formal_coco.ok_or(ReviewDraftError::InvalidArtifact)
     }
 
     fn load(&self, snapshot: &DraftSnapshot) -> Result<Option<StoredDraft>, ReviewDraftError> {
@@ -436,13 +535,17 @@ fn annotation_categories(document: &Value) -> BTreeMap<u64, u64> {
         .collect()
 }
 
-fn retain_tracks(old: &StoredDraft, next: &Value) -> Vec<ReviewTrackBinding> {
-    if old.track_bindings.is_empty() {
+fn retain_tracks(
+    bindings: &[ReviewTrackBinding],
+    old: &Value,
+    next: &Value,
+) -> Vec<ReviewTrackBinding> {
+    if bindings.is_empty() {
         return Vec::new();
     }
-    let old_categories = annotation_categories(&old.coco_document);
+    let old_categories = annotation_categories(old);
     let next_categories = annotation_categories(next);
-    old.track_bindings
+    bindings
         .iter()
         .filter(|binding| {
             old_categories

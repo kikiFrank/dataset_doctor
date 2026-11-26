@@ -107,7 +107,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
           width: currentEvidence.report.width, height: currentEvidence.report.height,
         } };
       if (!proof) throw new Error("请先运行标注检查，取得当前图像尺寸。");
-      const boxes = seedBoxes(source, loaded.categories, draft?.track_selections);
+      const boxes = seedBoxes(source, loaded.categories, draft?.track_selections ?? loaded.initial_track_selections);
       setEditor({
         review: loaded.review,
         categories: loaded.categories,

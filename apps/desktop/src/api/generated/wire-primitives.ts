@@ -224,7 +224,7 @@ export type DraftReceipt = { review_id: UuidText, draft_revision: DecimalU64, dr
 
 export type ReviewDraftView = { receipt: DraftReceipt, source_task_id: UuidText, coco_document: CocoDocument, track_selections?: Array<ReviewTrackSelection>, };
 
-export type ReviewEditorView = { review: ReviewSession, categories: Array<CocoCategory>, draft: ReviewDraftView | null, };
+export type ReviewEditorView = { review: ReviewSession, categories: Array<CocoCategory>, draft: ReviewDraftView | null, initial_track_selections?: Array<ReviewTrackSelection>, };
 
 export type MediaPurpose = "DISPLAY";
 

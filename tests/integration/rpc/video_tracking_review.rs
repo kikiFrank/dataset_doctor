@@ -405,6 +405,123 @@ async fn explicit_adoption_and_the_recoverable_final_track_map_survive_reopen_an
             .unwrap(),
         coco
     );
+    let track_output = Connection::open(restored.join("workspace.db"))
+        .unwrap()
+        .query_row(
+            "SELECT output_manifest_path FROM tasks WHERE task_id=?1",
+            [tracking.task_id.to_string()],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap();
+    let retired_candidate = restored
+        .join(track_output)
+        .with_file_name("video-tracks.json");
+    let retired_bytes = fs::read(&retired_candidate).unwrap();
+    fs::write(&retired_candidate, b"retired candidate awaiting cleanup").unwrap();
+    let mut geometry = GeometryRuntime::launch(
+        Arc::clone(owner),
+        restored_session,
+        fixture.python.clone(),
+        fixture.entry.clone(),
+    )
+    .await
+    .unwrap();
+    let checked_final = geometry
+        .audit(GeometryAuditRequest {
+            dataset_id: setup.dataset,
+            asset_id: asset,
+            request_id: Uuid::new_v4(),
+            idempotency_key: Uuid::new_v4(),
+            max_pixels: 10_000,
+        })
+        .await
+        .unwrap();
+    assert_eq!(checked_final.status, "SUCCEEDED");
+    geometry.shutdown().await.unwrap();
+    let next_review = owner
+        .open_review(restored_session, setup.dataset, asset, 265)
+        .unwrap();
+    let initial = service
+        .editor_state(restored_session, next_review.review_id)
+        .unwrap();
+    assert!(initial.draft.is_none());
+    assert_eq!(initial.initial_track_bindings[0].local_annotation_id, 10);
+    assert_eq!(initial.initial_track_bindings[0].track_id, choice.track_id);
+    let mut next_coco = coco.clone();
+    next_coco["annotations"][0]["bbox"][0] = json!(14);
+    let draft_request = |document| ReviewDraftRequest {
+        review_id: next_review.review_id,
+        source_task_id: checked_final.task_id,
+        expected_review_revision: next_review.row_revision,
+        expected_draft_revision: None,
+        coco_document: serde_json::to_vec(&document).unwrap(),
+    };
+    let mut incorrect = next_coco.clone();
+    incorrect["annotations"][0]["id"] = json!(11);
+    assert!(
+        service
+            .save_with_tracks(
+                restored_session,
+                draft_request(incorrect),
+                &[ReviewTrackSelection {
+                    local_annotation_id: 11,
+                    ..choice
+                }],
+                266
+            )
+            .is_err()
+    );
+    let next_draft = service
+        .save_with_tracks(
+            restored_session,
+            draft_request(next_coco.clone()),
+            &[ReviewTrackSelection {
+                local_annotation_id: 10,
+                ..choice
+            }],
+            266,
+        )
+        .unwrap();
+    let next_final = finals
+        .prepare(
+            restored_session,
+            ReviewFinalRequest {
+                review_id: next_review.review_id,
+                expected_review_revision: next_draft.review_revision,
+                base_image_digest: next_review.base_image_digest,
+                base_annotation_digest: next_review.base_annotation_digest,
+                draft_digest: next_draft.draft_digest,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                confirmed_negative: false,
+            },
+            267,
+        )
+        .unwrap();
+    assert_eq!(
+        finals
+            .resume(restored_session, next_final.operation_id, 268)
+            .unwrap()
+            .state,
+        FinalOperationState::Committed
+    );
+    let updated_metadata = read_metadata(&restored);
+    assert_ne!(updated_metadata["current_track_map_ref"], *reference);
+    let updated_path = updated_metadata["current_track_map_entry"]["relative_path"]
+        .as_str()
+        .unwrap();
+    let updated_map: serde_json::Value =
+        serde_json::from_slice(&fs::read(restored.join(updated_path)).unwrap()).unwrap();
+    let updated_view = annotation.read(restored_session, asset).unwrap();
+    assert_eq!(updated_view.formal_coco.unwrap(), next_coco);
+    assert_eq!(
+        updated_map["annotation_digest"],
+        updated_view.annotation_digest.unwrap()
+    );
+    assert_ne!(updated_map["annotation_digest"], map["annotation_digest"]);
+    assert_eq!(updated_map["bindings"], map["bindings"]);
+    assert_eq!(updated_map["frame"], map["frame"]);
+    fs::write(retired_candidate, retired_bytes).unwrap();
     owner.close(restored_session).unwrap();
     let rejected = fixture
         .root

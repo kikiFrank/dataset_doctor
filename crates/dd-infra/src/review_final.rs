@@ -360,6 +360,26 @@ impl ReviewFinalService {
             return Ok(None);
         }
         let invalid = || ReviewFinalError::Draft(ReviewDraftError::InvalidTrackingSelection);
+        if let Some(mut current) = self
+            .drafts
+            .current_track_map(session, &target.review)
+            .map_err(ReviewFinalError::Draft)?
+        {
+            if bindings
+                .iter()
+                .any(|binding| !current.bindings.contains(binding))
+            {
+                return Err(invalid());
+            }
+            current.annotation_digest = annotation_digest.to_owned();
+            current.bindings = bindings;
+            return Ok(Some(TrackMapEntry::publish(
+                &target.root,
+                &self.drafts.contracts,
+                &current,
+                operation,
+            )?));
+        }
         let work = VideoAnnotationService::new(Arc::clone(&self.owner)).map_err(|_| invalid())?;
         let candidates = work
             .staging_tracking_candidates_locked(

@@ -214,6 +214,8 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 
 审核中的 `track_selections` 记录明确采用的局部标注 ID 与轨迹 ID。Core 按当前待接收帧和类别核验选择。`review_open` 恢复已存草稿时返回其有效选择，前端用它恢复关联和编辑状态。
 
+再次打开已有 Final 的样本且暂无草稿时，`review_open` 通过 `initial_track_selections` 返回已核验正式标注摘要下仍适用的轨迹关联。保留同一局部标注 ID 和类别后继续提交，新 Final 为相同轨迹封存更新后的正式摘要。
+
 #### C4.3 视频、采样与 Staging
 
 | 命令 | 输入 | 输出 | 规则/失败重点 |

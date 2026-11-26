@@ -983,5 +983,36 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         restored["draft"]["receipt"]["draft_digest"],
         saved.draft_digest
     );
-    assert!(read_annotation(asset)["formal_coco"].is_null());
+    assert!(read_annotation(asset.clone())["formal_coco"].is_null());
+    let published = commands
+        .commit_review(ReviewCommitRequest {
+            context: context(reopened),
+            review_id: editor.review.review_id,
+            expected_review_revision: saved.review_revision,
+            base_image_digest: editor.review.base_image_digest,
+            base_annotation_digest: None,
+            draft_digest: saved.draft_digest,
+            confirmed_negative: false,
+        })
+        .unwrap();
+    assert_eq!(wait(reopened, published.task_id).status, "SUCCEEDED");
+    let current = read_annotation(asset.clone());
+    assert!(current["tracking_candidates"].is_null());
+    let edit = commands
+        .open_review(ReviewOpenRequest {
+            context: context(reopened),
+            dataset_id: dataset.clone(),
+            asset_id: asset,
+            base_image_digest: current["image_digest"].as_str().unwrap().to_owned(),
+            base_annotation_digest: Some(current["annotation_digest"].as_str().unwrap().to_owned()),
+        })
+        .unwrap();
+    let edit = serde_json::to_value(edit).unwrap();
+    assert!(edit["draft"].is_null());
+    assert_eq!(
+        edit["initial_track_selections"],
+        serde_json::json!([
+            {"local_annotation_id":9,"track_id":selected_track}
+        ])
+    );
 }

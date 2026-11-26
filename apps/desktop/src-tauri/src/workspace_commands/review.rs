@@ -94,22 +94,7 @@ impl Commands {
                     source_task_id: self.uuid_text(draft.source_task_id.to_string())?,
                     coco_document: serde_json::from_value(draft.coco_document)
                         .map_err(|_| self.error("INTERNAL", "审核草稿数据无效。"))?,
-                    track_selections: if draft.track_bindings.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            draft
-                                .track_bindings
-                                .into_iter()
-                                .map(|binding| {
-                                    Ok(ReviewTrackSelection {
-                                        local_annotation_id: binding.local_annotation_id,
-                                        track_id: self.uuid_text(binding.track_id.to_string())?,
-                                    })
-                                })
-                                .collect::<Result<_, AppError>>()?,
-                        )
-                    },
+                    track_selections: self.review_track_selections(draft.track_bindings)?,
                 })
             })
             .transpose()?;
@@ -124,6 +109,8 @@ impl Commands {
                 })
                 .collect(),
             draft,
+            initial_track_selections: self
+                .review_track_selections(editor.initial_track_bindings)?,
         })
     }
 
@@ -182,6 +169,25 @@ impl Commands {
 
     fn drafts(&self) -> Result<ReviewDraftService, AppError> {
         ReviewDraftService::new(Arc::clone(&self.thread)).map_err(|error| self.draft_error(error))
+    }
+
+    fn review_track_selections(
+        &self,
+        bindings: Vec<review_draft::ReviewTrackBinding>,
+    ) -> Result<Option<Vec<ReviewTrackSelection>>, AppError> {
+        if bindings.is_empty() {
+            return Ok(None);
+        }
+        bindings
+            .into_iter()
+            .map(|binding| {
+                Ok(ReviewTrackSelection {
+                    local_annotation_id: binding.local_annotation_id,
+                    track_id: self.uuid_text(binding.track_id.to_string())?,
+                })
+            })
+            .collect::<Result<_, AppError>>()
+            .map(Some)
     }
 
     fn draft_receipt(&self, receipt: review_draft::DraftReceipt) -> Result<DraftReceipt, AppError> {

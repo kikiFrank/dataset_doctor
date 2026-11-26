@@ -42,6 +42,29 @@ pub(crate) struct TrackMapEntry {
 
 impl TrackMapEntry {
     #[cfg(feature = "execution-rpc")]
+    pub fn from_metadata(metadata: &str) -> io::Result<Option<Self>> {
+        let document: serde_json::Value =
+            serde_json::from_str(metadata).map_err(io::Error::other)?;
+        match (
+            document.get("current_track_map_ref"),
+            document.get("current_track_map_entry"),
+        ) {
+            (None, None) => Ok(None),
+            (Some(reference), Some(entry)) => {
+                let reference: ArtifactReference =
+                    serde_json::from_value(reference.clone()).map_err(io::Error::other)?;
+                let entry: Self =
+                    serde_json::from_value(entry.clone()).map_err(io::Error::other)?;
+                if entry.reference != reference {
+                    return Err(invalid());
+                }
+                Ok(Some(entry))
+            }
+            _ => Err(invalid()),
+        }
+    }
+
+    #[cfg(feature = "execution-rpc")]
     pub fn publish(
         root: &Path,
         contracts: &JsonContracts,

@@ -155,6 +155,9 @@ pub struct ReviewEditorView {
     pub review: ReviewSession,
     pub categories: Vec<CocoCategory>,
     pub draft: Option<ReviewDraftView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub initial_track_selections: Option<Vec<ReviewTrackSelection>>,
 }
 
 #[derive(Deserialize, TS)]
