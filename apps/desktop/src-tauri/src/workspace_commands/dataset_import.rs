@@ -107,7 +107,7 @@ impl Commands {
             request_id,
             idempotency_key,
         };
-        let now = self.import_now()?;
+        let now = self.now_ms()?;
         let task = imports
             .submit_inspection(session, request.clone(), now)
             .map_err(|error| self.import_error(error))?;
@@ -138,7 +138,7 @@ impl Commands {
             request_id,
             idempotency_key,
         };
-        let now = self.import_now()?;
+        let now = self.now_ms()?;
         let task = imports
             .submit_confirmation(session, request, now)
             .map_err(|error| self.import_error(error))?;
@@ -162,7 +162,7 @@ impl Commands {
     ) -> Result<ImportTaskView, AppError> {
         let session = self.session(request.context)?;
         let id = self.parse_uuid(request.task_id)?;
-        let now = self.import_now()?;
+        let now = self.now_ms()?;
         match imports.inspection_task(session, id, now) {
             Ok(task) => {
                 let preview = task
@@ -244,15 +244,6 @@ impl Commands {
             .clone()
             .ok_or_else(|| self.error("INVALID_ARGUMENT", "导入请求缺少幂等键。"))?;
         Ok((self.session(context)?, request_id, self.parse_uuid(key)?))
-    }
-
-    fn import_now(&self) -> Result<i64, AppError> {
-        i64::try_from(
-            OffsetDateTime::now_utc()
-                .unix_timestamp_nanos()
-                .div_euclid(1_000_000),
-        )
-        .map_err(|_| self.error("INTERNAL", "无法获取导入时间。"))
     }
 
     pub(super) fn import_operation(

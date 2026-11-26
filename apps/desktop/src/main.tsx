@@ -15,6 +15,7 @@ function App() {
   const [workspace, setWorkspace] = useState<OpenWorkspace | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [reviewBlocked, setReviewBlocked] = useState(false);
 
   useEffect(() => {
     void acknowledgeDesktopRuntime().then(async (runtime) => {
@@ -66,7 +67,7 @@ function App() {
         <h1>{workspace?.display_name ?? "工作区"}</h1>
         <p role="status">{status}</p>
         {workspace && <p>离线资源 {workspace.offline_asset_count}</p>}
-        <button type="button" disabled={busy || !runtimeConnected} onClick={() => void toggleWorkspace()}>
+        <button type="button" disabled={busy || !runtimeConnected || reviewBlocked} onClick={() => void toggleWorkspace()}>
           {workspace ? "关闭工作区" : "打开工作区"}
         </button>
         {!workspace && (
@@ -81,7 +82,8 @@ function App() {
           </form>
         )}
         {error && <p role="alert">{error}</p>}
-        {workspace && <DatasetBrowser key={workspace.workspace_session_id} workspace={workspace} />}
+        {workspace && <DatasetBrowser key={workspace.workspace_session_id} workspace={workspace}
+          reviewBlocked={reviewBlocked} onReviewBlocked={setReviewBlocked} />}
       </main>
     </div>
   );

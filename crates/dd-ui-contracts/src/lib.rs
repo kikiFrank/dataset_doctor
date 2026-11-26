@@ -36,6 +36,12 @@ impl From<u64> for DecimalU64 {
     }
 }
 
+impl From<DecimalU64> for u64 {
+    fn from(value: DecimalU64) -> Self {
+        value.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 #[serde(try_from = "String", into = "String")]
 #[ts(type = "string")]
@@ -161,6 +167,12 @@ pub fn wire_primitives_typescript() -> String {
         annotation::AnnotationGetRequest::decl(&config),
         annotation::AnnotationView::decl(&config),
         annotation::ReviewSession::decl(&config),
+        annotation::ReviewOpenRequest::decl(&config),
+        annotation::ReviewSaveDraftRequest::decl(&config),
+        annotation::ReviewCancelRequest::decl(&config),
+        annotation::DraftReceipt::decl(&config),
+        annotation::ReviewDraftView::decl(&config),
+        annotation::ReviewEditorView::decl(&config),
         annotation::MediaPurpose::decl(&config),
         annotation::MediaGetLocatorRequest::decl(&config),
         annotation::DisplayLocator::decl(&config),

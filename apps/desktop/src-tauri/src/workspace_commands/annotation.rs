@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use dd_infra::annotation_view::{AnnotationReadError, AnnotationReader};
-use dd_infra::review_store::ReviewStatus;
 use dd_infra::workspace_thread::WorkspaceThread;
-use dd_ui_contracts::annotation::{AnnotationGetRequest, AnnotationView, ReviewSession};
+use dd_ui_contracts::annotation::{AnnotationGetRequest, AnnotationView};
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
 
@@ -126,24 +125,8 @@ impl Commands {
                 let review = self
                     .thread
                     .get_review(session, id)
-                    .map_err(|error| self.map_error(error))?;
-                let status = match review.status {
-                    ReviewStatus::Open => "OPEN",
-                    ReviewStatus::Committing => "COMMITTING",
-                    ReviewStatus::Confirmed => "CONFIRMED",
-                    ReviewStatus::Cancelled => "CANCELLED",
-                    ReviewStatus::Conflict => "CONFLICT",
-                    ReviewStatus::Stale => "STALE",
-                };
-                Ok::<_, AppError>(ReviewSession {
-                    review_id: self.uuid_text(id.to_string())?,
-                    asset_id: self.uuid_text(review.asset_id.to_string())?,
-                    status: status.into(),
-                    row_revision: review.row_revision.into(),
-                    base_image_digest: review.base_image_digest,
-                    base_annotation_digest: review.base_annotation_digest,
-                    base_label_schema_digest: review.base_label_schema_digest,
-                })
+                    .map_err(|error| self.review_error(error))?;
+                self.review_view(review)
             })
             .transpose()?;
         Ok(AnnotationView {

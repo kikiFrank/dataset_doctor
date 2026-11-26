@@ -21,7 +21,7 @@ use crate::dataset_query::{
     RegisteredImage,
 };
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
-use crate::review_store::{ReviewSession, ReviewStoreError};
+use crate::review_store::{ReviewBaseline, ReviewSession, ReviewStoreError};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission};
@@ -324,11 +324,33 @@ impl WorkspaceThread {
         asset: Uuid,
         now_ms: i64,
     ) -> Result<ReviewSession, WorkspaceThreadError> {
+        self.open_review_at_baseline(session, dataset, asset, None, now_ms)
+    }
+
+    pub fn open_review_checked(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        asset: Uuid,
+        baseline: ReviewBaseline,
+        now_ms: i64,
+    ) -> Result<ReviewSession, WorkspaceThreadError> {
+        self.open_review_at_baseline(session, dataset, asset, Some(baseline), now_ms)
+    }
+
+    fn open_review_at_baseline(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        asset: Uuid,
+        expected: Option<ReviewBaseline>,
+        now_ms: i64,
+    ) -> Result<ReviewSession, WorkspaceThreadError> {
         #[cfg(feature = "execution-rpc")]
         let _guard = self.lock_final_operations()?;
         self.workspace_action(session, move |workspace| {
             workspace
-                .open_review(dataset, asset, now_ms)
+                .open_review(dataset, asset, expected, now_ms)
                 .map_err(WorkspaceThreadError::Review)
         })
     }

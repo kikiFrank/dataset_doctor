@@ -31,6 +31,11 @@ pub struct ReviewSession {
     pub base_label_schema_digest: String,
 }
 
+pub struct ReviewBaseline {
+    pub image_digest: String,
+    pub annotation_digest: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum ReviewStoreError {
     Database(rusqlite::Error),
@@ -72,11 +77,19 @@ impl OpenedWorkspace {
         &mut self,
         dataset: Uuid,
         asset: Uuid,
+        expected: Option<ReviewBaseline>,
         now_ms: i64,
     ) -> Result<ReviewSession, ReviewStoreError> {
         let binding = self
             .registered_image(dataset, asset)
             .map_err(ReviewStoreError::Dataset)?;
+        let annotation_digest = binding.annotation.map(|file| file.sha256);
+        if expected.as_ref().is_some_and(|expected| {
+            expected.image_digest != binding.image.sha256
+                || expected.annotation_digest != annotation_digest
+        }) {
+            return Err(ReviewStoreError::RevisionConflict);
+        }
         let transaction = self.connection.transaction()?;
         let existing = transaction.query_row(
             &format!("SELECT {REVIEW_COLUMNS} FROM review_sessions
@@ -85,6 +98,13 @@ impl OpenedWorkspace {
             decode,
         ).optional()?.transpose()?;
         if let Some(existing) = existing {
+            if expected.is_some()
+                && (existing.base_image_digest != binding.image.sha256
+                    || existing.base_annotation_digest != annotation_digest
+                    || existing.base_label_schema_digest != binding.label_schema_fingerprint)
+            {
+                return Err(ReviewStoreError::RevisionConflict);
+            }
             return Ok(existing);
         }
         let review = ReviewSession {
@@ -94,7 +114,7 @@ impl OpenedWorkspace {
             status: ReviewStatus::Open,
             row_revision: 0,
             base_image_digest: binding.image.sha256,
-            base_annotation_digest: binding.annotation.map(|file| file.sha256),
+            base_annotation_digest: annotation_digest,
             base_label_schema_digest: binding.label_schema_fingerprint,
         };
         transaction.execute(

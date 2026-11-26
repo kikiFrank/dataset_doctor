@@ -113,3 +113,23 @@ button:disabled { opacity: 0.58; cursor: wait; }
 .import-path { overflow-wrap: anywhere; }
 .import-preview { max-height: 240px; overflow: auto; padding-left: 20px; }
 .import-preview small { margin-left: 12px; opacity: 0.8; }
+
+.review-panel { margin: 18px 0; border-top: 1px solid #d5dee9; }
+.review-panel h5 { margin: 16px 0 8px; font-size: 1rem; }
+.review-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px); gap: 12px; }
+.review-viewport { margin: 10px 0 6px; max-height: 60vh; overflow: auto; background: #15253b; }
+.review-image { width: 100%; height: auto; display: block; touch-action: none; }
+.review-image.zoom-150 { width: 150%; }
+.review-image.zoom-200 { width: 200%; }
+.review-image rect { fill: #1e9f9b22; stroke: #96ebdd; stroke-width: 2px; cursor: pointer; }
+.review-image rect.selected-box { stroke: #ffe389; }
+.review-image rect.preview-box { stroke-dasharray: 4 3; pointer-events: none; }
+.review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.review-inspector > label { display: grid; gap: 4px; }
+.review-inspector fieldset { margin: 10px 0 0; border: 1px solid #d5dee9; min-width: 0; }
+.review-coordinates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
+.review-coordinates label { display: grid; gap: 3px; }
+.review-coordinates input { min-width: 0; }
+@media (max-width: 1100px) {
+  .review-layout { grid-template-columns: minmax(0, 1fr); }
+}

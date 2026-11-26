@@ -21,6 +21,7 @@ pub(crate) mod annotation;
 pub(crate) mod dataset;
 pub(crate) mod dataset_import;
 pub(crate) mod geometry;
+pub(crate) mod review;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
@@ -39,6 +40,10 @@ mod import_tests;
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/geometry.rs"]
 mod geometry_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/review.rs"]
+mod review_tests;
 
 #[tauri::command]
 pub async fn path_select(
@@ -210,6 +215,15 @@ struct Commands {
 }
 
 impl Commands {
+    fn now_ms(&self) -> Result<i64, AppError> {
+        i64::try_from(
+            OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000),
+        )
+        .map_err(|_| self.error("INTERNAL", "无法获取当前时间。"))
+    }
+
     fn session(&self, context: CommandContext) -> Result<Uuid, AppError> {
         let current = self
             .thread

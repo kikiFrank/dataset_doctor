@@ -160,6 +160,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset_import::dataset_import_external,
             workspace_commands::dataset_import::task_get,
             workspace_commands::geometry::annotation_geometry_submit,
+            workspace_commands::review::review_open,
+            workspace_commands::review::review_save_draft,
+            workspace_commands::review::review_cancel,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

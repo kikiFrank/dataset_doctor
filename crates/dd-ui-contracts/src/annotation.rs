@@ -69,6 +69,54 @@ pub struct ReviewSession {
 }
 
 #[derive(Deserialize, TS)]
+pub struct ReviewOpenRequest {
+    pub context: CommandContext,
+    pub dataset_id: UuidText,
+    pub asset_id: UuidText,
+    pub base_image_digest: String,
+    pub base_annotation_digest: Option<String>,
+}
+
+#[derive(Deserialize, TS)]
+pub struct ReviewSaveDraftRequest {
+    pub context: CommandContext,
+    pub review_id: UuidText,
+    pub source_task_id: UuidText,
+    pub expected_review_revision: DecimalU64,
+    pub expected_draft_revision: Option<DecimalU64>,
+    pub coco_document: CocoDocument,
+}
+
+#[derive(Deserialize, TS)]
+pub struct ReviewCancelRequest {
+    pub context: CommandContext,
+    pub review_id: UuidText,
+    pub expected_revision: DecimalU64,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct DraftReceipt {
+    pub review_id: UuidText,
+    pub draft_revision: DecimalU64,
+    pub draft_digest: String,
+    pub review_revision: DecimalU64,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct ReviewDraftView {
+    pub receipt: DraftReceipt,
+    pub source_task_id: UuidText,
+    pub coco_document: CocoDocument,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct ReviewEditorView {
+    pub review: ReviewSession,
+    pub categories: Vec<CocoCategory>,
+    pub draft: Option<ReviewDraftView>,
+}
+
+#[derive(Deserialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum MediaPurpose {
     Display,

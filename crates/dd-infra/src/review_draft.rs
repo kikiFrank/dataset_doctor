@@ -46,6 +46,12 @@ pub struct StoredDraft {
     pub coco_document: Value,
 }
 
+pub struct ReviewEditorState {
+    pub review: ReviewSession,
+    pub categories: Vec<LocalCategory>,
+    pub draft: Option<StoredDraft>,
+}
+
 #[derive(Debug)]
 pub enum ReviewDraftError {
     Setup(Box<dyn Error + Send + Sync>),
@@ -125,6 +131,27 @@ impl ReviewDraftService {
     ) -> Result<Option<StoredDraft>, ReviewDraftError> {
         let snapshot = self.snapshot(session, review)?;
         self.load(&snapshot)
+    }
+
+    pub fn editor_state(
+        &self,
+        session: Uuid,
+        review: Uuid,
+    ) -> Result<ReviewEditorState, ReviewDraftError> {
+        let snapshot = self.snapshot(session, review)?;
+        if format!("{:x}", Sha256::digest(snapshot.categories.as_bytes()))
+            != snapshot.session.base_label_schema_digest
+        {
+            return Err(ReviewDraftError::RevisionConflict);
+        }
+        let draft = self.load(&snapshot)?;
+        let categories =
+            serde_json::from_str(&snapshot.categories).map_err(ReviewDraftError::Json)?;
+        Ok(ReviewEditorState {
+            review: snapshot.session,
+            categories,
+            draft,
+        })
     }
 
     pub fn save(

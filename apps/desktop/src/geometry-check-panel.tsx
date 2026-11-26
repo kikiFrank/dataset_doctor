@@ -10,7 +10,13 @@ const errorMessages: Record<string, string> = {
   WORKER_INTERRUPTED: "检查已中断，可以重新运行。",
 };
 
-export function GeometryCheckPanel({ workspace, asset }: { workspace: OpenWorkspace; asset: AssetSummary }) {
+export type GeometryEvidence = { taskId: string; report: GeometryReportView };
+
+export function GeometryCheckPanel({ workspace, asset, onEvidence }: {
+  workspace: OpenWorkspace;
+  asset: AssetSummary;
+  onEvidence: (evidence: GeometryEvidence | null) => void;
+}) {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [report, setReport] = useState<GeometryReportView | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -35,6 +41,7 @@ export function GeometryCheckPanel({ workspace, asset }: { workspace: OpenWorksp
         key.current = null;
         if (task.status === "SUCCEEDED" && task.geometry_report) {
           setReport(task.geometry_report);
+          onEvidence({ taskId: id, report: task.geometry_report });
         } else {
           setError(errorMessages[task.error_code ?? ""] ?? "检查未完成，可以重新运行。");
         }
@@ -44,7 +51,7 @@ export function GeometryCheckPanel({ workspace, asset }: { workspace: OpenWorksp
     }
     void poll();
     return () => { current = false; clearTimeout(timer); };
-  }, [workspace, taskId, retryQuery]);
+  }, [workspace, taskId, retryQuery, onEvidence]);
 
   async function submit() {
     if (submitting || taskId) return;
@@ -52,6 +59,7 @@ export function GeometryCheckPanel({ workspace, asset }: { workspace: OpenWorksp
     setSubmitting(true);
     setError(null);
     setReport(null);
+    onEvidence(null);
     try {
       const operation = await startGeometry(workspace, asset.dataset_id, asset.asset_id, key.current);
       setTaskId(operation.task_id);

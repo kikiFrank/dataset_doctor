@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { DatasetImportPanel } from "./dataset-import-panel";
 import { GeometryCheckPanel } from "./geometry-check-panel";
-import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary } from "./api/generated/wire-primitives";
+import type { GeometryEvidence } from "./geometry-check-panel";
+import { ReviewPanel } from "./review-panel";
+import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary, DisplayLocator } from "./api/generated/wire-primitives";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
@@ -14,7 +16,9 @@ const annotationLabels: Record<AnnotationState, string> = {
   STALE: "确认已失效",
 };
 
-export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
+type ReviewGuard = { reviewBlocked: boolean; onReviewBlocked: (blocked: boolean) => void };
+
+export function DatasetBrowser({ workspace, reviewBlocked, onReviewBlocked }: { workspace: OpenWorkspace } & ReviewGuard) {
   const [page, setPage] = useState<DatasetPage | null>(null);
   const [selected, setSelected] = useState<DatasetSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
             <ul className="dataset-list">
               {page.items.map((dataset) => (
                 <li key={dataset.dataset_id}>
-                  <button type="button" aria-pressed={selected?.dataset_id === dataset.dataset_id} onClick={() => setSelected(dataset)}>
+                  <button type="button" disabled={reviewBlocked} aria-pressed={selected?.dataset_id === dataset.dataset_id} onClick={() => setSelected(dataset)}>
                     <span>{dataset.name}</span>
                     <small>{dataset.asset_count} 项资源</small>
                   </button>
@@ -68,18 +72,22 @@ export function DatasetBrowser({ workspace }: { workspace: OpenWorkspace }) {
             </ul>
             {page.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void more()}>更多数据集</button>}
           </div>
-          {selected && <AssetTable key={selected.dataset_id} workspace={workspace} dataset={selected} />}
+          {selected && <AssetTable key={selected.dataset_id} workspace={workspace} dataset={selected}
+            reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} />}
         </div>
       )}
     </section>
   );
 }
 
-function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset: DatasetSummary }) {
+function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
+  workspace: OpenWorkspace; dataset: DatasetSummary;
+} & ReviewGuard) {
   const [selected, setSelected] = useState<AssetSummary | null>(null);
   const [page, setPage] = useState<AssetPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -89,7 +97,7 @@ function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset:
       if (current) setError(workspaceCommandError(failure));
     });
     return () => { current = false; };
-  }, [workspace, dataset.dataset_id]);
+  }, [workspace, dataset.dataset_id, refresh]);
 
   async function more() {
     if (!page?.next_cursor) return;
@@ -117,7 +125,7 @@ function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset:
           <tbody>
             {page.items.map((asset) => (
               <tr key={asset.asset_id}>
-                <td><button type="button" className="asset-link" onClick={() => setSelected(asset)}>{asset.display_name}</button></td>
+                <td><button type="button" className="asset-link" disabled={reviewBlocked} onClick={() => setSelected(asset)}>{asset.display_name}</button></td>
                 <td>{asset.availability === "OFFLINE" ? "文件离线" : annotationLabels[asset.annotation_state]}
                   {asset.active_review && <small> · 审核进行中</small>}
                 </td>
@@ -127,28 +135,38 @@ function AssetTable({ workspace, dataset }: { workspace: OpenWorkspace; dataset:
         </table>
       )}
       {page?.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void more()}>更多资源</button>}
-      {selected && <AnnotationDetails key={selected.asset_id} workspace={workspace} asset={selected} />}
+      {selected && <AnnotationDetails key={selected.asset_id} workspace={workspace} asset={selected}
+        reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} onChanged={() => setRefresh((value) => value + 1)} />}
     </div>
   );
 }
 
-function AnnotationDetails({ workspace, asset }: { workspace: OpenWorkspace; asset: AssetSummary }) {
-  const [locator, setLocator] = useState<string | null>(null);
+function AnnotationDetails({ workspace, asset, reviewBlocked, onReviewBlocked, onChanged }: {
+  workspace: OpenWorkspace; asset: AssetSummary; onChanged: () => void;
+} & ReviewGuard) {
+  const [media, setMedia] = useState<DisplayLocator | null>(null);
+  const [evidence, setEvidence] = useState<GeometryEvidence | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [mediaRefresh, setMediaRefresh] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [view, setView] = useState<AnnotationView | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let current = true;
-    setView(null);
-    setError(null);
-    setLocator(null);
+    setMedia(null);
     setImageError(null);
     getDisplayLocator(workspace, asset.asset_id).then((loaded) => {
-      if (current) setLocator(loaded.locator);
+      if (current) setMedia(loaded);
     }).catch((failure: unknown) => {
       if (current) setImageError(workspaceCommandError(failure));
     });
+    return () => { current = false; };
+  }, [workspace, asset.asset_id, refresh, mediaRefresh]);
+
+  useEffect(() => {
+    let current = true;
+    setView(null);
+    setError(null);
     getAnnotation(workspace, asset.asset_id).then((loaded) => {
       if (current) setView(loaded);
     }).catch((failure: unknown) => {
@@ -157,18 +175,25 @@ function AnnotationDetails({ workspace, asset }: { workspace: OpenWorkspace; ass
     return () => { current = false; };
   }, [workspace, asset.asset_id, refresh]);
 
+  function markImageError() {
+    setImageError("图像显示授权已失效或文件无法解码。");
+  }
+
   const document = view?.formal_coco;
   return (
     <section className="annotation-details" aria-label={asset.display_name + " 的标注"}>
       <h4>{asset.display_name}</h4>
-      <button type="button" onClick={() => setRefresh((value) => value + 1)}>刷新样本</button>
-      {locator && !imageError && <img className="sample-image" src={locator} alt={asset.display_name} onError={() => setImageError("图像显示授权已失效或文件无法解码，请刷新样本。")} />}
-      {imageError && <p role="alert">{imageError}</p>}
+      <button type="button" disabled={reviewBlocked} onClick={() => setRefresh((value) => value + 1)}>刷新样本</button>
+      {media && !imageError && <img className="sample-image" src={media.locator} alt={asset.display_name} onError={markImageError} />}
+      {imageError && <p role="alert">{imageError} <button type="button" onClick={() => setMediaRefresh((value) => value + 1)}>重新读取图像</button></p>}
       {error && <p role="alert">{error}</p>}
       {!view && !error && <p role="status">正在读取标注…</p>}
       {view && <p>{annotationLabels[view.annotation_state]}{view.active_review ? " · 审核进行中" : ""}</p>}
       {view && !document && <p>此样本没有标注文件。</p>}
-      <GeometryCheckPanel workspace={workspace} asset={asset} />
+      <GeometryCheckPanel workspace={workspace} asset={asset} onEvidence={setEvidence} />
+      {view && <ReviewPanel workspace={workspace} asset={asset} annotation={view} media={imageError ? null : media}
+        evidence={evidence} onBlocked={onReviewBlocked} onImageError={markImageError}
+        onChanged={() => { setRefresh((value) => value + 1); onChanged(); }} />}
       {document && (
         <>
           <p>标注尺寸 {document.images[0].width} × {document.images[0].height} 像素</p>
