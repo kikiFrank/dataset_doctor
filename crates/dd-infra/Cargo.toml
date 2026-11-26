@@ -53,3 +53,7 @@ path = "../../tests/storage/workspace/create.rs"
 [[test]]
 name = "import_preflight"
 path = "../../tests/storage/import/preflight.rs"
+
+[[test]]
+name = "import_registration"
+path = "../../tests/storage/import/registration.rs"

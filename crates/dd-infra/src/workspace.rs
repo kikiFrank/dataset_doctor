@@ -193,7 +193,7 @@ pub struct OpenedWorkspace {
     root: PathBuf,
     identity: WorkspaceIdentity,
     // Field drop order closes SQLite before releasing the file lock.
-    _connection: Connection,
+    pub(crate) connection: Connection,
     _lock: WorkspaceLock,
 }
 
@@ -298,7 +298,7 @@ fn finish_open(
     Ok(OpenedWorkspace {
         root,
         identity,
-        _connection: connection,
+        connection,
         _lock: lock,
     })
 }

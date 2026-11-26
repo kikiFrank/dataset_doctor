@@ -16,6 +16,7 @@ const MAX_ANNOTATION_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ImportPreview {
+    pub(crate) root: PathBuf,
     pub inputs: Vec<ImportInput>,
 }
 
@@ -32,6 +33,7 @@ pub enum Annotation {
     Reference {
         path: PathBuf,
         sha256: String,
+        local_image_id: u64,
         categories: Vec<LocalCategory>,
     },
     Blocked(ImportProblem),
@@ -125,7 +127,7 @@ pub fn inspect_single_image_coco(
             annotation,
         });
     }
-    Ok(ImportPreview { inputs })
+    Ok(ImportPreview { root, inputs })
 }
 
 type SiblingCounts = HashMap<PathBuf, io::Result<HashMap<String, usize>>>;
@@ -187,6 +189,7 @@ fn inspect_annotation(
     Ok(Annotation::Reference {
         path,
         sha256: format!("{:x}", Sha256::digest(&bytes)),
+        local_image_id: references.images[0].id,
         categories: references.categories,
     })
 }
