@@ -2,13 +2,14 @@
 
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::io::{self, Read};
 use std::path::PathBuf;
 
 use rusqlite::{OptionalExtension, Row, params};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::paths::is_portable_relative_file;
+use crate::paths::{is_portable_relative_file, open_registered_file};
 use crate::sqlite::{decode_uuid, row_uuid};
 use crate::workspace::OpenedWorkspace;
 
@@ -81,12 +82,63 @@ pub struct AssetSummary {
     pub availability: String,
     pub has_annotation: bool,
     pub final_review_id: Option<Uuid>,
+    pub annotation_state: AssetAnnotationState,
+    pub active_review: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssetAnnotationState {
+    Unannotated,
+    Unreviewed,
+    ConfirmedPositive,
+    ConfirmedNegative,
+    Stale,
 }
 
 #[derive(Debug)]
 pub struct RegisteredInputFile {
     pub path: PathBuf,
     pub sha256: String,
+}
+
+impl RegisteredInputFile {
+    pub(crate) fn live_digest(&self, limit: u64) -> io::Result<bool> {
+        let mut sha = Sha256::new();
+        let size = io::copy(
+            &mut open_registered_file(&self.path)?.take(limit + 1),
+            &mut sha,
+        )?;
+        Ok(size <= limit && format!("{:x}", sha.finalize()) == self.sha256)
+    }
+}
+
+impl AssetSummary {
+    pub(crate) fn validate_confirmation(&mut self, binding: Option<RegisteredImage>) {
+        if !matches!(
+            self.annotation_state,
+            AssetAnnotationState::ConfirmedPositive | AssetAnnotationState::ConfirmedNegative
+        ) {
+            return;
+        }
+        let files = binding.and_then(|binding| {
+            binding
+                .annotation
+                .map(|annotation| (binding.image, annotation))
+        });
+        let validity = files.map(|(image, annotation)| {
+            let matches_image = image.live_digest(256 * 1024 * 1024)?;
+            let matches_annotation = annotation.live_digest(16 * 1024 * 1024)?;
+            Ok::<_, io::Error>(matches_image && matches_annotation)
+        });
+        if !matches!(validity, Some(Ok(true))) {
+            self.annotation_state = AssetAnnotationState::Stale;
+        }
+        if let Some(Err(error)) = validity {
+            if error.kind() == io::ErrorKind::NotFound {
+                self.availability = "OFFLINE".into();
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -225,35 +277,72 @@ impl OpenedWorkspace {
     ) -> Result<DatasetPage<AssetSummary>, DatasetQueryError> {
         let limit = checked_limit(size)?;
         let dataset = dataset.to_string();
-        let exists: bool = self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM datasets WHERE dataset_id=?1)",
-            [&dataset],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            return Err(DatasetQueryError::UnknownDataset);
-        }
+        let categories: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT categories_json FROM datasets WHERE dataset_id=?1",
+                [&dataset],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let categories = categories.ok_or(DatasetQueryError::UnknownDataset)?;
+        let label_schema_digest = format!("{:x}", Sha256::digest(categories.as_bytes()));
         let mut statement = self.connection.prepare(
-            "SELECT a.asset_id, a.original_filename, a.kind, a.availability, a.annotation_path IS NOT NULL, m.final_review_id
+            "SELECT a.asset_id, a.original_filename, a.kind, a.availability, a.annotation_path IS NOT NULL, m.final_review_id,
+                    EXISTS(SELECT 1 FROM review_sessions o WHERE o.asset_id=a.asset_id AND o.status IN ('OPEN','COMMITTING','CONFLICT')),
+                    COALESCE(r.status='CONFIRMED' AND r.confirmed_media_digest=a.media_digest
+                        AND r.confirmed_annotation_digest=a.annotation_digest
+                        AND r.confirmed_label_schema_digest=?4, 0),
+                    (SELECT json_extract(f.result_json,'$.confirmed_negative') FROM file_operations f
+                     WHERE f.review_id=r.review_id AND f.operation_kind='REVIEW_COMMIT' AND f.status='COMMITTED'
+                     ORDER BY f.completed_at_ms DESC LIMIT 1)
              FROM dataset_assets m JOIN assets a ON a.asset_id=m.asset_id
+             LEFT JOIN review_sessions r ON r.review_id=m.final_review_id
              WHERE m.dataset_id=?1 AND (?2 IS NULL OR m.asset_id > ?2)
              ORDER BY m.asset_id LIMIT ?3",
         )?;
         let rows = statement
             .query_map(
-                params![dataset, after.map(|id| id.to_string()), limit],
+                params![
+                    dataset,
+                    after.map(|id| id.to_string()),
+                    limit,
+                    label_schema_digest
+                ],
                 |row| {
-                    let final_review: Option<String> = row.get(5)?;
+                    let final_review_id = row
+                        .get::<_, Option<String>>(5)?
+                        .as_deref()
+                        .map(|value| decode_uuid(value, 5))
+                        .transpose()?;
+                    let has_annotation: bool = row.get(4)?;
+                    let persisted_valid: bool = row.get(7)?;
+                    let confirmed_negative: Option<bool> = row.get(8)?;
+                    let annotation_state = match (
+                        has_annotation,
+                        final_review_id,
+                        persisted_valid,
+                        confirmed_negative,
+                    ) {
+                        (false, None, _, _) => AssetAnnotationState::Unannotated,
+                        (true, None, _, _) => AssetAnnotationState::Unreviewed,
+                        (true, Some(_), true, Some(false)) => {
+                            AssetAnnotationState::ConfirmedPositive
+                        }
+                        (true, Some(_), true, Some(true)) => {
+                            AssetAnnotationState::ConfirmedNegative
+                        }
+                        _ => AssetAnnotationState::Stale,
+                    };
                     Ok(AssetSummary {
                         asset_id: row_uuid(row, 0)?,
                         filename: row.get(1)?,
                         kind: row.get(2)?,
                         availability: row.get(3)?,
-                        has_annotation: row.get(4)?,
-                        final_review_id: final_review
-                            .as_deref()
-                            .map(|value| decode_uuid(value, 5))
-                            .transpose()?,
+                        has_annotation,
+                        final_review_id,
+                        annotation_state,
+                        active_review: row.get(6)?,
                     })
                 },
             )?

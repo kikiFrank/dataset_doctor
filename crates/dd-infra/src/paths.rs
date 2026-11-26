@@ -44,6 +44,26 @@ pub(crate) fn open_scoped_file(root: &Path, relative: &Path) -> io::Result<File>
     Ok(file)
 }
 
+pub(crate) fn open_registered_file(path: &Path) -> io::Result<File> {
+    let parent = path
+        .parent()
+        .filter(|parent| parent.is_absolute())
+        .ok_or_else(|| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                "Expected an absolute registered path",
+            )
+        })?;
+    let name = path.file_name().ok_or(ErrorKind::InvalidData)?;
+    if parent.canonicalize()? != parent {
+        return Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            "Registered directory moved",
+        ));
+    }
+    open_scoped_file(parent, Path::new(name))
+}
+
 #[cfg(feature = "execution-rpc")]
 pub(crate) fn scoped_directory(root: &Path, relative: &Path) -> io::Result<PathBuf> {
     if !is_portable_relative_file(relative) {

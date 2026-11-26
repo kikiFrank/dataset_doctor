@@ -63,7 +63,7 @@ export function closeWorkspace(workspace: OpenWorkspace): Promise<CloseReceipt> 
   return invoke("workspace_close", { request });
 }
 
-function context(workspace: OpenWorkspace, request_id: string): CommandContext {
+export function context(workspace: OpenWorkspace, request_id: string): CommandContext {
   return {
     request_id,
     workspace_id: workspace.workspace_id,

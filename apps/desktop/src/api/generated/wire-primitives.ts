@@ -37,3 +37,17 @@ export type WorkspaceCloseRequest = { context: CommandContext, mode: CloseMode, 
 export type CloseReceipt = { workspace_id: UuidText, workspace_session_id: UuidText, close_state: CloseState, blocking_task_ids: Array<UuidText>, };
 
 export type AppError = { code: string, message: string, request_id: UuidText, retryable: boolean, };
+
+export type DatasetListRequest = { context: CommandContext, page_cursor?: UuidText, page_size: number, };
+
+export type DatasetSummary = { dataset_id: UuidText, name: string, asset_count: DecimalU64, unconfirmed_count: DecimalU64, row_revision: DecimalU64, label_schema_digest: string, updated_at_ms: DecimalI64, };
+
+export type DatasetPage = { items: Array<DatasetSummary>, next_cursor: UuidText | null, };
+
+export type AssetListRequest = { context: CommandContext, dataset_id: UuidText, cursor?: UuidText, page_size: number, };
+
+export type AnnotationState = "UNANNOTATED" | "UNREVIEWED" | "CONFIRMED_POSITIVE" | "CONFIRMED_NEGATIVE" | "STALE";
+
+export type AssetSummary = { asset_id: UuidText, dataset_id: UuidText, display_name: string, kind: string, availability: string, annotation_state: AnnotationState, active_review: boolean, };
+
+export type AssetPage = { items: Array<AssetSummary>, next_cursor: UuidText | null, };

@@ -17,7 +17,8 @@ use dd_core::workspace::{
 use uuid::Uuid;
 
 use crate::dataset_query::{
-    AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary, RegisteredImage,
+    AssetAnnotationState, AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary,
+    RegisteredImage,
 };
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
 use crate::review_store::{ReviewSession, ReviewStoreError};
@@ -262,11 +263,31 @@ impl WorkspaceThread {
         after: Option<Uuid>,
         size: u16,
     ) -> Result<DatasetPage<AssetSummary>, WorkspaceThreadError> {
-        self.workspace_action(session, move |workspace| {
-            workspace
+        let (mut page, bindings) = self.workspace_action(session, move |workspace| {
+            let page = workspace
                 .list_assets(dataset, after, size)
-                .map_err(WorkspaceThreadError::Dataset)
-        })
+                .map_err(WorkspaceThreadError::Dataset)?;
+            let bindings: Vec<_> = page
+                .items
+                .iter()
+                .map(|asset| {
+                    if matches!(
+                        asset.annotation_state,
+                        AssetAnnotationState::ConfirmedPositive
+                            | AssetAnnotationState::ConfirmedNegative
+                    ) {
+                        workspace.registered_image(dataset, asset.asset_id).ok()
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            Ok((page, bindings))
+        })?;
+        for (asset, binding) in page.items.iter_mut().zip(bindings) {
+            asset.validate_confirmation(binding);
+        }
+        Ok(page)
     }
 
     pub fn registered_image(

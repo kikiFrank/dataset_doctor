@@ -5,6 +5,7 @@ import { acknowledgeDesktopRuntime } from "./api/runtime";
 import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
+import { DatasetBrowser } from "./dataset-browser";
 import "./style.css";
 
 function App() {
@@ -80,6 +81,7 @@ function App() {
           </form>
         )}
         {error && <p role="alert">{error}</p>}
+        {workspace && <DatasetBrowser key={workspace.workspace_session_id} workspace={workspace} />}
       </main>
     </div>
   );

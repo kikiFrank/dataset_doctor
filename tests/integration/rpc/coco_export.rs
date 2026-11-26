@@ -8,6 +8,7 @@ use dd_infra::coco_export::{
     CocoExportPolicy, CocoExportRequest, CocoExportService, ExclusionReason,
 };
 use dd_infra::dataset_import::DatasetImportCoordinator;
+use dd_infra::dataset_query::AssetAnnotationState;
 use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime};
 use dd_infra::review_draft::{ReviewDraftRequest, ReviewDraftService};
 use dd_infra::review_final::{FinalOperationState, ReviewFinalRequest, ReviewFinalService};
@@ -181,6 +182,25 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
     }
     worker.shutdown().await.unwrap();
 
+    let listed = owner.list_assets(session, dataset, None, 4).unwrap();
+    let state = |name: &str| {
+        listed
+            .items
+            .iter()
+            .find(|entry| entry.filename == name)
+            .unwrap()
+            .annotation_state
+    };
+    assert_eq!(
+        state("positive.png"),
+        AssetAnnotationState::ConfirmedPositive
+    );
+    assert_eq!(
+        state("negative.png"),
+        AssetAnnotationState::ConfirmedNegative
+    );
+    assert_eq!(state("unreviewed.png"), AssetAnnotationState::Unreviewed);
+
     let export = CocoExportService::new(Arc::clone(&owner)).unwrap();
     let request = |destination_grant_id, policy| CocoExportRequest {
         dataset_id: dataset,
@@ -251,6 +271,20 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
         [fs::read(&changed).unwrap(), b" ".to_vec()].concat(),
     )
     .unwrap();
+    let after = owner.list_assets(session, dataset, None, 4).unwrap();
+    assert!(
+        after
+            .items
+            .iter()
+            .any(|entry| entry.filename == "positive.png" && entry.active_review)
+    );
+    assert!(
+        after
+            .items
+            .iter()
+            .any(|entry| entry.filename == "negative.png"
+                && entry.annotation_state == AssetAnnotationState::Stale)
+    );
     let ineligible = export.eligibility(session, dataset).unwrap();
     assert!(
         ineligible

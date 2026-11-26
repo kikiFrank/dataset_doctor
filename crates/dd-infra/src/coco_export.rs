@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use self::selection::{ExportableImage, PreparedSelection, collect};
 use crate::json::JsonContracts;
-use crate::paths::open_scoped_file;
+use crate::paths::open_registered_file;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const IMAGE_LIMIT: u64 = 256 * 1024 * 1024;
@@ -261,7 +261,7 @@ fn next_coco_id(current: usize) -> Result<u64, CocoExportError> {
 }
 
 fn copy_image(sample: &ExportableImage, path: &Path) -> Result<(), CocoExportError> {
-    let source = open_source(&sample.media.path)?;
+    let source = open_registered_file(&sample.media.path)?;
     let mut target = File::create_new(path)?;
     if io::copy(&mut source.take(IMAGE_LIMIT + 1), &mut target)? > IMAGE_LIMIT {
         return Err(CocoExportError::InputChanged);
@@ -279,26 +279,9 @@ fn copy_image(sample: &ExportableImage, path: &Path) -> Result<(), CocoExportErr
     Ok(())
 }
 
-fn open_source(path: &Path) -> io::Result<File> {
-    let Some(parent) = path.parent().filter(|parent| parent.is_absolute()) else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Expected an absolute registered path",
-        ));
-    };
-    let name = path.file_name().ok_or(io::ErrorKind::InvalidData)?;
-    if parent.canonicalize()? != parent {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Registered directory moved",
-        ));
-    }
-    open_scoped_file(parent, Path::new(name))
-}
-
 fn hash_file(path: &Path, limit: u64) -> io::Result<String> {
     let mut sha = Sha256::new();
-    if io::copy(&mut open_source(path)?.take(limit + 1), &mut sha)? > limit {
+    if io::copy(&mut open_registered_file(path)?.take(limit + 1), &mut sha)? > limit {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "Source exceeds the export size limit",

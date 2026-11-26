@@ -8,11 +8,11 @@ use uuid::Uuid;
 
 use super::{
     ANNOTATION_LIMIT, CocoExportError, ExcludedAsset, ExclusionReason, IMAGE_LIMIT, hash_file,
-    open_source,
 };
 use crate::dataset_query::{DatasetQueryError, RegisteredImage, RegisteredInputFile};
 use crate::import_preflight::LocalCategory;
 use crate::json::{JsonContracts, JsonProfile};
+use crate::paths::open_registered_file;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 pub(super) struct PreparedSelection {
@@ -163,7 +163,7 @@ fn confirmed(
         return Err(ExclusionReason::InputChanged);
     }
     let mut bytes = Vec::new();
-    open_source(&annotation.path)
+    open_registered_file(&annotation.path)
         .map_err(file_error)?
         .take(ANNOTATION_LIMIT + 1)
         .read_to_end(&mut bytes)

@@ -132,6 +132,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::workspace_create,
             workspace_commands::workspace_get,
             workspace_commands::workspace_close,
+            workspace_commands::dataset::dataset_list,
+            workspace_commands::dataset::asset_list,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

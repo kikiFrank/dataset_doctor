@@ -17,11 +17,17 @@ use uuid::Uuid;
 
 use crate::RuntimeMode;
 
+pub(crate) mod dataset;
+
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/workspace_create.rs"]
 mod create_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/dataset_browse.rs"]
+mod dataset_tests;
 
 #[tauri::command]
 pub async fn path_select(
@@ -172,6 +178,16 @@ struct Commands {
 }
 
 impl Commands {
+    fn session(&self, context: CommandContext) -> Result<Uuid, AppError> {
+        let current = self
+            .thread
+            .current()
+            .map_err(|failure| self.map_error(failure))?
+            .ok_or_else(|| self.error("WORKSPACE_NOT_OPEN", "工作区已关闭。"))?;
+        self.verify_context(&current, context)?;
+        Ok(current.workspace_session_id)
+    }
+
     fn create(&self, request: WorkspaceCreateRequest) -> Result<WorkspaceSnapshot, AppError> {
         let grant = self.parse_uuid(request.directory_grant_id)?;
         let now_ms = i64::try_from(

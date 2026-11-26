@@ -1,5 +1,6 @@
 //! Tauri message contracts shared with the desktop frontend.
 
+pub mod dataset;
 pub mod workspace;
 
 use std::fmt::Display;
@@ -49,6 +50,12 @@ impl TryFrom<String> for DecimalI64 {
 impl From<DecimalI64> for String {
     fn from(value: DecimalI64) -> Self {
         value.0.to_string()
+    }
+}
+
+impl From<i64> for DecimalI64 {
+    fn from(value: i64) -> Self {
+        Self(value)
     }
 }
 
@@ -125,6 +132,13 @@ pub fn wire_primitives_typescript() -> String {
         workspace::WorkspaceCloseRequest::decl(&config),
         workspace::CloseReceipt::decl(&config),
         workspace::AppError::decl(&config),
+        dataset::DatasetListRequest::decl(&config),
+        dataset::DatasetSummary::decl(&config),
+        dataset::DatasetPage::decl(&config),
+        dataset::AssetListRequest::decl(&config),
+        dataset::AnnotationState::decl(&config),
+        dataset::AssetSummary::decl(&config),
+        dataset::AssetPage::decl(&config),
     ] {
         output.push_str("\nexport ");
         output.push_str(&declaration);

@@ -14,7 +14,7 @@ New-Item -ItemType Directory -Path $run -Force | Out-Null
 $env:DD_DESKTOP_COMMANDS_RUN_DIR = $run
 $log = Join-Path $run 'check.log'
 $args = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
-    '--target', 'x86_64-pc-windows-msvc', '-p', 'dd-desktop', 'workspace_commands::create_tests')
+    '--target', 'x86_64-pc-windows-msvc', '-p', 'dd-desktop', 'workspace_commands::')
 "Running desktop host tests without starting WebView2. Log: $log" | Tee-Object -FilePath $log
 $ErrorActionPreference = 'Continue'
 & $cargo @args 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
