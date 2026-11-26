@@ -133,18 +133,7 @@ impl Commands {
         let observations = data
             .observations
             .into_iter()
-            .map(|observation| {
-                Ok(TrackObservationView {
-                    frame_index: DecimalU64::try_from(observation.frame_index)
-                        .map_err(|_| invalid())?,
-                    track_id: self.uuid_text(observation.track_id.to_string())?,
-                    category_id: DecimalU64::try_from(observation.category_id)
-                        .map_err(|_| invalid())?,
-                    bbox_xywh: observation.bbox_xywh,
-                    source: observation.source,
-                    mean_absolute_error: observation.mean_absolute_error,
-                })
-            })
+            .map(|observation| self.tracking_observation(observation))
             .collect::<Result<_, AppError>>()?;
         let uncertain_ranges = data
             .uncertain_ranges
@@ -193,6 +182,21 @@ impl Commands {
     fn video_tracking_service(&self) -> Result<VideoTrackingService, AppError> {
         VideoTrackingService::new(Arc::clone(&self.thread))
             .map_err(|error| self.video_tracking_error(error))
+    }
+
+    pub(super) fn tracking_observation(
+        &self,
+        observation: dd_infra::video_tracking_runtime::TrackObservation,
+    ) -> Result<TrackObservationView, AppError> {
+        let invalid = || self.error("DATA_CORRUPTION", "无法核验已保存的追踪结果。");
+        Ok(TrackObservationView {
+            frame_index: DecimalU64::try_from(observation.frame_index).map_err(|_| invalid())?,
+            track_id: self.uuid_text(observation.track_id.to_string())?,
+            category_id: DecimalU64::try_from(observation.category_id).map_err(|_| invalid())?,
+            bbox_xywh: observation.bbox_xywh,
+            source: observation.source,
+            mean_absolute_error: observation.mean_absolute_error,
+        })
     }
 
     fn video_tracking_error(&self, error: TrackingError) -> AppError {

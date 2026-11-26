@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use dd_infra::annotation_view::{AnnotationReadError, AnnotationReader};
+use dd_infra::video_keyframes::{VideoAnnotationError, VideoAnnotationService};
 use dd_infra::workspace_thread::WorkspaceThread;
-use dd_ui_contracts::annotation::{AnnotationGetRequest, AnnotationView};
+use dd_ui_contracts::annotation::{
+    AnnotationGetRequest, AnnotationView, StagingTrackingCandidatesView,
+};
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
 
@@ -138,6 +141,28 @@ impl Commands {
                 self.review_view(review)
             })
             .transpose()?;
+        let tracking_candidates = if current.annotation_digest.is_none() {
+            let work = VideoAnnotationService::new(Arc::clone(&self.thread))
+                .map_err(|error| self.video_annotation_error(error))?;
+            match work.staging_tracking_candidates(session, current.dataset_id, asset) {
+                Ok(Some(candidates)) => Some(StagingTrackingCandidatesView::Available {
+                    tracks_ref: self.wire_artifact(candidates.reference)?,
+                    frame_index: candidates.frame_index.into(),
+                    observations: candidates
+                        .observations
+                        .into_iter()
+                        .map(|observation| self.tracking_observation(observation))
+                        .collect::<Result<_, AppError>>()?,
+                }),
+                Ok(None) => None,
+                Err(
+                    VideoAnnotationError::TrackingEvidenceInvalid | VideoAnnotationError::Io(_),
+                ) => Some(StagingTrackingCandidatesView::Unavailable),
+                Err(error) => return Err(self.video_annotation_error(error)),
+            }
+        } else {
+            None
+        };
         Ok(AnnotationView {
             asset_id: self.uuid_text(current.asset_id.to_string())?,
             image_digest: current.image_digest,
@@ -149,6 +174,7 @@ impl Commands {
                 .map_err(|_| self.error("INVALID_ARGUMENT", "标注数值超出支持范围。"))?,
             annotation_state: annotation_state(current.annotation_state),
             active_review,
+            tracking_candidates,
         })
     }
 }

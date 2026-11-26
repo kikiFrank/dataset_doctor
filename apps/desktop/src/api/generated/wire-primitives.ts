@@ -204,7 +204,9 @@ export type CocoDocument = { images: Array<CocoImage>, annotations: Array<CocoBo
 
 export type AnnotationGetRequest = { context: CommandContext, asset_id: UuidText, };
 
-export type AnnotationView = { asset_id: UuidText, image_digest: string, annotation_digest: string | null, formal_coco: CocoDocument | null, annotation_state: AnnotationState, active_review: ReviewSession | null, };
+export type StagingTrackingCandidatesView = { "status": "AVAILABLE", tracks_ref: ArtifactReference, frame_index: DecimalU64, observations: Array<TrackObservationView>, } | { "status": "UNAVAILABLE" };
+
+export type AnnotationView = { asset_id: UuidText, image_digest: string, annotation_digest: string | null, formal_coco: CocoDocument | null, annotation_state: AnnotationState, active_review: ReviewSession | null, tracking_candidates?: StagingTrackingCandidatesView, };
 
 export type ReviewSession = { review_id: UuidText, asset_id: UuidText, status: string, row_revision: DecimalU64, base_image_digest: string, base_annotation_digest: string | null, base_label_schema_digest: string, };
 

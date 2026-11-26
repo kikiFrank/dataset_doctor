@@ -20,6 +20,7 @@ use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 #[derive(Debug)]
 pub struct AnnotationView {
     pub asset_id: Uuid,
+    pub dataset_id: Uuid,
     pub image_digest: String,
     pub annotation_digest: Option<String>,
     pub formal_coco: Option<Value>,
@@ -140,6 +141,7 @@ impl AnnotationReader {
             .transpose()?;
         Ok(AnnotationView {
             asset_id: asset,
+            dataset_id: binding.dataset_id,
             image_digest,
             annotation_digest,
             formal_coco,

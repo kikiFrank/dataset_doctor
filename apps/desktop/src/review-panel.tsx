@@ -87,6 +87,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   const currentEvidence = report?.image_digest === annotation.image_digest
     && report.width > 0 && report.height > 0 ? evidence : null;
   const matchingImage = media?.resource_digest === annotation.image_digest;
+  const candidates = annotation.tracking_candidates;
 
   async function begin() {
     setBusy(true);
@@ -202,6 +203,15 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   return (
     <section className="review-panel" aria-label="人工审核">
       <h5>人工审核</h5>
+      {candidates?.status === "UNAVAILABLE" && <p role="status">无法核验该帧的追踪候选。</p>}
+      {candidates?.status === "AVAILABLE" && <table aria-label={"帧 " + candidates.frame_index + " 的追踪候选"}>
+        <thead><tr><th scope="col">轨迹</th><th scope="col">类别 ID</th><th scope="col">框坐标 x、y、宽、高</th></tr></thead>
+        <tbody>{candidates.observations.map(item => <tr key={item.track_id}>
+          <td title={item.track_id}>{item.track_id.slice(0, 8)}</td>
+          <td>{item.category_id}</td>
+          <td>{item.bbox_xywh.join(", ")}</td>
+        </tr>)}</tbody>
+      </table>}
       {!editor && <button type="button" disabled={busy || (!currentEvidence && !annotation.active_review)} onClick={() => void begin()}>
         {annotation.active_review ? "继续审核" : "开始审核"}
       </button>}

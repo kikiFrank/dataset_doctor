@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{DecimalU64, UuidText, dataset::AnnotationState, workspace::CommandContext};
+use crate::{
+    ArtifactReference, DecimalU64, UuidText, dataset::AnnotationState, video::TrackObservationView,
+    workspace::CommandContext,
+};
 
 #[derive(Deserialize, TS)]
 pub struct AnnotationGetRequest {
@@ -55,6 +58,20 @@ pub struct AnnotationView {
     pub formal_coco: Option<CocoDocument>,
     pub annotation_state: AnnotationState,
     pub active_review: Option<ReviewSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tracking_candidates: Option<StagingTrackingCandidatesView>,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[serde(tag = "status", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum StagingTrackingCandidatesView {
+    Available {
+        tracks_ref: ArtifactReference,
+        frame_index: DecimalU64,
+        observations: Vec<TrackObservationView>,
+    },
+    Unavailable,
 }
 
 #[derive(Debug, Serialize, TS)]

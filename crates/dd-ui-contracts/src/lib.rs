@@ -244,6 +244,7 @@ pub fn wire_primitives_typescript() -> String {
         annotation::CocoCategory::decl(&config),
         annotation::CocoDocument::decl(&config),
         annotation::AnnotationGetRequest::decl(&config),
+        annotation::StagingTrackingCandidatesView::decl(&config),
         annotation::AnnotationView::decl(&config),
         annotation::ReviewSession::decl(&config),
         annotation::ReviewOpenRequest::decl(&config),

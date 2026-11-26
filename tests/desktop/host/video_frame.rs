@@ -446,7 +446,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
             .unwrap(),
     );
     assert_eq!(response.status(), 403);
-    let grant = owner.grant_selected_directory(root).unwrap();
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
     let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
     assert_eq!(
         commands
@@ -783,4 +783,136 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         wait(reopened, unavailable.task_id).error_code.as_deref(),
         Some("WORKER_START_FAILED")
     );
+
+    let motion = run.join("Textured staged tracking.mkv");
+    let generated =
+        std::process::Command::new(repo.join("target/dev/worker-venv/Scripts/python.exe"))
+            .args(["-I", "-B"])
+            .arg(repo.join("tests/worker/video/tracking_fixture.py"))
+            .arg(&motion)
+            .arg(std::env::var_os("DD_WORKER_VIDEO_FFMPEG").unwrap())
+            .status()
+            .unwrap();
+    assert!(generated.success());
+    let grant = commands.video_file(context(reopened), motion).unwrap();
+    let registered = commands
+        .start_video_import(
+            Arc::clone(&runner),
+            VideoImportRequest {
+                context: context(reopened),
+                file_grant_id: grant.grant_id,
+                display_name: None,
+                stream_index: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        wait(reopened, registered.operation.task_id).status,
+        "SUCCEEDED"
+    );
+    let video = registered.source_video_id;
+    let resolve = serde_json::from_value(serde_json::json!({
+        "context": context(reopened), "source_video_id": video, "target":{"frame_index":"0"},
+        "seek_policy":"AT_OR_AFTER"
+    }))
+    .unwrap();
+    let resolve = commands
+        .resolve_video_frame(Some(Arc::clone(&runner)), resolve)
+        .unwrap();
+    let FrameResolution::Accepted { operation } = resolve else {
+        panic!("expected a new frame task");
+    };
+    let frame = wait(reopened, operation.task_id).video_frame.unwrap();
+    let revision = commands
+        .video_detail(VideoGetRequest {
+            context: context(reopened),
+            source_video_id: video.clone(),
+        })
+        .unwrap()
+        .row_revision;
+    let draft = commands.save_video_keyframe(serde_json::from_value(serde_json::json!({
+        "context": context(reopened), "source_video_id": video, "target_dataset_id": dataset,
+        "frame_ref": frame, "expected_video_revision":revision,
+        "coco_document":{
+            "images":[{"id":1,"file_name":"frame.png","width":34,"height":26}],
+            "categories":[{"id":1,"name":"signal"}],
+            "annotations":[{"id":1,"image_id":1,"category_id":1,"bbox":[8,8,5,5],"area":25,"iscrowd":0}]
+        }
+    })).unwrap()).unwrap();
+    let segment = commands.save_video_segment(serde_json::from_value(serde_json::json!({
+        "context": context(reopened), "source_video_id": video, "target_dataset_id": dataset,
+        "start_us":"0","end_us":"600000","expected_revision":"0",
+        "keyframes":[{"frame_ref":draft.frame_ref,"annotation_ref":draft.annotation_ref}]
+    })).unwrap()).unwrap();
+    let track = commands
+        .start_video_tracking(
+            Some(Arc::clone(&runner)),
+            VideoTrackSubmitRequest {
+                context: context(reopened),
+                source_video_id: video.clone(),
+                target_dataset_id: dataset.clone(),
+                segment_id: segment.segment_id.clone(),
+                tracker_profile_id: None,
+                tracking_sampling_config: TrackingSamplingConfigInput {
+                    mode: DatasetSamplingMode::EveryNFrames,
+                    every_n: Some(2),
+                    interval_ms: None,
+                },
+            },
+        )
+        .unwrap();
+    let tracking_task_id = track.task_id.clone();
+    let track = wait(reopened, track.task_id).video_tracking.unwrap();
+    let mut request = sample_request(1, None);
+    request.context = context(reopened);
+    request.source_video_id = video;
+    request.segment_id = segment.segment_id;
+    request.tracking_result_ref = Some(track.tracks_ref);
+    let sampled = commands
+        .start_video_sample(Some(Arc::clone(&runner)), request)
+        .unwrap();
+    let sampled = wait(reopened, sampled.task_id).video_sample.unwrap();
+    let read_annotation = |asset: UuidText| {
+        serde_json::to_value(
+            commands
+                .annotation(dd_ui_contracts::annotation::AnnotationGetRequest {
+                    context: context(reopened),
+                    asset_id: asset,
+                })
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    assert_eq!(sampled.samples.len(), 6);
+    let candidate = read_annotation(sampled.samples[2].asset_id.clone());
+    assert!(candidate["formal_coco"].is_null());
+    let view = &candidate["tracking_candidates"];
+    assert_eq!(view["status"], "AVAILABLE");
+    assert_eq!(view["frame_index"], "2");
+    assert_eq!(
+        view["observations"][0]["bbox_xywh"],
+        serde_json::json!([11.0, 9.0, 5.0, 5.0])
+    );
+    assert_eq!(view["observations"][0]["category_id"], "1");
+    assert_eq!(
+        view["observations"][0]["track_id"],
+        String::from(track.observations[1].track_id.clone())
+    );
+    assert!(read_annotation(sampled.samples[1].asset_id.clone())["tracking_candidates"].is_null());
+    let task_folder = root
+        .join("artifacts/tasks")
+        .join(String::from(tracking_task_id));
+    let track_file = fs::read_dir(task_folder)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|attempt| attempt.path().join("video-tracks.json"))
+        .find(|file| file.is_file())
+        .unwrap();
+    let original_track = fs::read(&track_file).unwrap();
+    fs::write(&track_file, b"modified track result").unwrap();
+    let after = read_annotation(sampled.samples[2].asset_id.clone());
+    assert_eq!(after["tracking_candidates"]["status"], "UNAVAILABLE");
+    assert!(after["formal_coco"].is_null());
+    assert_eq!(after["image_digest"], candidate["image_digest"]);
+    fs::write(track_file, original_track).unwrap();
 }
