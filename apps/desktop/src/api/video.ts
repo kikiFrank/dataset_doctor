@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView } from "./generated/wire-primitives";
+import type { PathGrant, PathSelectRequest, VideoImportRequest, VideoImportView, VideoGetRequest, VideoDetail } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
 
@@ -25,4 +25,11 @@ export function importVideo(
     stream_index: streamIndex,
   };
   return invoke("video_import", { request });
+}
+
+export function getVideo(workspace: OpenWorkspace, sourceVideoId: string): Promise<VideoDetail> {
+  const request: VideoGetRequest = {
+    context: context(workspace, crypto.randomUUID()), source_video_id: sourceVideoId,
+  };
+  return invoke("video_get", { request });
 }

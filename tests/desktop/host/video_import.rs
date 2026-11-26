@@ -117,8 +117,36 @@ fn desktop_video_import_returns_a_registered_asset_and_queryable_background_task
         let finished = await_task(selected.operation.task_id);
         assert_eq!(finished.status, "SUCCEEDED");
         assert!(finished.error_code.is_none());
+        let detail = commands
+            .video_detail(dd_ui_contracts::video::VideoGetRequest {
+                context: context(),
+                source_video_id: selected.source_video_id.clone(),
+            })
+            .unwrap();
+        assert_eq!(
+            detail.source_availability,
+            dd_ui_contracts::video::VideoAvailability::Online
+        );
+        assert_eq!(detail.duration_ms, Some(500_u64.into()));
+        assert_eq!(detail.streams.len(), 1);
+        assert_eq!(detail.rotation_ccw, Some(0));
+        assert_eq!(detail.variable_frame_rate, None);
+        let old_session = session;
+        thread.close(old_session).unwrap();
+        let root = run.join("Desktop video Workspace");
+        let directory = thread.grant_selected_directory(root).unwrap();
+        let reopened = thread.open(directory.grant_id).unwrap();
+        let mut restored_context = context();
+        restored_context.workspace_session_id = id(reopened.workspace_session_id.to_string());
+        let detail = commands
+            .video_detail(dd_ui_contracts::video::VideoGetRequest {
+                context: restored_context,
+                source_video_id: selected.source_video_id,
+            })
+            .unwrap();
+        assert_eq!(detail.duration_ms, Some(500_u64.into()));
         assert_eq!(fs::read(source).unwrap(), bytes);
-        println!("The desktop host registered and probed a real synthetic clip");
+        println!("The desktop host registered, probed and reopened a real synthetic clip");
     }
 }
 

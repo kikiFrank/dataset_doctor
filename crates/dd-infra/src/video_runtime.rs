@@ -70,6 +70,9 @@ impl VideoProbeRuntime {
         let session = self.runtime.session.workspace_session_id;
         let binding = tokio::task::spawn_blocking(move || {
             let binding = load_binding(&workspace, session, receipt)?;
+            if binding.record.availability != "ONLINE" {
+                return Err(VideoRuntimeError::InvalidBinding);
+            }
             if binding.record.status == "QUEUED" {
                 let expected = format_digest(&binding.input_fingerprint);
                 workspace.workspace_action(session, move |owner| {
@@ -158,6 +161,25 @@ pub fn read_registered_video_observation(
         return Err(VideoRuntimeError::ResultUnconfirmed);
     }
     verify_live_source(&binding)?;
+    read_bound_video_observation(binding, receipt)
+}
+
+pub(crate) fn read_stored_video_observation(
+    workspace: &WorkspaceThread,
+    session: Uuid,
+    receipt: VideoImportReceipt,
+) -> Result<VideoProbeObservation, VideoRuntimeError> {
+    let binding = load_binding(workspace, session, receipt)?;
+    if binding.record.status != "SUCCEEDED" {
+        return Err(VideoRuntimeError::ResultUnconfirmed);
+    }
+    read_bound_video_observation(binding, receipt)
+}
+
+fn read_bound_video_observation(
+    binding: ProbeBinding,
+    receipt: VideoImportReceipt,
+) -> Result<VideoProbeObservation, VideoRuntimeError> {
     let attempt = binding
         .record
         .attempt
@@ -218,6 +240,7 @@ struct StoredProbe {
     input_fingerprint: String,
     source_path: String,
     source_location: String,
+    availability: String,
     source_digest: String,
     attempt: Option<String>,
     output_path: Option<String>,
@@ -260,14 +283,14 @@ fn load_binding(
         owner.connection.query_row(
             "SELECT t.status, t.input_manifest_path, t.input_fingerprint, a.path, a.location_kind,
                     a.media_digest, t.current_attempt_id, t.output_manifest_path,
-                    json_extract(t.execution_metadata_json, '$.terminal_receipt.result_manifest_ref')
+                    json_extract(t.execution_metadata_json, '$.terminal_receipt.result_manifest_ref'), a.availability
              FROM main.tasks t JOIN main.assets a ON a.asset_id = ?2
-             WHERE t.task_id = ?1 AND t.capability_id = ?3 AND a.kind = 'VIDEO' AND a.availability = 'ONLINE'",
+             WHERE t.task_id = ?1 AND t.capability_id = ?3 AND a.kind = 'VIDEO'",
             params![receipt.task_id.to_string(), receipt.video_id.to_string(), CAPABILITY],
             |row| Ok(StoredProbe {
                 root: owner.root().to_owned(), status: row.get(0)?, input_path: row.get(1)?,
                 input_fingerprint: row.get(2)?, source_path: row.get(3)?, source_location: row.get(4)?,
-                source_digest: row.get(5)?, attempt: row.get(6)?, output_path: row.get(7)?, manifest_ref: row.get(8)?,
+                source_digest: row.get(5)?, attempt: row.get(6)?, output_path: row.get(7)?, manifest_ref: row.get(8)?, availability: row.get(9)?,
             }),
         ).optional().map_err(TaskStoreError::Database).map_err(WorkspaceThreadError::Task)?
             .ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))
@@ -322,6 +345,9 @@ fn load_binding(
 }
 
 fn verify_live_source(binding: &ProbeBinding) -> Result<(), VideoRuntimeError> {
+    if binding.record.availability != "ONLINE" {
+        return Err(VideoRuntimeError::InvalidBinding);
+    }
     let mut source = if binding.record.source_location == "EXTERNAL" {
         open_registered_file(&binding.source_path)?
     } else {

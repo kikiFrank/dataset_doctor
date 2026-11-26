@@ -314,6 +314,11 @@ fn commit_video(
     };
     let queued = enqueue_task_in(&tx, &submission, now_ms).map_err(VideoImportError::Task)?;
     publish_immutable(&root, &submission.input_manifest_path, &frozen.bytes)?;
+    tx.execute(
+        "UPDATE assets SET metadata_json=json_set(metadata_json,'$.video_probe_task_id',?2),
+            updated_at_ms=?3 WHERE asset_id=?1",
+        params![video_id.to_string(), queued.task_id.to_string(), now_ms],
+    )?;
     tx.commit()?;
     Ok(VideoImportReceipt {
         video_id,
@@ -349,7 +354,7 @@ fn find_existing(
     }))
 }
 
-fn read_video_id(root: &Path, relative: &Path) -> Result<Uuid, VideoImportError> {
+pub(crate) fn read_video_id(root: &Path, relative: &Path) -> Result<Uuid, VideoImportError> {
     let mut bytes = Vec::new();
     open_scoped_file(root, relative)?
         .take(MANIFEST_LIMIT + 1)

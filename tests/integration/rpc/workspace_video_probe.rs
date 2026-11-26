@@ -50,6 +50,18 @@ async fn a_registered_probe_survives_reopen_and_persists_a_reusable_video_index(
             200,
         )
         .unwrap();
+    let pending = dd_infra::video_query::registered_video_detail(
+        &owner,
+        workspace.workspace_session_id,
+        registered.video_id,
+    )
+    .unwrap();
+    assert_eq!(pending.probe_status.as_deref(), Some("QUEUED"));
+    assert!(pending.metadata.is_none());
+    assert_eq!(
+        pending.source_availability,
+        dd_infra::video_query::VideoSourceAvailability::Online
+    );
     reopen(&owner, &root, workspace.workspace_session_id);
     let session = owner.current().unwrap().unwrap().workspace_session_id;
 
@@ -67,9 +79,99 @@ async fn a_registered_probe_survives_reopen_and_persists_a_reusable_video_index(
     assert_eq!(metadata.duration_ms, Some(1000));
     assert_eq!(metadata.variable_frame_rate, Some(false));
     assert_eq!(metadata.streams[0].stream_index, 0);
+    let connection = rusqlite::Connection::open(root.join("workspace.db")).unwrap();
+    connection
+        .execute(
+            "UPDATE assets SET availability='OFFLINE' WHERE asset_id=?1",
+            [registered.video_id.to_string()],
+        )
+        .unwrap();
+    let declared_offline =
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .unwrap();
+    assert_eq!(
+        declared_offline.source_availability,
+        dd_infra::video_query::VideoSourceAvailability::Offline
+    );
+    assert_eq!(declared_offline.metadata.unwrap().duration_ms, Some(1000));
+    connection
+        .execute(
+            "UPDATE assets SET availability='ONLINE',
+        metadata_json=json_remove(metadata_json,'$.video_probe_task_id') WHERE asset_id=?1",
+            [registered.video_id.to_string()],
+        )
+        .unwrap();
+    let legacy =
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .unwrap();
+    assert_eq!(legacy.metadata.unwrap().duration_ms, Some(1000));
+    connection
+        .execute(
+            "UPDATE assets SET metadata_json=json_set(metadata_json,
+        '$.video_probe_task_id',?2) WHERE asset_id=?1",
+            [registered.video_id.to_string(), Uuid::new_v4().to_string()],
+        )
+        .unwrap();
+    assert!(
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .is_err()
+    );
+    connection
+        .execute(
+            "UPDATE assets SET metadata_json=json_set(metadata_json,
+        '$.video_probe_task_id',?2) WHERE asset_id=?1",
+            [
+                registered.video_id.to_string(),
+                registered.task_id.to_string(),
+            ],
+        )
+        .unwrap();
+    drop(connection);
     let frame = stored.index.resolve_index(sha, 1).unwrap();
     assert_eq!(frame.source_video_id, registered.video_id);
     assert_eq!(frame.pts_us, Some(250_000));
+    let detail =
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .unwrap();
+    assert_eq!(
+        detail.source_availability,
+        dd_infra::video_query::VideoSourceAvailability::Online
+    );
+    assert_eq!(detail.probe_status.as_deref(), Some("SUCCEEDED"));
+    assert_eq!(detail.metadata.unwrap().duration_ms, Some(1000));
+    assert_eq!(detail.rotation_ccw, Some(0));
+    assert!(
+        dd_infra::video_query::registered_video_detail(&owner, session, Uuid::new_v4()).is_err()
+    );
+    assert!(
+        dd_infra::video_query::registered_video_detail(
+            &owner,
+            workspace.workspace_session_id,
+            registered.video_id
+        )
+        .is_err()
+    );
+    let moved = run.join("temporarily-unavailable-video.mp4");
+    fs::rename(&source, &moved).unwrap();
+    let offline =
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .unwrap();
+    assert_eq!(
+        offline.source_availability,
+        dd_infra::video_query::VideoSourceAvailability::Offline
+    );
+    assert_eq!(offline.metadata.unwrap().duration_ms, Some(1000));
+    fs::rename(moved, &source).unwrap();
+    fs::write(&source, b"temporary changed video bytes").unwrap();
+    let changed =
+        dd_infra::video_query::registered_video_detail(&owner, session, registered.video_id)
+            .unwrap();
+    assert_eq!(
+        changed.source_availability,
+        dd_infra::video_query::VideoSourceAvailability::Changed
+    );
+    fs::write(&source, &original).unwrap();
+
     assert_eq!(fs::read(&source).unwrap(), original);
     let grant = owner.grant_video_file(session, source.clone()).unwrap();
     let next = registry

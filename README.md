@@ -165,6 +165,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv -VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe
 ```
 
+视频登记后可查询时长、视频流、旋转、帧率节奏和来源状态。刷新信息会重新核对视频摘要，离线时保留已经封存的元数据。视频片段与抽帧工作台仍在开发。
+
 Windows 开发版的视频入口从启动进程继承已核验的视频工具路径。使用 `$env:DD_WORKER_VIDEO_FFMPEG = $ffmpeg` 和 `$env:DD_WORKER_VIDEO_FFPROBE = $ffprobe` 设置工具路径后启动桌面程序。`tests/desktop/windows/check-command-handlers.ps1` 接受 `-VideoFfmpegExe` 和 `-VideoFfprobeExe` 参数，可在命令行复跑 Windows 桌面命令宿主的真实视频探测。
 
 ## Windows Workspace SQLite 写连接初始化（P01-03）

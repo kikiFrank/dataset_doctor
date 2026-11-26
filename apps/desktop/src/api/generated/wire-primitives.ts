@@ -94,6 +94,14 @@ export type VideoImportRequest = { context: CommandContext, file_grant_id: UuidT
 
 export type VideoImportView = { source_video_id: UuidText, operation: ImportOperationRef, };
 
+export type VideoGetRequest = { context: CommandContext, source_video_id: UuidText, };
+
+export type VideoAvailability = "ONLINE" | "OFFLINE" | "CHANGED";
+
+export type VideoStreamView = { stream_index: number, codec: string | null, width: number | null, height: number | null, duration_ms: DecimalU64 | null, };
+
+export type VideoDetail = { source_video_id: UuidText, display_name: string, row_revision: DecimalU64, source_digest: string, source_availability: VideoAvailability, probe_status: string | null, duration_ms: DecimalU64 | null, streams: Array<VideoStreamView>, rotation_ccw: number | null, variable_frame_rate: boolean | null, };
+
 export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
 
 export type GeometryReportView = { status: string, width: number, height: number, image_digest: string, findings: Array<GeometryFindingView>, };

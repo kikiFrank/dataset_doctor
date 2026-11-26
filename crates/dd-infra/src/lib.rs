@@ -34,6 +34,8 @@ pub mod sqlite;
 pub mod task_store;
 #[cfg(feature = "execution-rpc")]
 pub mod video_index;
+#[cfg(feature = "execution-rpc")]
+pub mod video_query;
 pub mod video_registration;
 #[cfg(feature = "execution-rpc")]
 pub mod video_runtime;

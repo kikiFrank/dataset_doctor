@@ -1,12 +1,17 @@
 use std::{path::PathBuf, sync::Arc};
 
+use dd_infra::video_query::{VideoSourceAvailability, registered_video_detail};
 use dd_infra::video_registration::{
     VideoImport, VideoImportError, VideoImportReceipt, VideoRegistry,
 };
 use dd_infra::video_runtime::VideoProbeRuntime;
+use dd_infra::video_runtime::VideoRuntimeError;
 use dd_infra::workspace_thread::WorkspaceThread;
 use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportTaskView};
-use dd_ui_contracts::video::{VideoImportRequest, VideoImportView};
+use dd_ui_contracts::video::{
+    VideoAvailability, VideoDetail, VideoGetRequest, VideoImportRequest, VideoImportView,
+    VideoStreamView,
+};
 use dd_ui_contracts::workspace::{AppError, CommandContext, PathGrant};
 use tauri::{State, async_runtime};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -213,5 +218,69 @@ impl Commands {
             VideoImportError::File(_) => self.error("FILE_IO_FAILED", "无法读取视频文件。"),
             _ => self.error("INTERNAL", "未能登记视频。"),
         }
+    }
+}
+
+#[tauri::command]
+pub async fn video_get(
+    request: VideoGetRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<VideoDetail, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.video_detail(request),
+    )
+    .await
+}
+
+impl Commands {
+    pub(super) fn video_detail(&self, request: VideoGetRequest) -> Result<VideoDetail, AppError> {
+        let session = self.session(request.context)?;
+        let source = self.parse_uuid(request.source_video_id)?;
+        let detail =
+            registered_video_detail(&self.thread, session, source).map_err(
+                |error| match error {
+                    VideoRuntimeError::Workspace(failure) => self.dataset_error(failure),
+                    VideoRuntimeError::StaleWorkspace => {
+                        self.error("STALE_WORKSPACE_SESSION", "工作区会话已更新。")
+                    }
+                    _ => self.error("FAILED_PRECONDITION", "无法核验视频探测结果，请重新探测。"),
+                },
+            )?;
+        let (duration, variable_frame_rate, streams) = match detail.metadata {
+            Some(metadata) => (
+                metadata.duration_ms.map(Into::into),
+                metadata.variable_frame_rate,
+                metadata
+                    .streams
+                    .into_iter()
+                    .map(|stream| VideoStreamView {
+                        stream_index: stream.stream_index,
+                        codec: stream.codec,
+                        width: stream.width,
+                        height: stream.height,
+                        duration_ms: stream.duration_ms.map(Into::into),
+                    })
+                    .collect(),
+            ),
+            None => (None, None, Vec::new()),
+        };
+        Ok(VideoDetail {
+            source_video_id: self.uuid_text(detail.video_id.to_string())?,
+            display_name: detail.display_name,
+            row_revision: detail.revision.into(),
+            source_digest: detail.source_digest,
+            source_availability: match detail.source_availability {
+                VideoSourceAvailability::Online => VideoAvailability::Online,
+                VideoSourceAvailability::Offline => VideoAvailability::Offline,
+                VideoSourceAvailability::Changed => VideoAvailability::Changed,
+            },
+            probe_status: detail.probe_status,
+            duration_ms: duration,
+            streams,
+            rotation_ccw: detail.rotation_ccw,
+            variable_frame_rate,
+        })
     }
 }

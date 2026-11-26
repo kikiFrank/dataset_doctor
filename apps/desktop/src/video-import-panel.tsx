@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { VideoDetailPanel } from "./video-detail-panel";
 import type { PathGrant, VideoImportView } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
 import { importVideo, pickVideoFile } from "./api/video";
@@ -104,6 +105,7 @@ export function VideoImportPanel({ workspace }: { workspace: OpenWorkspace }) {
       </>}
       {running && !error && <p role="status">正在探测视频帧…</p>}
       {status && <p role="status">{status}</p>}
+      {receipt && !running && <VideoDetailPanel key={receipt.source_video_id} workspace={workspace} sourceVideoId={receipt.source_video_id} />}
       {error && <p role="alert">{error}</p>}
       {running && error && <button type="button" onClick={() => {
         setError(null);

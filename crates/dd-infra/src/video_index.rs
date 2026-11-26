@@ -23,6 +23,7 @@ const MAX_STREAMS: usize = 64;
 pub struct VideoProbeObservation {
     pub index: FrameIndex,
     pub metadata: Option<VideoMetadata>,
+    pub rotation_ccw: u16,
 }
 
 #[derive(Deserialize)]
@@ -189,6 +190,7 @@ pub fn read_video_observation(
     Ok(VideoProbeObservation {
         index,
         metadata: document.metadata,
+        rotation_ccw: document.rotation_ccw,
     })
 }
 
