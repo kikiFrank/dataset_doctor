@@ -84,7 +84,11 @@ fn desktop_geometry_worker_publishes_findings_and_startup_failure_is_terminal() 
             if !matches!(task.status.as_str(), "QUEUED" | "DISPATCHING" | "RUNNING") {
                 break task;
             }
-            assert!(Instant::now() < deadline);
+            assert!(
+                Instant::now() < deadline,
+                "last geometry status: {}",
+                task.status
+            );
             std::thread::sleep(Duration::from_millis(25));
         }
     };
@@ -101,10 +105,23 @@ fn desktop_geometry_worker_publishes_findings_and_startup_failure_is_terminal() 
 
     let failed_entrypoint = run.join("worker-start-failure.py");
     fs::write(&failed_entrypoint, b"raise SystemExit(3)\n").unwrap();
-    let runner = GeometryRunner::new(interpreter, failed_entrypoint);
+    let runner = GeometryRunner::new(interpreter.clone(), failed_entrypoint);
     let failed = commands.start_geometry(runner, make_request()).unwrap();
     let result = wait(failed.task_id);
     assert_eq!(result.status, "FAILED");
     assert_eq!(result.error_code.as_deref(), Some("WORKER_START_FAILED"));
+
+    let crash_entrypoint = run.join("geometry-worker-crash.py");
+    fs::write(
+        &crash_entrypoint,
+        include_bytes!("geometry_worker_crash.py"),
+    )
+    .unwrap();
+    let runner = GeometryRunner::new(interpreter, crash_entrypoint);
+    let interrupted = commands.start_geometry(runner, make_request()).unwrap();
+    let result = wait(interrupted.task_id);
+    assert_eq!(result.status, "INTERRUPTED");
+    assert_eq!(result.error_code.as_deref(), Some("WORKER_INTERRUPTED"));
+    assert!(result.geometry_report.is_none());
     thread.close(session).unwrap();
 }

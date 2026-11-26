@@ -383,10 +383,26 @@ impl GeometryRuntime {
 
     pub async fn shutdown(self) -> Result<(), GeometryRuntimeError> {
         let worker = self.worker.shutdown().await;
-        let _ = self.stop_core.send(());
-        let core = timeout(GRANT_LIFETIME, self.core_task).await;
+        let core = Self::stop_service(self.stop_core, self.core_task).await;
         worker?;
-        core.map_err(|_| GeometryRuntimeError::Deadline)?
+        core
+    }
+
+    pub async fn terminate(self) -> Result<(), GeometryRuntimeError> {
+        let worker = self.worker.terminate().await;
+        let core = Self::stop_service(self.stop_core, self.core_task).await;
+        worker?;
+        core
+    }
+
+    async fn stop_service(
+        stop: oneshot::Sender<()>,
+        task: JoinHandle<Result<(), tonic::transport::Error>>,
+    ) -> Result<(), GeometryRuntimeError> {
+        let _ = stop.send(());
+        timeout(GRANT_LIFETIME, task)
+            .await
+            .map_err(|_| GeometryRuntimeError::Deadline)?
             .map_err(|_| GeometryRuntimeError::CoreStopped)?
             .map_err(|_| GeometryRuntimeError::CoreStopped)
     }

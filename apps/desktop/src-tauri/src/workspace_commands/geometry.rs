@@ -79,8 +79,11 @@ impl GeometryRunner {
         let startup_failed = match worker {
             Ok(mut worker) => {
                 let audit = worker.audit_admitted(job).await;
-                let stopped = worker.shutdown().await;
-                if audit.is_ok() || stopped.is_err() {
+                if audit.is_ok() {
+                    let _ = worker.shutdown().await;
+                    return;
+                }
+                if worker.terminate().await.is_err() {
                     return;
                 }
                 false

@@ -89,4 +89,8 @@ impl WorkerProcess {
         }
         self.process.wait_for_exit().await
     }
+
+    pub(crate) async fn terminate(self) -> Result<(), WorkerProcessError> {
+        self.process.terminate().await
+    }
 }

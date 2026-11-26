@@ -192,4 +192,20 @@ impl LocalProcess {
         }
         Ok(())
     }
+
+    pub(super) async fn terminate(mut self) -> Result<(), LocalProcessError> {
+        if self.child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        if let Err(error) = self.child.start_kill() {
+            if self.child.try_wait()?.is_some() {
+                return Ok(());
+            }
+            return Err(error.into());
+        }
+        timeout(RPC_DEADLINE, self.child.wait())
+            .await
+            .map_err(|_| LocalProcessError::Deadline("termination"))??;
+        Ok(())
+    }
 }
