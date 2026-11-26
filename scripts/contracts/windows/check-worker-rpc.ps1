@@ -86,6 +86,9 @@ if ($PackagedWorkerExe) {
 }
 if ($VideoFfmpegExe) {
     $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve')
+    if (-not $PackagedWorkerExe) {
+        $tests += @('--test', 'workspace_video_probe')
+    }
 }
 if ($CocoReaderPythonExe) {
     $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path

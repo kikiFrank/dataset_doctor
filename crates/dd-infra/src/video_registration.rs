@@ -15,11 +15,13 @@ use crate::input_fingerprint::{InputFingerprintError, freeze_input_manifest};
 use crate::json::JsonContracts;
 use crate::paths::{open_registered_file, open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
-use crate::task_store::{TaskStoreError, TaskSubmission, enqueue_task_in, format_digest};
+use crate::task_store::{
+    TaskStoreError, TaskSubmission, enqueue_task_in, format_digest, parse_digest,
+};
 use crate::workspace::OpenedWorkspace;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
-const CAPABILITY: &str = "video_probe.v1";
+pub(crate) const CAPABILITY: &str = "video_probe.v1";
 const ACTION: &str = "VIDEO_PROBE";
 const MANIFEST_LIMIT: u64 = 128 * 1024;
 
@@ -277,8 +279,11 @@ fn find_existing(
         .take(MANIFEST_LIMIT + 1)
         .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MANIFEST_LIMIT
-        || relative.file_stem().and_then(|name| name.to_str())
-            != Some(&format!("{:x}", Sha256::digest(&bytes)))
+        || relative
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .and_then(parse_digest)
+            != Some(Sha256::digest(&bytes).into())
     {
         return Err(VideoImportError::InvalidManifest);
     }

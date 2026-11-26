@@ -272,21 +272,8 @@ fn parse_uuid(value: &str) -> Result<Uuid, Status> {
 }
 
 fn parse_digest(value: &str) -> Result<[u8; 32], Status> {
-    if value.len() != 64
-        || !value
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-    {
-        return Err(Status::invalid_argument(
-            "Expected lower-case SHA-256 digest",
-        ));
-    }
-    let mut digest = [0; 32];
-    for (index, byte) in digest.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
-            .map_err(|_| Status::invalid_argument("Expected lower-case SHA-256 digest"))?;
-    }
-    Ok(digest)
+    crate::task_store::parse_digest(value)
+        .ok_or_else(|| Status::invalid_argument("Expected lower-case SHA-256 digest"))
 }
 
 fn invalid_credential() -> Status {

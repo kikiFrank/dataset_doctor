@@ -35,7 +35,11 @@ pub mod task_store;
 pub mod video_index;
 pub mod video_registration;
 #[cfg(feature = "execution-rpc")]
+pub mod video_runtime;
+#[cfg(feature = "execution-rpc")]
 pub mod worker_process;
+#[cfg(feature = "execution-rpc")]
+mod worker_runtime;
 pub mod workflow_store;
 pub mod workspace;
 pub mod workspace_thread;

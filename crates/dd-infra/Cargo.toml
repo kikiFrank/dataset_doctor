@@ -157,6 +157,11 @@ path = "../../tests/integration/rpc/worker_frame_resolve.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workspace_video_probe"
+path = "../../tests/integration/rpc/workspace_video_probe.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "agent_process"
 path = "../../tests/integration/rpc/agent_process.rs"
 required-features = ["execution-rpc"]
