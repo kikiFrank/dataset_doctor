@@ -57,6 +57,12 @@ pub struct WorkspaceCreateRequest {
     pub display_name: String,
 }
 
+#[derive(Deserialize, TS)]
+pub struct WorkspaceRestoreRequest {
+    pub request_id: UuidText,
+    pub folder_name: String,
+}
+
 #[derive(Clone, Deserialize, TS)]
 pub struct CommandContext {
     pub request_id: UuidText,

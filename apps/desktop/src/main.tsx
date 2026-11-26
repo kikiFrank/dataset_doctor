@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { acknowledgeDesktopRuntime } from "./api/runtime";
-import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./api/workspace";
+import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, selectAndRestoreWorkspace, workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
 import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
 import { DatasetBrowser } from "./dataset-browser";
@@ -15,6 +15,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [workspace, setWorkspace] = useState<OpenWorkspace | null>(null);
   const [name, setName] = useState("");
+  const [restoreFolder, setRestoreFolder] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [reviewBlocked, setReviewBlocked] = useState(false);
 
@@ -61,6 +62,16 @@ function App() {
     });
   }
 
+  async function restoreWorkspace() {
+    await runWorkspaceAction(async () => {
+      const restored = await selectAndRestoreWorkspace(restoreFolder.trim());
+      if (restored) {
+        setRestoreFolder("");
+        setWorkspace(restored);
+      }
+    });
+  }
+
   return (
     <div className="app">
       <header><span className="brand-mark" aria-hidden="true">D</span>Dataset Doctor</header>
@@ -78,6 +89,18 @@ function App() {
               <input id="workspace-name" value={name} required disabled={busy} onChange={(event) => setName(event.target.value)} />
               <button type="submit" disabled={busy || !runtimeConnected || !name.trim() || [...name.trim()].length > 128}>
                 选择目录并创建
+              </button>
+            </div>
+          </form>
+        )}
+        {!workspace && (
+          <form className="workspace-create-form" onSubmit={(event) => { event.preventDefault(); void restoreWorkspace(); }}>
+            <label htmlFor="restore-folder">恢复目录名称</label>
+            <div className="workspace-create">
+              <input id="restore-folder" value={restoreFolder} required disabled={busy}
+                onChange={(event) => setRestoreFolder(event.target.value)} />
+              <button type="submit" disabled={busy || !runtimeConnected || !restoreFolder.trim() || [...restoreFolder.trim()].length > 128}>
+                选择备份和恢复位置
               </button>
             </div>
           </form>

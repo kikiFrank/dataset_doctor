@@ -9,6 +9,7 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceGetRequest,
   WorkspaceOpenRequest,
+  WorkspaceRestoreRequest,
   WorkspaceSnapshot,
 } from "./generated/wire-primitives";
 
@@ -31,6 +32,14 @@ export async function selectAndCreateWorkspace(displayName: string): Promise<Ope
     display_name: displayName,
   };
   return requireOpen(await invoke<WorkspaceSnapshot>("workspace_create", { request }));
+}
+
+export async function selectAndRestoreWorkspace(folderName: string): Promise<OpenWorkspace | null> {
+  const request: WorkspaceRestoreRequest = {
+    request_id: crypto.randomUUID(), folder_name: folderName,
+  };
+  const workspace = await invoke<WorkspaceSnapshot | null>("workspace_restore", { request });
+  return workspace && requireOpen(workspace);
 }
 
 function pickWorkspaceDirectory(): Promise<PathGrant | null> {

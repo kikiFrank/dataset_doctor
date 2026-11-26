@@ -29,6 +29,8 @@ use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission};
 use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError, ordinary_file};
 
+use crate::workspace_backup::{WorkspacePackageError, restore_workspace_backup};
+
 const QUEUE_CAPACITY: usize = 8;
 type AccessError = WorkspaceAccessError<WorkspaceOpenError>;
 type AccessReply<T> = Sender<Result<T, AccessError>>;
@@ -43,6 +45,7 @@ pub enum WorkspaceThreadError {
     Dataset(DatasetQueryError),
     Review(ReviewStoreError),
     WorkflowDatabase(rusqlite::Error),
+    Backup(WorkspacePackageError),
     Busy,
     Stopped,
 }
@@ -59,6 +62,7 @@ impl Display for WorkspaceThreadError {
             Self::WorkflowDatabase(error) => {
                 write!(formatter, "Workspace workflow persistence: {error}")
             }
+            Self::Backup(error) => Display::fmt(error, formatter),
             Self::Busy => write!(formatter, "Workspace request queue is full"),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
@@ -75,6 +79,7 @@ impl Error for WorkspaceThreadError {
             Self::Dataset(error) => Some(error),
             Self::Review(error) => Some(error),
             Self::WorkflowDatabase(error) => Some(error),
+            Self::Backup(error) => Some(error),
             _ => None,
         }
     }
@@ -90,6 +95,11 @@ enum Request {
     ),
     ConsumePath(Uuid, WorkspacePathPurpose, Uuid, AccessReply<PathBuf>),
     Open(Uuid, AccessReply<WorkspaceSession>),
+    Restore(
+        PathBuf,
+        PathBuf,
+        Sender<Result<WorkspaceSession, WorkspaceThreadError>>,
+    ),
     Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
     Close(Uuid, AccessReply<()>),
@@ -140,6 +150,25 @@ impl WorkspaceThread {
                         Request::Open(id, reply) => {
                             let _ = reply.send(access.open(id, Instant::now()));
                         }
+                        Request::Restore(package, destination, reply) => {
+                            let result = (|| {
+                                if access.current().is_some() {
+                                    return Err(WorkspaceThreadError::Access(
+                                        WorkspaceAccessError::AlreadyOpen,
+                                    ));
+                                }
+                                restore_workspace_backup(&package, &destination)
+                                    .map_err(WorkspaceThreadError::Backup)?;
+                                let now = Instant::now();
+                                let grant = access
+                                    .grant_selected_directory(destination, now)
+                                    .map_err(WorkspaceThreadError::Access)?;
+                                access
+                                    .open(grant.grant_id, now)
+                                    .map_err(WorkspaceThreadError::Access)
+                            })();
+                            let _ = reply.send(result);
+                        }
                         Request::Create(id, name, now_ms, reply) => {
                             let _ = reply.send(access.create(id, &name, Instant::now(), now_ms));
                         }
@@ -173,6 +202,15 @@ impl WorkspaceThread {
     pub fn open(&self, grant_id: Uuid) -> Result<WorkspaceSession, WorkspaceThreadError> {
         self.request(|reply| Request::Open(grant_id, reply))?
             .map_err(WorkspaceThreadError::Access)
+    }
+
+    /// Restore only from trusted local selections while the owner has no open Workspace.
+    pub fn restore_backup(
+        &self,
+        package: PathBuf,
+        destination: PathBuf,
+    ) -> Result<WorkspaceSession, WorkspaceThreadError> {
+        self.request(|reply| Request::Restore(package, destination, reply))?
     }
 
     pub fn grant_import_directory(

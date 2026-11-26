@@ -22,6 +22,8 @@ export type WorkspaceOpenRequest = { request_id: UuidText, directory_grant_id: U
 
 export type WorkspaceCreateRequest = { request_id: UuidText, directory_grant_id: UuidText, display_name: string, };
 
+export type WorkspaceRestoreRequest = { request_id: UuidText, folder_name: string, };
+
 export type CommandContext = { request_id: UuidText, workspace_id: UuidText, workspace_session_id: UuidText, idempotency_key?: UuidText, };
 
 export type WorkspaceGetRequest = { request_id: UuidText, context?: CommandContext, };

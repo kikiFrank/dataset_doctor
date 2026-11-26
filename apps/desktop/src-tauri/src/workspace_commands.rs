@@ -19,6 +19,7 @@ use uuid::Uuid;
 use crate::RuntimeMode;
 
 pub(crate) mod annotation;
+pub(crate) mod backup;
 pub(crate) mod dataset;
 pub(crate) mod dataset_export;
 pub(crate) mod dataset_import;
@@ -59,6 +60,10 @@ pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/workspace_create.rs"]
 mod create_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/workspace_restore.rs"]
+mod restore_tests;
 
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/dataset_browse.rs"]

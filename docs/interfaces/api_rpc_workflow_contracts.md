@@ -174,6 +174,7 @@ Finding 的 explanation 说明证据与理由；uncertainty 说明缺少什么�
 | workspace_open | directory_grant_id | WorkspaceSnapshot + workspace_session_id | 校验格式、恢复未完成文件操作、产生新会话；不默认执行未完成旧任务 |
 | workspace_get | context | WorkspaceSnapshot | 包含能力、离线资源统计、进行中任务 |
 | workspace_close | mode=WAIT/CANCEL、expected_session_id | CloseReceipt | 停止新任务；等待/取消在途任务；只有实际关闭成功才切换页面 |
+| workspace_restore | request_id、folder_name | WorkspaceSnapshot 或取消 | 仅关闭工作区时可用。原生目录选择器依次选择备份包和现有父目录，校验后发布到该父目录下的新目录并打开。已有目标保留原样。 |
 | workspace_backup_submit | destination_grant_id、include_reports=true | 异步 | 包含登记的外部资源；创建可恢复清单；不能把复制目录视为 SQLite 一致备份 |
 | dataset_create | name、category_names[] | ImportPlan | plan_id、input_manifest_ref、plan_fingerprint、source_format、proposed_dataset、file_actions[]、category_mapping、conflicts[]、unsupported_fields[]、requires_explicit_choices[]；file_actions 明确 REFERENCE/CREATE_CONVERTED/WRITE_CONVERTED_TO_SELECTED_ROOT/EXPLICIT_OVERWRITE，不自动选择有损覆盖 |
 | SecretStatus | model_profile_id、configured:boolean、credential_ref?、credential_revision；永远不返回已有 Key；new_secret 为非空字符串，最大 8192 UTF-8 字节，不落普通配置与诊断 |
