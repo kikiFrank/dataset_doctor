@@ -228,7 +228,7 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 
 video_get 的 video_annotation_manifest_ref 和 video_annotation_manifest 公开已核验的当前工作引用与内容，未建立时为空。video_get_keyframe_draft 以已保存的 annotation_ref 读取编辑器所需的单图 COCO。画布的类别来自 dataset_get 的当前类别字典。目录和产物文件路径由 Core 管理。
 
-训练采样受理时冻结片段修订、真实帧选择及类别摘要。完成后 task_get 的 video_sample 返回已核验回执和受管样本 ID；登记与成功终态同事务提交。重复采样复用同一帧的受管资产。当前支持人工关键帧以及无候选的实际帧，提供 tracking_result_ref 的入口待追踪任务接通。
+训练采样受理时冻结片段修订、真实帧选择及类别摘要。显式传入 tracking_result_ref 时，Core 核对封存的追踪任务、视频内容、流、片段修订、目标及类别摘要。候选引用仅登记到与追踪结果精确匹配且无人工标注的帧。完成后 task_get 的 video_sample 返回已核验回执和受管样本 ID，登记与成功终态同事务提交。重复采样复用同一帧的受管资产，保留其已审核标注。
 
 桌面 `video_track_submit` 提交暂存片段和独立的追踪采样方式，Core 冻结源、首个人工种子、片段修订及类别摘要。未指定追踪配置时使用内置平移适配器。成功后 `task_get.video_tracking` 返回已核验的范围、轨迹引用、人工种子、候选与待审核区间。当前帧的结果按来源摘要、流和显示帧号匹配。
 

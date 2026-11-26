@@ -5,7 +5,7 @@ import type {
 import { getTask } from "./api/task";
 import { submitVideoTracking } from "./api/video";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
-import { trackingObservationsAtFrame, trackingSamplingConfig } from "./video-annotation";
+import { matchingTrackingReceipt, trackingObservationsAtFrame, trackingSamplingConfig } from "./video-annotation";
 
 const active = new Set(["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"]);
 const errors: Record<string, string> = {
@@ -23,12 +23,14 @@ const reasons: Record<string, string> = {
   AMBIGUOUS_IDENTITY: "多个轨迹匹配同一区域",
 };
 
-export function VideoTrackingPanel({ workspace, segments, frame, categories, schema, disabled }: {
+export function VideoTrackingPanel({ workspace, segments, frame, categories, schema, receipt, onReceipt, disabled }: {
   workspace: OpenWorkspace;
   segments: VideoSegment[];
   frame: VideoFrame | null;
   categories: CocoCategory[];
   schema: string;
+  receipt: VideoTrackingView | null;
+  onReceipt: (receipt: VideoTrackingView | null) => void;
   disabled: boolean;
 }) {
   const [segmentId, setSegmentId] = useState("");
@@ -36,7 +38,6 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
   const [interval, setIntervalValue] = useState("1");
   const [busy, setBusy] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<VideoTrackingView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const request = useRef({ fingerprint: "", key: "" });
@@ -57,7 +58,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
         }
         setTaskId(null);
         request.current = { fingerprint: "", key: "" };
-        if (task.status === "SUCCEEDED" && task.video_tracking) setReceipt(task.video_tracking);
+        if (task.status === "SUCCEEDED" && task.video_tracking) onReceipt(task.video_tracking);
         else setError(errors[task.error_code ?? ""] ?? "追踪未完成，请核对片段和视频来源。");
       } catch (failure) {
         if (current) setError(workspaceCommandError(failure));
@@ -65,12 +66,12 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
     }
     void read();
     return () => { current = false; clearTimeout(timer); };
-  }, [workspace, taskId, retry]);
+  }, [workspace, taskId, retry, onReceipt]);
 
   async function submit() {
     if (!segment || busy || disabled || taskId) return;
     setBusy(true);
-    setReceipt(null);
+    onReceipt(null);
     setError(null);
     try {
       const fields = {
@@ -90,10 +91,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
     }
   }
 
-  const current = receipt && segment && receipt.segment_id === segment.segment_id
-    && receipt.segment_revision === segment.revision && receipt.target_dataset_id === segment.target_dataset_id
-    && receipt.source_video_id === segment.source_video_id
-    && receipt.source_digest === segment.source_digest && receipt.label_schema_digest === schema ? receipt : null;
+  const current = matchingTrackingReceipt(receipt, segment, schema);
   const observations = current ? trackingObservationsAtFrame(current, frame) : [];
 
   return <section aria-label="视频追踪">

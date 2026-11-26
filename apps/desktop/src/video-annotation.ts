@@ -1,6 +1,6 @@
 import type {
   DatasetSamplingConfigInput, DatasetSamplingMode, TrackingSamplingConfigInput,
-  VideoAnnotationManifest, VideoFrame, VideoKeyframe, VideoTrackingView,
+  VideoAnnotationManifest, VideoFrame, VideoKeyframe, VideoSegment, VideoTrackingView,
 } from "./api/generated/wire-primitives";
 
 function sameFrame(left: VideoFrame, right: VideoFrame): boolean {
@@ -81,4 +81,15 @@ export function trackingObservationsAtFrame(tracks: VideoTrackingView, frame: Vi
   if (!frame || frame.source_video_id !== tracks.source_video_id || frame.source_digest !== tracks.source_digest
       || frame.stream_index !== tracks.stream_index) return [];
   return tracks.observations.filter(observation => observation.frame_index === frame.frame_index);
+}
+
+export function matchingTrackingReceipt(
+  receipt: VideoTrackingView | null, segment: VideoSegment | undefined, schema: string,
+): VideoTrackingView | null {
+  if (!receipt || !segment || receipt.segment_id !== segment.segment_id
+      || receipt.segment_revision !== segment.revision || receipt.target_dataset_id !== segment.target_dataset_id
+      || receipt.source_video_id !== segment.source_video_id || receipt.source_digest !== segment.source_digest
+      || receipt.stream_index !== segment.keyframes[0]?.frame_ref.stream_index
+      || receipt.label_schema_digest !== schema) return null;
+  return receipt;
 }

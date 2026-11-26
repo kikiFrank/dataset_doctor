@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getDataset, listDatasets } from "./api/dataset";
 import type {
   ArtifactReference, CocoDocument, DatasetDetail, DatasetPage, DisplayLocator,
-  VideoDetail, VideoFrame, VideoSegment,
+  VideoDetail, VideoFrame, VideoSegment, VideoTrackingView,
 } from "./api/generated/wire-primitives";
 import { getKeyframeDraft, saveKeyframeDraft, saveSegment } from "./api/video";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
@@ -32,6 +32,7 @@ export function VideoAnnotationPanel(props: AnnotationProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState<DatasetDetail | null>(null);
+  const [tracks, setTracks] = useState<VideoTrackingView | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -74,7 +75,10 @@ export function VideoAnnotationPanel(props: AnnotationProps) {
   const renderEditor = frame && image && dataset && !changed;
   return <section aria-label="视频标注">
     <h3>视频标注</h3>
-    <label>目标数据集 <select value={target} disabled={props.editGuard.blocked} onChange={event => setTarget(event.target.value)}>
+    <label>目标数据集 <select value={target} disabled={props.editGuard.blocked} onChange={event => {
+      setTracks(null);
+      setTarget(event.target.value);
+    }}>
       <option value="">选择数据集</option>
       {page?.items.map(item => <option key={item.dataset_id} value={item.dataset_id}>{item.name}</option>)}
     </select></label>
@@ -90,9 +94,11 @@ export function VideoAnnotationPanel(props: AnnotationProps) {
       disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} segments={segments} />}
     {dataset && segments.length > 0 && <VideoTrackingPanel key={"tracking-" + target} workspace={workspace}
       frame={frame} segments={segments} categories={dataset.categories} schema={dataset.label_schema_digest}
+      receipt={tracks} onReceipt={setTracks}
       disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} />}
     {dataset && segments.length > 0 && <VideoSamplingPanel key={"sampling-" + target} workspace={workspace}
-      segments={segments} disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} />}
+      segments={segments} tracks={tracks} schema={dataset.label_schema_digest}
+      disabled={props.disabled || props.editGuard.blocked || Boolean(changed)} />}
   </section>;
 }
 

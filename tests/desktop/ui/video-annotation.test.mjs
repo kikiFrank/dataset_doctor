@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   datasetSamplingConfig, keyframeChoices, locateDraft, segmentInput,
-  trackingObservationsAtFrame, trackingSamplingConfig,
+  matchingTrackingReceipt, trackingObservationsAtFrame, trackingSamplingConfig,
 } from "../../../apps/desktop/src/video-annotation.ts";
 
 const frame = (index, time, digest = "source") => ({
@@ -67,4 +67,26 @@ test("tracking candidates bind to the exact video and display frame identity", (
   assert.deepEqual(trackingObservationsAtFrame(tracks, { ...target, source_digest: "changed" }), []);
   assert.deepEqual(trackingObservationsAtFrame(tracks, { ...target, stream_index: 1 }), []);
   assert.deepEqual(trackingObservationsAtFrame(tracks, null), []);
+});
+
+test("sampling can offer only a tracking receipt from the exact saved segment and category scope", () => {
+  const tracks = {
+    segment_id: "segment", segment_revision: "9007199254740993", stream_index: 4,
+    source_video_id: "video", source_digest: "source", target_dataset_id: "training",
+    label_schema_digest: "labels",
+  };
+  const segment = {
+    segment_id: "segment", revision: "9007199254740993",
+    source_video_id: "video", source_digest: "source", target_dataset_id: "training",
+    keyframes: [{ frame_ref: { stream_index: 4 } }],
+  };
+  assert.equal(matchingTrackingReceipt(tracks, segment, "labels"), tracks);
+  for (const change of [
+    { segment_id: "other" }, { revision: "9007199254740992" }, { keyframes: [{ frame_ref: { stream_index: 5 } }] },
+    { source_video_id: "other" }, { source_digest: "changed" }, { target_dataset_id: "other" },
+  ]) {
+    assert.equal(matchingTrackingReceipt(tracks, { ...segment, ...change }, "labels"), null);
+  }
+  assert.equal(matchingTrackingReceipt(tracks, segment, "new labels"), null);
+  assert.equal(matchingTrackingReceipt(tracks, undefined, "labels"), null);
 });

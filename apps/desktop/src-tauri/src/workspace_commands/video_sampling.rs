@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
+use dd_infra::artifact_reference::{
+    ArtifactOwner as StoredOwner, ArtifactReference as StoredReference,
+};
 use dd_infra::task_store::TaskStoreError;
 use dd_infra::video_keyframes::{
     VideoAnnotationError, VideoSampleService, VideoSampleSubmission, VideoSamplingMode,
     VideoSamplingPurpose, VideoSamplingRequest,
 };
 use dd_infra::workspace_thread::WorkspaceThreadError;
+use dd_ui_contracts::ArtifactOwner;
 use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportOperationRef, ImportTaskView};
 use dd_ui_contracts::video::{
     DatasetSamplingMode, StagedVideoSampleView, VideoSampleSubmitRequest, VideoSampleView,
@@ -38,12 +42,6 @@ impl Commands {
         request: VideoSampleSubmitRequest,
     ) -> Result<ImportOperationRef, AppError> {
         let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
-        if request.tracking_result_ref.is_some() {
-            return Err(self.error(
-                "FAILED_PRECONDITION",
-                "当前只能依据人工关键帧和实际视频帧采样。",
-            ));
-        }
         let config = request.dataset_sampling_config;
         let mode = self.video_sampling_mode(config.mode, config.every_n, config.interval_ms)?;
         let selection = VideoSamplingRequest {
@@ -57,17 +55,30 @@ impl Commands {
             },
         };
         let service = self.video_sample_service()?;
-        let (mut snapshot, job) = service
-            .submit(
-                session,
-                VideoSampleSubmission {
-                    request_id,
-                    idempotency_key,
-                    selection,
-                },
-                self.now_ms()?,
-            )
-            .map_err(|error| self.video_sample_error(error))?;
+        let submission = VideoSampleSubmission {
+            request_id,
+            idempotency_key,
+            selection,
+        };
+        let now = self.now_ms()?;
+        let admitted = if let Some(reference) = request.tracking_result_ref {
+            let ArtifactOwner::Task(task) = reference.owner else {
+                return Err(self.error("INVALID_ARGUMENT", "请选择已完成的追踪任务产物。"));
+            };
+            let tracking = StoredReference {
+                artifact_id: self.parse_uuid(reference.artifact_id)?,
+                owner: StoredOwner::Task(self.parse_uuid(task)?),
+                kind: reference.kind,
+                media_type: reference.media_type,
+                sha256: reference.sha256,
+                size_bytes: reference.size_bytes.into(),
+                schema_id: reference.schema_id,
+            };
+            service.submit_with_tracking(session, submission, tracking, now)
+        } else {
+            service.submit(session, submission, now)
+        };
+        let (mut snapshot, job) = admitted.map_err(|error| self.video_sample_error(error))?;
         if let Some(job) = job {
             match runner {
                 Some(runner) => {

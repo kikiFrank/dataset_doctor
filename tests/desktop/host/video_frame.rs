@@ -713,6 +713,52 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     );
     assert_eq!(bundle.observations[0].source, "HUMAN_SEED");
     assert_eq!(bundle.tracks_ref.kind, "VIDEO_TRACK_BUNDLE");
+    let tracking_sample = |reference| {
+        let mut request = sample_request(1, None);
+        request.context = context(reopened);
+        request.context.idempotency_key = Some(uuid(Uuid::new_v4().to_string()));
+        request.segment_id = reopened_segment_id.clone();
+        request.tracking_result_ref = Some(reference);
+        request
+    };
+    let read_final = || {
+        let view = commands
+            .annotation(dd_ui_contracts::annotation::AnnotationGetRequest {
+                context: context(reopened),
+                asset_id: staged.clone(),
+            })
+            .unwrap();
+        (
+            view.annotation_digest,
+            serde_json::to_value(view.formal_coco.unwrap()).unwrap(),
+        )
+    };
+    let reviewed = read_final();
+    let sampled = commands
+        .start_video_sample(
+            Some(Arc::clone(&runner)),
+            tracking_sample(bundle.tracks_ref),
+        )
+        .unwrap();
+    let sampled = wait(reopened, sampled.task_id);
+    assert_eq!(sampled.status, "SUCCEEDED", "{:?}", sampled.error_code);
+    let sampled = sampled.video_sample.unwrap();
+    assert_eq!(sampled.samples.len(), 1);
+    assert_eq!(sampled.samples[0].asset_id, staged);
+    assert!(sampled.samples[0].already_in_dataset);
+    assert_eq!(read_final(), reviewed);
+    let mut invalid_track = wait(reopened, submitted.task_id.clone())
+        .video_tracking
+        .unwrap()
+        .tracks_ref;
+    invalid_track.sha256 = "0".repeat(64);
+    assert_eq!(
+        commands
+            .start_video_sample(Some(Arc::clone(&runner)), tracking_sample(invalid_track))
+            .unwrap_err()
+            .code,
+        "FAILED_PRECONDITION"
+    );
     assert_eq!(
         commands
             .start_video_tracking(

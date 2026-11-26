@@ -15,6 +15,7 @@ use super::{
     VideoSamplingPurpose, database, digest, invalid_storage,
 };
 use crate::frame_runtime::FrameService;
+use crate::import_registration::ImportRegistrationError;
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::format_digest;
@@ -200,7 +201,7 @@ impl VideoAnnotationService {
                 }
                 let staged = prepared
                     .iter()
-                    .map(|sample| sample.register(&tx, dataset, video, now_ms))
+                    .map(|sample| sample.register(&tx, &root, dataset, video, now_ms))
                     .collect::<Result<Vec<_>, _>>()?;
                 finish(&tx, &root, &staged)?;
                 tx.commit().map_err(database)?;
@@ -297,19 +298,13 @@ impl PreparedSample {
             return Err(VideoAnnotationError::InvalidInput);
         }
         publish_once(root, Path::new(&self.target_relative), &png)?;
-        if let Some(annotation) = &self.annotation {
-            publish_once(
-                root,
-                Path::new(&annotation.relative_path),
-                &annotation.bytes,
-            )?;
-        }
         Ok(())
     }
 
     fn register(
         &self,
         tx: &Transaction<'_>,
+        root: &Path,
         dataset: Uuid,
         video: Uuid,
         now: i64,
@@ -357,6 +352,16 @@ impl PreparedSample {
         }
         let asset_id = Uuid::new_v4();
         let annotation = self.annotation.as_ref();
+        if let Some(annotation) = annotation {
+            publish_once(
+                root,
+                Path::new(&annotation.relative_path),
+                &annotation.bytes,
+            )
+            .map_err(|error| {
+                WorkspaceThreadError::Import(ImportRegistrationError::Source(error))
+            })?;
+        }
         tx.execute(
             "INSERT INTO assets(asset_id,kind,location_kind,path,original_filename,file_origin,
                  media_digest,annotation_path,annotation_format,annotation_origin,annotation_local_image_id,
