@@ -33,7 +33,7 @@ jobs:
         run: rustc +1.97.1 --version --verbose
       - name: Validate real Rig APIs with deterministic model responses
         working-directory: tests/rig-poc
-        run: cargo +1.97.1 test --all-targets -- --nocapture
+        run: cargo +1.97.1 test --locked --all-targets -- --nocapture
       - name: Preserve the resolved dependency lock
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
