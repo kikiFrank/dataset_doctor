@@ -204,6 +204,7 @@ impl Commands {
                     preview,
                     geometry_report: None,
                     coco_export: None,
+                    report_export: None,
                     workspace_backup: None,
                 })
             }
@@ -227,6 +228,7 @@ impl Commands {
                             Self::staging_commit_task,
                             Self::color_preview_task,
                             Self::color_apply_task,
+                            Self::report_export_task,
                         ];
                         for query in queries {
                             match query(self, session, id) {
@@ -264,6 +266,7 @@ impl Commands {
                     preview: None,
                     geometry_report: None,
                     coco_export: None,
+                    report_export: None,
                     workspace_backup: None,
                 })
             }

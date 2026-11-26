@@ -272,6 +272,7 @@ impl Commands {
             registration: None,
             geometry_report: None,
             coco_export: None,
+            report_export: None,
             workspace_backup: task.receipt.map(|receipt| WorkspaceBackupView {
                 package_path: receipt.package.to_string_lossy().into_owned(),
                 asset_file_count: (receipt.asset_files as u64).into(),

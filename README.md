@@ -36,6 +36,8 @@ Windows 开发版的自动化业务验收使用 `tests/desktop/windows/verify-ru
 
 使用 `-Suite WorkspaceWorkflow` 可以验收本地体检。测试点击数据集面板、运行真实 Worker，检查几何问题、实际覆盖和未执行原因。关闭并重开 Workspace 后读取同一份报告，保持人工审核关卡和源文件摘要。
 
+使用 `-Suite WorkspaceReportExport` 可以验收报告导出。测试从同一份质量报告导出 JSON 和 Markdown，用独立脚本核验文件、报告摘要和持久化回执。
+
 打开已有 Workspace 后可分页浏览 Dataset 和样本，查看正式标注与受限的本地图像。命令宿主验收使用 `tests/desktop/windows/check-command-handlers.ps1 -RustBin $rustBin`，图像授权和标注读取可用 `scripts/storage/windows/check-workspace-sqlite.ps1 -RustBin $rustBin -Suite MediaDisplay` 或 `-Suite AnnotationView` 单独复跑。这些命令均可在命令行执行。样本页面的新交互与自定义图像协议仍需实际 WebView2 验收。
 
 在宿主验收附加 `-CocoReaderPythonExe $reader` 可用装有 `pycocotools 2.0.11` 和 Pillow 的本机 Python 重新读取测试生成的 COCO 包。该用例通过宿主完成合成样本导入、检查、审核、Final 确认和导出，产物保存在 `target/desktop-commands/runs/`。

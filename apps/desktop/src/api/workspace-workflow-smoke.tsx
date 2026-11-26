@@ -14,7 +14,7 @@ async function waitFor<T>(read: () => T | null, host: HTMLElement, description: 
   throw new Error("Timed out waiting for " + description);
 }
 
-async function verifyPanel(workspace: OpenWorkspace, datasetId: string, submit: boolean) {
+async function verifyPanel(workspace: OpenWorkspace, datasetId: string, submit: boolean, exportReport = false) {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   root.render(<WorkflowPanel workspace={workspace} datasetId={datasetId} />);
@@ -29,14 +29,27 @@ async function verifyPanel(workspace: OpenWorkspace, datasetId: string, submit: 
         || !body.includes("1 / 1 个样本") || !body.includes("未配置模型")) {
       throw new Error("The workflow panel did not show the actual findings, coverage and review state");
     }
+    if (exportReport) {
+      for (const [format, suffix] of [["JSON", ".json"], ["MARKDOWN", ".md"]]) {
+        const button = await waitFor(
+          () => report.querySelector<HTMLButtonElement>(`[data-report-export="${format}"]:enabled`),
+          host, `the ${format} export button`,
+        );
+        button.click();
+        await waitFor(() => {
+          const receipt = report.querySelector(`[data-report-export-receipt="${format}"]`);
+          return receipt?.textContent?.includes(suffix) ? receipt : null;
+        }, host, `the ${format} export receipt`);
+      }
+    }
   } finally {
     root.unmount();
     host.remove();
   }
 }
 
-export async function verifyWorkspaceWorkflowPanel(workspace: OpenWorkspace, datasetId: string) {
-  await verifyPanel(workspace, datasetId, true);
+export async function verifyWorkspaceWorkflowPanel(workspace: OpenWorkspace, datasetId: string, exportReport: boolean) {
+  await verifyPanel(workspace, datasetId, true, exportReport);
   if ((await closeWorkspace(workspace)).close_state !== "CLOSED") throw new Error("Workspace did not close");
   const reopened = await selectAndOpenWorkspace();
   if (!reopened || reopened.workspace_id !== workspace.workspace_id || reopened.workspace_session_id === workspace.workspace_session_id) {

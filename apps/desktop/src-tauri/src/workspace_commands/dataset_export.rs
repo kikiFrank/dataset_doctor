@@ -46,7 +46,7 @@ impl Commands {
         Ok(PathGrant {
             grant_id: self.uuid_text(grant.grant_id.to_string())?,
             display_path,
-            allowed_operations: vec!["DATASET_EXPORT".into()],
+            allowed_operations: vec!["DATASET_EXPORT".into(), "REPORT_EXPORT".into()],
             expires_at,
         })
     }
@@ -125,6 +125,7 @@ impl Commands {
             registration: None,
             geometry_report: None,
             coco_export: receipt,
+            report_export: None,
             workspace_backup: None,
         })
     }

@@ -26,6 +26,7 @@ pub(crate) mod dataset;
 pub(crate) mod dataset_export;
 pub(crate) mod dataset_import;
 pub(crate) mod geometry;
+pub(crate) mod report_export;
 pub(crate) mod review;
 pub(crate) mod review_commit;
 pub(crate) mod staging;

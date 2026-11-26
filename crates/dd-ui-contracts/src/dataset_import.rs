@@ -43,6 +43,7 @@ pub enum ImportOperationKind {
     VideoProbe,
     ReviewCommit,
     DatasetExport,
+    ReportExport,
     WorkspaceBackup,
     FrameResolve,
     VideoSample,
@@ -96,6 +97,9 @@ pub struct ImportTaskView {
     pub registration: Option<DatasetImportRegistration>,
     pub geometry_report: Option<GeometryReportView>,
     pub coco_export: Option<CocoExportView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub report_export: Option<crate::report_export::ReportExportView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub workspace_backup: Option<WorkspaceBackupView>,

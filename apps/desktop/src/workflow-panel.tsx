@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
 import { getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
+import { ReportExportActions } from "./report-export-actions";
 import { reportCheckLabel } from "./staging-report-view";
 
 const statusNames: Record<WorkflowStatusView, string> = {
@@ -149,6 +150,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     {loadingReport && !report && !error && <p role="status">正在核验质量报告…</p>}
     {report && report.scope.workflow_run_id === selected && <section aria-label="质量报告">
       <h5>质量报告</h5>
+      <ReportExportActions key={report.report_id} workspace={workspace} reference={report.report_artifact_ref} />
       <ul>
         {report.checks.map(check => <li key={check.check_id}>
           <strong>{checkNames[check.check_id] ?? check.check_id}</strong> · {reportCheckLabel(check)}

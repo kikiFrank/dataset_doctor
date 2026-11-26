@@ -3,6 +3,7 @@ import type { StagingItem, StagingReportView } from "./api/generated/wire-primit
 import { commitStaging, getStagingReport } from "./api/staging";
 import { getTask } from "./api/task";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
+import { ReportExportActions } from "./report-export-actions";
 import { findingsToAcknowledge, matchesCurrentReport, reportCheckLabel, stagingCommitDetails } from "./staging-report-view";
 
 const checkNames: Record<string, string> = {
@@ -75,6 +76,7 @@ export function StagingReportPanel({ workspace, item, acceptanceBlocked, onClose
     <button type="button" disabled={busy} onClick={onClose}>关闭报告</button>
     {!report && !error && <p role="status">正在核验检查报告…</p>}
     {error && <p role="alert">{error}</p>}
+    {report && <ReportExportActions key={report.report_id} workspace={workspace} reference={report.report_artifact_ref} />}
     {report && <ul>
       {report.checks.map(check => <li key={check.check_id}>
         <strong>{checkNames[check.check_id] ?? check.check_id}</strong> · {reportCheckLabel(check)}

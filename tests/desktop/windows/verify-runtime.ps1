@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')][string]$Suite = 'Runtime',
     [string]$PythonExe
 )
 
@@ -36,7 +36,7 @@ try {
         $start.Arguments += ' --workspace-create-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
-    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')) {
+    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')) {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
         $business = Join-Path $run 'Synthetic business'
         & $python -I -B (Join-Path $PSScriptRoot 'seed_business_fixture.py') $business
@@ -47,6 +47,9 @@ try {
         } elseif ($Suite -eq 'WorkspaceWorkflow') {
             $start.Arguments += ' --workspace-workflow-smoke'
             $expected = 'DESKTOP_WORKSPACE_WORKFLOW_VERIFIED'
+        } elseif ($Suite -eq 'WorkspaceReportExport') {
+            $start.Arguments += ' --workspace-report-export-smoke'
+            $expected = 'DESKTOP_WORKSPACE_REPORT_EXPORT_VERIFIED'
         } else {
             $start.Arguments += ' --workspace-business-smoke'
             $expected = 'DESKTOP_WORKSPACE_BUSINESS_VERIFIED'
@@ -58,7 +61,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')) { 55000 } else { 25000 }
+        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')) { 55000 } else { 25000 }
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
@@ -75,8 +78,10 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
             throw 'The native application did not publish both Workspace files.'
         }
-        if ($Suite -eq 'WorkspaceWorkflow') {
-            & $python -I -B (Join-Path $PSScriptRoot 'verify_workflow_fixture.py') $business
+        if ($Suite -in @('WorkspaceWorkflow', 'WorkspaceReportExport')) {
+            $arguments = @($business)
+            if ($Suite -eq 'WorkspaceReportExport') { $arguments += '--exported' }
+            & $python -I -B (Join-Path $PSScriptRoot 'verify_workflow_fixture.py') @arguments
             if ($LASTEXITCODE -ne 0) { throw 'The local workflow failed the database and report checks.' }
         } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) {
             $packages = @(Get-ChildItem -LiteralPath (Join-Path $business 'Exports') -Directory)

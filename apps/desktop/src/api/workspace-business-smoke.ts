@@ -23,8 +23,8 @@ async function completed(workspace: OpenWorkspace, taskId: string) {
   throw new Error("Task did not finish in time");
 }
 
-export async function verifyWorkspaceBusinessIpc({ verifyColor, verifyWorkflow }: {
-  verifyColor: boolean; verifyWorkflow: boolean;
+export async function verifyWorkspaceBusinessIpc({ verifyColor, verifyWorkflow, verifyReportExport }: {
+  verifyColor: boolean; verifyWorkflow: boolean; verifyReportExport: boolean;
 }) {
   const name = "WebView2 Business Acceptance";
   let phase = "create Workspace";
@@ -51,7 +51,7 @@ export async function verifyWorkspaceBusinessIpc({ verifyColor, verifyWorkflow }
 
     if (verifyWorkflow) {
       phase = "run the local healthcheck and reopen its report";
-      await verifyWorkspaceWorkflowPanel(workspace, dataset);
+      await verifyWorkspaceWorkflowPanel(workspace, dataset, verifyReportExport);
       await acknowledgeWorkspaceVerification();
       return;
     }

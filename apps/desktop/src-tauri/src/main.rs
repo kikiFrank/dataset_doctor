@@ -19,6 +19,7 @@ struct RuntimeMode {
     smoke_business_directories: Option<(PathBuf, PathBuf)>,
     smoke_color: bool,
     smoke_workflow: bool,
+    smoke_report_export: bool,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +35,7 @@ struct DesktopReadyResponse {
     verify_workspace_business: bool,
     verify_workspace_color: bool,
     verify_workspace_workflow: bool,
+    verify_workspace_report_export: bool,
 }
 
 #[tauri::command]
@@ -61,7 +63,8 @@ fn desktop_ready(
         verify_workspace_create: runtime.smoke_workspace_create,
         verify_workspace_business: business,
         verify_workspace_color: runtime.smoke_color,
-        verify_workspace_workflow: runtime.smoke_workflow,
+        verify_workspace_workflow: runtime.smoke_workflow || runtime.smoke_report_export,
+        verify_workspace_report_export: runtime.smoke_report_export,
     })
 }
 
@@ -100,6 +103,8 @@ async fn desktop_workspace_verified(
     }
     let marker = if runtime.smoke_color {
         "DESKTOP_WORKSPACE_COLOR_VERIFIED"
+    } else if runtime.smoke_report_export {
+        "DESKTOP_WORKSPACE_REPORT_EXPORT_VERIFIED"
     } else if runtime.smoke_workflow {
         "DESKTOP_WORKSPACE_WORKFLOW_VERIFIED"
     } else if business {
@@ -138,6 +143,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && std::env::args_os().any(|argument| argument == "--workspace-color-smoke");
     let smoke_workflow = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-workflow-smoke");
+    let smoke_report_export = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-report-export-smoke");
     let smoke_workspace_open = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-smoke");
     if [
@@ -145,6 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         smoke_workspace_business,
         smoke_color,
         smoke_workflow,
+        smoke_report_export,
         smoke_workspace_open,
     ]
     .into_iter()
@@ -159,6 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || smoke_workspace_business
         || smoke_color
         || smoke_workflow
+        || smoke_report_export
     {
         let path = PathBuf::from(
             std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
@@ -171,27 +180,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let smoke_business_directories = if smoke_workspace_business || smoke_color || smoke_workflow {
-        let root = smoke_root
-            .as_deref()
-            .ok_or("Business verification requires a dedicated run")?;
-        let selected = |name: &str| -> Result<PathBuf, Box<dyn std::error::Error>> {
-            let expected = root.join(name);
-            let resolved = expected.canonicalize()?;
-            if resolved != expected || !resolved.is_dir() {
+    let smoke_business_directories =
+        if smoke_workspace_business || smoke_color || smoke_workflow || smoke_report_export {
+            let root = smoke_root
+                .as_deref()
+                .ok_or("Business verification requires a dedicated run")?;
+            let selected = |name: &str| -> Result<PathBuf, Box<dyn std::error::Error>> {
+                let expected = root.join(name);
+                let resolved = expected.canonicalize()?;
+                if resolved != expected || !resolved.is_dir() {
+                    return Err(
+                        "Business fixture directory must be a direct child of the smoke run".into(),
+                    );
+                }
+                Ok(resolved)
+            };
+            if smoke_workspace.as_ref() != Some(&selected("Workspace")?) {
                 return Err(
-                    "Business fixture directory must be a direct child of the smoke run".into(),
+                    "Business verification requires the fixture Workspace directory".into(),
                 );
             }
-            Ok(resolved)
+            Some((selected("Inputs")?, selected("Exports")?))
+        } else {
+            None
         };
-        if smoke_workspace.as_ref() != Some(&selected("Workspace")?) {
-            return Err("Business verification requires the fixture Workspace directory".into());
-        }
-        Some((selected("Inputs")?, selected("Exports")?))
-    } else {
-        None
-    };
     let workspace = Arc::new(WorkspaceThread::start(
         250,
         workspace_commands::GRANT_LIFETIME,
@@ -225,6 +237,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_business_directories,
             smoke_color,
             smoke_workflow,
+            smoke_report_export,
         })
         .setup(|app| {
             let runtime = app.state::<RuntimeMode>();
@@ -275,6 +288,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::staging::staging_list,
             workspace_commands::staging::staging_commit,
             workspace_commands::staging::report_get,
+            workspace_commands::report_export::report_export_submit,
             workspace_commands::review::review_open,
             workspace_commands::review::review_save_draft,
             workspace_commands::review::review_cancel,

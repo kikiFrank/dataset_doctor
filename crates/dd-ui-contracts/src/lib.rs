@@ -5,6 +5,7 @@ pub mod color;
 pub mod dataset;
 pub mod dataset_export;
 pub mod dataset_import;
+pub mod report_export;
 pub mod staging;
 pub mod video;
 pub mod workflow;
@@ -229,6 +230,9 @@ pub fn wire_primitives_typescript() -> String {
         color::ColorApplySubmitRequest::decl(&config),
         color::ColorPreviewView::decl(&config),
         color::ColorApplyView::decl(&config),
+        report_export::ReportExportFormat::decl(&config),
+        report_export::ReportExportSubmitRequest::decl(&config),
+        report_export::ReportExportView::decl(&config),
         dataset_import::ImportTaskView::decl(&config),
         dataset_import::GeometrySubmitRequest::decl(&config),
         video::VideoImportRequest::decl(&config),

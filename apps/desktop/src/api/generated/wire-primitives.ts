@@ -144,7 +144,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE" | "VIDEO_TRACK" | "STAGING_COMMIT" | "COLOR_PREVIEW" | "COLOR_APPLY";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "REPORT_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE" | "VIDEO_TRACK" | "STAGING_COMMIT" | "COLOR_PREVIEW" | "COLOR_APPLY";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -170,7 +170,13 @@ export type ColorPreviewView = { dataset_id: UuidText, asset_id: UuidText, asset
 
 export type ColorApplyView = { operation_id: UuidText, asset_id: UuidText, image_digest: string, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, video_tracking?: VideoTrackingView, staging_commit?: StagingCommitView, color_preview?: ColorPreviewView, color_apply?: ColorApplyView, };
+export type ReportExportFormat = "JSON" | "MARKDOWN";
+
+export type ReportExportSubmitRequest = { context: CommandContext, report_ref: ArtifactReference, format: ReportExportFormat, destination_grant_id: UuidText, };
+
+export type ReportExportView = { report_ref: ArtifactReference, format: ReportExportFormat, file_name: string, sha256: string, size_bytes: DecimalU64, };
+
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, report_export?: ReportExportView, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, video_tracking?: VideoTrackingView, staging_commit?: StagingCommitView, color_preview?: ColorPreviewView, color_apply?: ColorApplyView, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 

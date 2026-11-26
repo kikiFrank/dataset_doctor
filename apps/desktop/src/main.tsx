@@ -30,6 +30,7 @@ function App() {
       if (runtime.verify_workspace_create) await verifyWorkspaceCreationIpc();
       if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc({
         verifyColor: runtime.verify_workspace_color, verifyWorkflow: runtime.verify_workspace_workflow,
+        verifyReportExport: runtime.verify_workspace_report_export,
       });
     }).catch((failure: unknown) => setError(workspaceCommandError(failure)));
   }, []);

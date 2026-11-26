@@ -115,6 +115,7 @@ impl Commands {
             registration: None,
             geometry_report: None,
             coco_export: None,
+            report_export: None,
             workspace_backup: None,
             video_sample: None,
             video_frame: snapshot

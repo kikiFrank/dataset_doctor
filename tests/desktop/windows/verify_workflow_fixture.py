@@ -7,7 +7,7 @@ import sqlite3
 import sys
 
 
-def verify(root: Path) -> None:
+def verify(root: Path, exports_requested: bool = False) -> None:
     expected = json.loads((root / "input-proof.json").read_text(encoding="utf-8"))
     actual = {name: sha256((root / "Inputs" / name).read_bytes()).hexdigest() for name in expected}
     assert actual == expected, "Healthcheck changed source media or annotation"
@@ -52,14 +52,62 @@ def verify(root: Path) -> None:
     visual = checks["semantic_review"]
     assert visual["assessment"] == "NOT_EVALUATED"
     assert visual["skip_or_failure_reason"]["code"] == "MODEL_NOT_CONFIGURED"
-    assert not any((root / "Exports").iterdir())
-    (root / "workflow-evidence.json").write_text(json.dumps({
+    evidence = {
         "platform": "Windows", "workflow_run_id": run, "dataset_id": dataset, "status": status,
         "task_statuses": tasks, "report_id": report["report_id"], "report_sha256": reference["sha256"],
         "verified_source_sha256": actual,
-    }, indent=2) + "\n", encoding="utf-8")
+    }
+    if exports_requested:
+        evidence["report_exports"] = verify_exports(root, report_bytes, reference)
+    else:
+        assert not any((root / "Exports").iterdir())
+    (root / "workflow-evidence.json").write_text(
+        json.dumps(evidence, indent=2) + "\n", encoding="utf-8",
+    )
     print("Native local workflow, report and human approval gate verified")
 
 
+def verify_exports(root: Path, original: bytes, reference: dict) -> list[dict]:
+    db_path = (root / "Workspace" / "workspace.db").as_uri()
+    with sqlite3.connect(db_path + "?mode=ro", uri=True) as database:
+        records = database.execute(
+            "SELECT t.status, t.execution_metadata_json, f.status, f.result_json "
+            "FROM tasks t JOIN file_operations f USING (task_id) "
+            "WHERE t.operation_kind='REPORT_EXPORT'"
+        ).fetchall()
+    database.close()
+    assert len(records) == 2
+    expected = {"JSON": ".json", "MARKDOWN": ".md"}
+    exported = []
+    for status, metadata, operation, result in records:
+        assert (status, operation) == ("SUCCEEDED", "COMMITTED")
+        receipt = json.loads(metadata)
+        assert receipt == json.loads(result)
+        assert receipt["report_ref"] == reference
+        filename = receipt["file_name"]
+        assert Path(filename).name == filename
+        output = root / "Exports" / filename
+        assert output.suffix == expected.pop(receipt["format"])
+        contents = output.read_bytes()
+        assert sha256(contents).hexdigest() == receipt["sha256"]
+        assert str(len(contents)) == receipt["size_bytes"]
+        if receipt["format"] == "JSON":
+            assert contents == original
+        else:
+            text = contents.decode("utf-8")
+            assert "MODEL_NOT_CONFIGURED" in text and "bbox_out_of_bounds" in text
+            _, delimiter, block = text.partition("\n```json\n")
+            assert delimiter and block.endswith("\n```\n")
+            assert json.loads(block[:-5]) == json.loads(original)
+        exported.append({
+            "format": receipt["format"], "file_name": filename, "sha256": receipt["sha256"],
+        })
+    assert not expected
+    assert {path.name for path in (root / "Exports").iterdir()} == {
+        receipt["file_name"] for receipt in exported
+    }
+    return sorted(exported, key=lambda receipt: receipt["format"])
+
+
 if __name__ == "__main__":
-    verify(Path(sys.argv[1]).resolve(strict=True))
+    verify(Path(sys.argv[1]).resolve(strict=True), sys.argv[2:] == ["--exported"])
