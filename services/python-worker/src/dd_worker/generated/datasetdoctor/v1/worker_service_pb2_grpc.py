@@ -40,6 +40,11 @@ class PythonWorkerStub:
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.SerializeToString,
                 response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
                 _registered_method=True)
+        self.StartImageQualityInspection = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/StartImageQualityInspection',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.StartImageQualityInspectionRequest.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+                _registered_method=True)
         self.StartAnnotationGeometryAudit = channel.unary_unary(
                 '/datasetdoctor.v1.PythonWorker/StartAnnotationGeometryAudit',
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.SerializeToString,
@@ -86,6 +91,12 @@ class PythonWorkerServicer:
     """Missing associated documentation comment in .proto file."""
 
     def StartProfileDataset(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StartImageQualityInspection(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -145,6 +156,11 @@ def add_PythonWorkerServicer_to_server(servicer, server):
             'StartProfileDataset': grpc.unary_unary_rpc_method_handler(
                     servicer.StartProfileDataset,
                     request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
+            ),
+            'StartImageQualityInspection': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartImageQualityInspection,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.StartImageQualityInspectionRequest.FromString,
                     response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
             ),
             'StartAnnotationGeometryAudit': grpc.unary_unary_rpc_method_handler(
@@ -214,6 +230,33 @@ class PythonWorker:
             target,
             '/datasetdoctor.v1.PythonWorker/StartProfileDataset',
             datasetdoctor_dot_v1_dot_worker__service__pb2.DatasetProfileRequest.SerializeToString,
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartImageQualityInspection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/StartImageQualityInspection',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.StartImageQualityInspectionRequest.SerializeToString,
             datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
             options,
             channel_credentials,

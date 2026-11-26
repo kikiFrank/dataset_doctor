@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use dd_protocol::v1::{
     ColorPreviewRequest, DatasetProfileRequest, ExecutionHandle, ExecutionLookup,
     ExecutionSnapshot, FrameResolveRequest, GeometryAuditRequest, HealthRequest, HealthSnapshot,
-    ShutdownRequest, VideoProbeRequest, VideoTrackingRequest,
+    ShutdownRequest, StartImageQualityInspectionRequest, VideoProbeRequest, VideoTrackingRequest,
     python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
@@ -99,6 +99,17 @@ impl WorkerProcess {
     ) -> Result<ExecutionHandle, WorkerProcessError> {
         self.client
             .start_profile_dataset(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
+
+    pub async fn start_image_quality(
+        &mut self,
+        request: StartImageQualityInspectionRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_image_quality_inspection(self.process.request(request))
             .await
             .map(|reply| reply.into_inner())
             .map_err(WorkerProcessError::Rpc)

@@ -60,6 +60,27 @@ message DatasetProfileRequest {
   DatasetProfileInput parameters = 3;
 }
 
+message ImageQualityPolicy {
+  uint32 dark_luma_max = 1;
+  uint32 bright_luma_min = 2;
+  double exposure_fraction = 3;
+  double min_gradient_energy = 4;
+}
+
+message ImageQualityInput {
+  WorkerInputFile image = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  uint64 max_pixels = 4;
+  ImageQualityPolicy policy = 5;
+}
+
+message StartImageQualityInspectionRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  ImageQualityInput parameters = 3;
+}
+
 message ColorPoint {
   double x = 1;
   double y = 2;
@@ -200,6 +221,7 @@ message ExecutionSnapshot {
 
 service PythonWorker {
   rpc StartProfileDataset(DatasetProfileRequest) returns (ExecutionHandle);
+  rpc StartImageQualityInspection(StartImageQualityInspectionRequest) returns (ExecutionHandle);
   rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
   rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
   rpc StartVideoProbe(VideoProbeRequest) returns (ExecutionHandle);

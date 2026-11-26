@@ -143,12 +143,15 @@
 | P07 聚合报告和人工审核关卡 | `52bdc07`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_report` 专项通过。核对真实几何覆盖 1/2、越界与缺标、模型未配置原因、报告封存及真实 Worker 证据。任务、报告索引和 WAITING_REVIEW 同事务，模拟失败回滚，重开保持人工关卡并拒绝篡改。原 COCO 字节一致，无自动确认。红绿 `target/dev/logs/p07-workflow-report-{red,green}.log`。累计 Windows 回归与五套 WebView2 见 `target/dev/logs/p07-workflow-report-regression.log`。 |
 | P07 默认本地体检入口 | `96dfd65`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_local_runner` 专项通过。从实际登记的 Dataset 冻结范围，采用默认计划，串行运行真实画像与几何，生成报告并等待人工审核。相同请求重放，变更抽样限制冲突。Worker 启动实际失败时，工作流和 Task 同事务保存失败原因。红绿 `target/dev/logs/p07-workflow-local-runner-{red,green}.log`。累计 Windows 回归与五套 WebView2 见 `target/dev/logs/p07-workflow-local-runner-regression.log`。 |
 | P07 桌面体检命令 | `ce58785`。Windows 命令宿主 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-desktop workspace_commands::workflow_tests` 通过。真实 Worker 从已登记 Dataset 产生报告，通过 workflow_start、workflow_get 与 report_get 查询，重开保持人工审核。新旧报告请求格式可区分，混用拒绝。红绿与类型生成 `target/dev/logs/p07-desktop-workflow-{red,green,wire}.log`。累计 Windows 回归、宿主 12 项与五套 WebView2 见 `target/dev/logs/p07-desktop-workflow-regression.log`。 |
-| P07 WebView2 数据体检与历史 | 本页所在提交。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceWorkflow -PythonExe $readerPython` 实际点击体检，核对真实覆盖、越界框、未配置模型、重开后的同一历史报告和人工关卡。数据库、文件摘要与回执证据 `target/desktop-smoke/runs/4a7142bbbf3d472ba9a08a5c65e19687/Synthetic business/workflow-evidence.json`。历史分页专项验证范围、游标和中断恢复，红绿 `target/dev/logs/p07-workflow-list-{red,green}.log` 与 `target/dev/logs/p07-webview-workflow-{red,green,wire,node}.log`。累计 Windows 回归与六套 WebView2 见 `target/dev/logs/p07-webview-workflow-regression.log`。 |
+| P07 WebView2 数据体检与历史 | `55a5eaa`。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceWorkflow -PythonExe $readerPython` 实际点击体检，核对真实覆盖、越界框、未配置模型、重开后的同一历史报告和人工关卡。数据库、文件摘要与回执证据 `target/desktop-smoke/runs/4a7142bbbf3d472ba9a08a5c65e19687/Synthetic business/workflow-evidence.json`。历史分页专项验证范围、游标和中断恢复，红绿 `target/dev/logs/p07-workflow-list-{red,green}.log` 与 `target/dev/logs/p07-webview-workflow-{red,green,wire,node}.log`。累计 Windows 回归与六套 WebView2 见 `target/dev/logs/p07-webview-workflow-regression.log`。 |
+| P04/P08 Worker 图像质量 | Windows `python -I -B -m unittest discover -s tests/worker/quality -v` 4 项，`cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test worker_image_quality` 3 项。验证真实 PNG 曝光和局部对比度、Alpha、冻结阈值与拒绝越权、坏图原因、源摘要变化及任务封存。红绿证据 `target/dev/logs/p08-image-quality-{red,python-final}.log`、`target/dev/logs/p08-worker-image-quality-{red,green}.log`。`build-worker-product.ps1` 打包并校验搬移前后 EXE 摘要，搬移后 3 项仍通过，证据 `target/dev/logs/p08-worker-image-quality-packaged.log` 和 `target/p10/worker-product/e2fbf90b148e442692ce232476497ab9/build-evidence.json`。真实 FFmpeg 视频回归 15 项见 `target/dev/logs/p08-image-quality-video-regression.log`。累计 Windows 回归及六套 WebView2 见 `target/dev/logs/p08-image-quality-regression.log`。实际数据阈值与桌面入口未验收。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
 
 Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSON Schema（10 项）和 ArtifactRef Protobuf（含非法编码拒绝）。三项入口均返回 0，证据为 `target/dev/logs/p00-sqlite-recheck.log`、`p01-json-recheck.log` 和 `p01-protobuf-recheck.log`。
+
+图像质量切片再次复跑相同三项，均通过。对应日志为 `target/dev/logs/p08-image-quality-{sqlite-lock,json,protobuf}.log`。
 
 ## 未验证与接续点
 
@@ -161,7 +164,7 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 
 ## 本轮接续检查点
 
-- P08 单帧人工采用、Final 映射、再次审核和正式备份已通过。P09 Core、桌面宿主及 WebView2 `WorkspaceColor` 已通过。P07 READY 修订、真实 Worker 画像和 Workspace 画像已通过累计回归。模板启动和画像首节点已通过累计验收。画像到几何检查已通过累计回归。BUILD_REPORT 与人工审核关卡已通过累计回归。默认本地体检已通过累计回归。桌面 workflow_start、workflow_get 和 report_get 已通过累计回归。Dataset 体检历史和实际 WebView2 报告已通过累计回归。P08 图像质量像素专项已通过，真实 Worker 接口红测 `target/dev/logs/p08-worker-image-quality-red.log`。接续专用 StartImageQualityInspection，记录阈值和坏图导致的未执行项。流程人工完成和可选模型仍待接续。P08 批次接收及可选检查仍待验收。
+- Dataset 本地体检已在 WebView2 走到人工关卡。接续工作流完成人工审核、变更后的复检以及可选模型。P04/P08 专用 `StartImageQualityInspection` 已通过源运行和搬移后 Worker 专项。下一步执行 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workspace_image_quality` 红测，接入 Workspace 单资产授权与可重开的封存结果，再用实际检查结果扩充报告覆盖。P08 批次接收仍待验收。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和显式接收，仍需批次接收与可选检查。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。

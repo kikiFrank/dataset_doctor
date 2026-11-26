@@ -21,6 +21,7 @@ from datasetdoctor.v1 import worker_service_pb2_grpc as service
 import color_execution
 import geometry_execution
 import profile_execution
+import quality_execution
 import video_execution
 from worker_execution import WorkerExecutions
 
@@ -86,7 +87,10 @@ class Worker(service.PythonWorkerServicer):
         self._authorize(context)
         capabilities = []
         if self._executions is not None:
-            capabilities.extend([geometry_execution.CAPABILITY, color_execution.CAPABILITY, profile_execution.CAPABILITY])
+            capabilities.extend([
+                geometry_execution.CAPABILITY, color_execution.CAPABILITY, profile_execution.CAPABILITY,
+                quality_execution.CAPABILITY,
+            ])
             if self._video_tools is not None:
                 capabilities.extend([
                     video_execution.CAPABILITY, video_execution.RESOLVE_CAPABILITY, video_execution.TRACK_CAPABILITY,
@@ -108,6 +112,11 @@ class Worker(service.PythonWorkerServicer):
     def StartProfileDataset(self, request, context):
         return self._start(
             request, context, profile_execution.OPERATION_DOMAIN, profile_execution.compute_profile, None,
+        )
+
+    def StartImageQualityInspection(self, request, context):
+        return self._start(
+            request, context, quality_execution.OPERATION_DOMAIN, quality_execution.compute_quality,
         )
 
     def StartColorPreview(self, request, context):

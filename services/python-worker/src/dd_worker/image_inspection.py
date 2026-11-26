@@ -24,6 +24,12 @@ class InspectedImage:
 
 
 def inspect_image(encoded: bytes, *, max_pixels: int) -> InspectedImage:
+    display, inspected = decode_display_image(encoded, max_pixels=max_pixels)
+    display.close()
+    return inspected
+
+
+def decode_display_image(encoded: bytes, *, max_pixels: int) -> tuple[Image.Image, InspectedImage]:
     if max_pixels <= 0:
         raise ValueError("max_pixels must be positive")
     try:
@@ -34,8 +40,9 @@ def inspect_image(encoded: bytes, *, max_pixels: int) -> InspectedImage:
             if source.width * source.height > max_pixels:
                 raise ImageInspectionError("pixel_limit_exceeded")
             source.load()
-            with ImageOps.exif_transpose(source) as display:
-                return InspectedImage(display.width, display.height, media_type, sha256(encoded).hexdigest())
+            display = ImageOps.exif_transpose(source)
+            facts = InspectedImage(display.width, display.height, media_type, sha256(encoded).hexdigest())
+            return display, facts
     except ImageInspectionError:
         raise
     except Image.DecompressionBombError:

@@ -112,6 +112,42 @@ class DatasetProfileRequest(_message.Message):
     parameters: DatasetProfileInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[DatasetProfileInput, _Mapping]] = ...) -> None: ...
 
+class ImageQualityPolicy(_message.Message):
+    __slots__ = ("dark_luma_max", "bright_luma_min", "exposure_fraction", "min_gradient_energy")
+    DARK_LUMA_MAX_FIELD_NUMBER: _ClassVar[int]
+    BRIGHT_LUMA_MIN_FIELD_NUMBER: _ClassVar[int]
+    EXPOSURE_FRACTION_FIELD_NUMBER: _ClassVar[int]
+    MIN_GRADIENT_ENERGY_FIELD_NUMBER: _ClassVar[int]
+    dark_luma_max: int
+    bright_luma_min: int
+    exposure_fraction: float
+    min_gradient_energy: float
+    def __init__(self, dark_luma_max: _Optional[int] = ..., bright_luma_min: _Optional[int] = ..., exposure_fraction: _Optional[float] = ..., min_gradient_energy: _Optional[float] = ...) -> None: ...
+
+class ImageQualityInput(_message.Message):
+    __slots__ = ("image", "input_manifest", "output_directory", "max_pixels", "policy")
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    POLICY_FIELD_NUMBER: _ClassVar[int]
+    image: WorkerInputFile
+    input_manifest: WorkerInputFile
+    output_directory: str
+    max_pixels: int
+    policy: ImageQualityPolicy
+    def __init__(self, image: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., max_pixels: _Optional[int] = ..., policy: _Optional[_Union[ImageQualityPolicy, _Mapping]] = ...) -> None: ...
+
+class StartImageQualityInspectionRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: ImageQualityInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[ImageQualityInput, _Mapping]] = ...) -> None: ...
+
 class ColorPoint(_message.Message):
     __slots__ = ("x", "y")
     X_FIELD_NUMBER: _ClassVar[int]
