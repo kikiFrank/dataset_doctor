@@ -26,6 +26,9 @@ use crate::video_annotation_store::{
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
+mod segments;
+pub use segments::{SegmentReceipt, SegmentRequest};
+
 #[derive(Clone)]
 pub struct KeyframeDraftRequest {
     pub source_video_id: Uuid,
@@ -153,11 +156,6 @@ impl VideoAnnotationService {
         if snapshot.revision != request.expected_video_revision {
             return Err(VideoAnnotationError::RevisionConflict);
         }
-        let next = snapshot
-            .revision
-            .checked_add(1)
-            .filter(|value| i64::try_from(*value).is_ok())
-            .ok_or(VideoAnnotationError::InvalidInput)?;
         let detail = registered_video_detail(&self.owner, session, request.source_video_id)
             .map_err(|e| VideoAnnotationError::Evidence(Box::new(e)))?;
         if detail.source_availability != VideoSourceAvailability::Online
@@ -256,9 +254,42 @@ impl VideoAnnotationService {
                 frame_ref: request.frame_ref.clone(),
                 annotation_ref: annotation_ref.clone(),
             });
+        let (_, next) = self.commit_manifest(
+            session,
+            request.source_video_id,
+            snapshot,
+            &manifest,
+            (dataset, categories),
+            now_ms,
+        )?;
+        Ok(KeyframeDraftReceipt {
+            source_video_id: request.source_video_id,
+            target_dataset_id: dataset,
+            frame_ref: request.frame_ref,
+            draft_digest: annotation_ref.sha256.clone(),
+            annotation_ref,
+            video_revision: next,
+        })
+    }
+
+    fn commit_manifest(
+        &self,
+        session: Uuid,
+        video: Uuid,
+        snapshot: Snapshot,
+        manifest: &VideoAnnotationManifest,
+        target: (Uuid, String),
+        now_ms: i64,
+    ) -> Result<(VideoArtifactReference, u64), VideoAnnotationError> {
+        let (dataset, categories) = target;
+        let next = snapshot
+            .revision
+            .checked_add(1)
+            .filter(|value| i64::try_from(*value).is_ok())
+            .ok_or(VideoAnnotationError::InvalidInput)?;
         let (manifest_ref, path) = publish(
             &snapshot.root,
-            request.source_video_id,
+            video,
             "manifests",
             "VIDEO_ANNOTATION_MANIFEST",
             &manifest,
@@ -266,10 +297,9 @@ impl VideoAnnotationService {
         let mut metadata = snapshot.metadata.clone();
         metadata["video_annotation_manifest_ref"] = json!(manifest_ref);
         metadata["video_annotation_manifest_entry"] = json!(VideoManifestEntry {
-            reference: manifest_ref,
+            reference: manifest_ref.clone(),
             relative_path: path
         });
-        let video = request.source_video_id;
         let changed=self.owner.workspace_action(session,move|workspace|{
             workspace.connection.execute("UPDATE assets SET metadata_json=?1,row_revision=?2,updated_at_ms=?3
                 WHERE asset_id=?4 AND kind='VIDEO' AND row_revision=?5 AND media_digest=?6 AND metadata_json=?7
@@ -280,14 +310,7 @@ impl VideoAnnotationService {
         if changed != 1 {
             return Err(VideoAnnotationError::RevisionConflict);
         }
-        Ok(KeyframeDraftReceipt {
-            source_video_id: video,
-            target_dataset_id: dataset,
-            frame_ref: request.frame_ref,
-            draft_digest: annotation_ref.sha256.clone(),
-            annotation_ref,
-            video_revision: next,
-        })
+        Ok((manifest_ref, next))
     }
 
     fn snapshot(&self, session: Uuid, video: Uuid) -> Result<Snapshot, VideoAnnotationError> {

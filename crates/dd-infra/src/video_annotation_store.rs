@@ -1,6 +1,6 @@
 //! Immutable video work artifacts shared by editing, backup and restore.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -207,6 +207,33 @@ pub(crate) fn read_video_work(
     {
         return Err(invalid());
     }
+    let mut segment_ids = BTreeSet::new();
+    for segment in &manifest.segments {
+        let start = canonical::<i64>(&segment.start_us)?;
+        let end = canonical::<i64>(&segment.end_us)?;
+        if segment.segment_id.is_nil()
+            || !segment_ids.insert(segment.segment_id)
+            || segment.source_video_id != video
+            || segment.source_digest != source_digest
+            || start < 0
+            || end <= start
+            || canonical::<u64>(&segment.revision)? == 0
+            || !manifest
+                .target_contexts
+                .contains_key(&segment.target_dataset_id)
+        {
+            return Err(invalid());
+        }
+        let mut frames = BTreeSet::new();
+        for keyframe in &segment.keyframes {
+            let pts = canonical::<i64>(keyframe.frame_ref.pts_us.as_deref().ok_or_else(invalid)?)?;
+            let index = canonical::<u64>(&keyframe.frame_ref.frame_index)?;
+            if pts < start || pts >= end || !frames.insert((keyframe.frame_ref.stream_index, index))
+            {
+                return Err(invalid());
+            }
+        }
+    }
     let mut files = vec![(PathBuf::from(path), reference.clone())];
     for (dataset, frame, annotation) in manifest.keyframes() {
         let draft = read_keyframe(root, video, annotation)?;
@@ -276,4 +303,12 @@ fn invalid() -> io::Error {
         io::ErrorKind::InvalidData,
         "Video work artifact does not match its durable binding",
     )
+}
+
+fn canonical<T: std::str::FromStr + std::fmt::Display>(value: &str) -> io::Result<T> {
+    let parsed: T = value.parse().map_err(|_| invalid())?;
+    if parsed.to_string() != value {
+        return Err(invalid());
+    }
+    Ok(parsed)
 }

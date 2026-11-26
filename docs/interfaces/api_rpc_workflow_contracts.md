@@ -864,6 +864,8 @@ Staging 没有独立 state 列。每次查询由 Asset、Review、任务与报�
 
 KeyframeDraftReceipt 固定为 {source_video_id, target_dataset_id, frame_ref, annotation_ref, draft_digest, video_revision}。video_save_keyframe_draft 接收实际 COCO 文档，Core 验证图像尺寸、坐标与 Dataset 类别后，保存为 owner=ASSET、id=source_video_id 的工作 Artifact。它服务于追踪种子，不意味着已经生成训练 Asset 或确认 Final。
 
+片段创建省略 segment_id 并使用 expected_revision=0；修改时匹配当前片段 revision，成功后递增。Core 同时以快照的 assets.row_revision 和当前类别内容条件发布清单，防止覆盖其他工作。短命令结果不明时先用 video_get 读取当前工作状态，再决定重试。移出片段的人工关键帧保留为未分配草稿，尚无关键帧的片段可作为工作状态保存，运行追踪时另行验证可用种子。
+
 video_save_segment 只接收已保存关键帧的 {frame_ref,annotation_ref} 引用。Core 验证引用归属、源摘要、类别摘要和区间；所有关键帧必须满足 start_us ≤ pts_us < end_us。用户所说的“尾部关键帧”是区间内最后一张被选择的实际帧，不把 end_us 边界外的帧纳入。已有片段更换目标 Dataset 时必须重新验证类别及草稿，不能直接沿用不匹配的类别数字。
 
 video_annotation_manifest 的当前载荷固定包含 contract_version、source_video_id、source_digest、target_contexts、segments、unassigned_keyframe_drafts。segments 使用 C12 的 VideoSegment；target_contexts 按 dataset_id 记录 label_schema_digest；unassigned_keyframe_drafts 保存尚未加入片段的关键帧引用。此清单经 Core 文件提交与 assets.row_revision 校验，恢复/备份时保留，候选清理时排除。

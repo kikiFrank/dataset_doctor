@@ -216,3 +216,8 @@ required-features = ["execution-rpc"]
 name = "video_keyframes"
 path = "../../tests/integration/rpc/video_keyframes.rs"
 required-features = ["execution-rpc"]
+
+[[test]]
+name = "video_segments"
+path = "../../tests/integration/rpc/video_segments.rs"
+required-features = ["execution-rpc"]
