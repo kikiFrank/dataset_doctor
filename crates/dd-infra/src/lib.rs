@@ -3,6 +3,7 @@
 #[cfg(feature = "execution-rpc")]
 pub mod agent_process;
 pub mod annotation_view;
+pub mod backup_artifacts;
 pub mod backup_assets;
 pub mod dataset_import;
 pub mod dataset_query;

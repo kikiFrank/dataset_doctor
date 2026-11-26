@@ -3,15 +3,16 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, Row};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::paths::{is_portable_relative_file, open_registered_file, open_scoped_file};
+use crate::paths::{
+    copy_and_hash, is_portable_relative_file, open_registered_file, open_scoped_file,
+};
 use crate::sqlite::row_uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -241,19 +242,4 @@ fn open_source(
         role,
         source,
     })
-}
-
-fn copy_and_hash(source: &mut File, output: &mut impl Write) -> io::Result<(u64, String)> {
-    let mut hash = Sha256::new();
-    let mut size = 0;
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = source.read(&mut buffer)?;
-        if count == 0 {
-            return Ok((size, format!("{:x}", hash.finalize())));
-        }
-        output.write_all(&buffer[..count])?;
-        hash.update(&buffer[..count]);
-        size += count as u64;
-    }
 }

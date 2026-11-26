@@ -3,6 +3,8 @@ use std::io::{self, ErrorKind};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use crate::workspace::{ordinary_file, prevent_replacement};
 
 pub(crate) fn is_portable_relative_file(path: &Path) -> bool {
@@ -153,4 +155,22 @@ fn opened_path(file: &File, _: &Path) -> io::Result<PathBuf> {
 #[cfg(not(windows))]
 fn opened_path(_: &File, path: &Path) -> io::Result<PathBuf> {
     path.canonicalize()
+}
+
+pub(crate) fn copy_and_hash(
+    source: &mut File,
+    output: &mut impl Write,
+) -> io::Result<(u64, String)> {
+    let mut hash = Sha256::new();
+    let mut size = 0;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = source.read(&mut buffer)?;
+        if count == 0 {
+            return Ok((size, format!("{:x}", hash.finalize())));
+        }
+        output.write_all(&buffer[..count])?;
+        hash.update(&buffer[..count]);
+        size += count as u64;
+    }
 }
