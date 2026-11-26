@@ -159,6 +159,8 @@ assets.metadata_json 的 video_probe_task_id 保存最近登记的探测 Task UU
 
 assets.metadata_json 可以包含 current_track_map_ref、video_frame_index_ref 和 video_annotation_manifest_ref。对外引用复用公共 ArtifactRef，owner 明确为 TASK、ASSET 或 REVIEW 及对应 UUID，不强制所有产物都依附 Task，不暴露内部路径；Core 的持久 manifest entry 保存 artifact_id、relative_path、sha256、kind、media_type 等定位信息，由 Core 校验后解析。
 
+Core 将视频工作清单写入不可变的 artifacts/videos/<video_id>/manifests/<artifact_id>.json，人工草稿位于同一视频的 keyframes 目录。metadata_json 的 video_annotation_manifest_entry 保存 reference 与内部 relative_path，公开命令仅返回 ArtifactRef。草稿携带完整帧引用、目标 Dataset 类别摘要和已校验的 COCO。文件落盘并同步后才以 assets.row_revision 条件更新当前清单指针，失败保留旧指针；未被指针引用的文件不构成已保存状态。备份和恢复核验当前清单及其草稿的身份、归属、长度和摘要，并保留帧引用所依赖的 Task 产物。
+
 video_annotation_manifest_ref 指向当前视频工作清单，包含已保存片段、精确端点、关键帧及人工草稿引用。video_save_segment 必须更新这一正式依赖并持久化；它需要备份，不能作为 AI 临时候选清理。每张图片当前 track map 的载荷建议为：
 
 ```json

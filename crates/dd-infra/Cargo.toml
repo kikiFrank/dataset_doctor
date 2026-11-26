@@ -211,3 +211,8 @@ path = "../../tests/storage/tasks/task_store.rs"
 name = "workspace_frame_resolve"
 path = "../../tests/integration/rpc/workspace_frame_resolve.rs"
 required-features = ["execution-rpc"]
+
+[[test]]
+name = "video_keyframes"
+path = "../../tests/integration/rpc/video_keyframes.rs"
+required-features = ["execution-rpc"]

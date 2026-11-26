@@ -34,6 +34,9 @@ pub mod review_store;
 pub mod review_validation;
 pub mod sqlite;
 pub mod task_store;
+pub mod video_annotation_store;
+#[cfg(feature = "execution-rpc")]
+pub mod video_keyframes;
 #[cfg(feature = "execution-rpc")]
 pub mod video_index;
 #[cfg(feature = "execution-rpc")]

@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{copy_and_hash, is_portable_relative_file, open_scoped_file};
 use crate::task_store::parse_digest;
+use crate::video_annotation_store::{VideoArtifactReference, VideoManifestEntry, read_video_work};
 
 const RESULT_LIMIT: u64 = 4 * 1024 * 1024;
 
@@ -142,6 +143,36 @@ pub(crate) fn formal_backup_inventory(
             stage_result(&mut staged, &contracts, result)?;
         } else {
             staged.copy(&result.path, result.sha256.as_deref(), None)?;
+        }
+    }
+    let mut videos = snapshot
+        .prepare("SELECT asset_id,media_digest,metadata_json FROM assets WHERE kind='VIDEO'")?;
+    for row in videos.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })? {
+        let (video, digest, metadata) = row?;
+        let invalid =
+            || BackupArtifactError::InvalidManifest(PathBuf::from("video_annotation_manifest"));
+        let video = uuid::Uuid::parse_str(&video).map_err(|_| invalid())?;
+        let metadata: serde_json::Value = serde_json::from_str(&metadata).map_err(|_| invalid())?;
+        let reference = metadata.get("video_annotation_manifest_ref");
+        let entry = metadata.get("video_annotation_manifest_entry");
+        if reference.is_none() && entry.is_none() {
+            continue;
+        }
+        let reference: VideoArtifactReference =
+            serde_json::from_value(reference.cloned().ok_or_else(invalid)?)
+                .map_err(|_| invalid())?;
+        let entry: VideoManifestEntry =
+            serde_json::from_value(entry.cloned().ok_or_else(invalid)?).map_err(|_| invalid())?;
+        let (_, files) = read_video_work(workspace_root, video, &digest, &reference, &entry)?;
+        for (path, reference) in files {
+            let size = reference.size_bytes.parse().map_err(|_| invalid())?;
+            staged.copy(&path, Some(&reference.sha256), Some(size))?;
         }
     }
     Ok(staged.files.into_values().collect())

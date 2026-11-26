@@ -167,6 +167,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 
 视频详情支持按时间（毫秒）或从 0 开始的显示帧序号请求精确帧。时间定位可选最近帧或该时间及之后的帧，显示结果保留实际帧序号和规范化微秒时间。后台解析成功后取得会话显示授权，缓存命中时复用已核验的帧。
 
+人工关键帧持久化可用 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test video_keyframes` 复跑，环境变量与 Worker RPC 验收一致。它使用真实合成视频与专用 Worker，验证草稿的帧、类别、几何、修订冲突和备份恢复。传入视频工具的 `check-worker-rpc.ps1` 也包含这些用例。桌面关键帧编辑入口仍待接入。
+
 视频登记后可查询时长、视频流、旋转、帧率节奏和来源状态。刷新信息会重新核对视频摘要，离线时保留已经封存的元数据。视频片段与抽帧工作台仍在开发。
 
 桌面命令宿主的完整视频验收需要同时传入已核验的 FFmpeg、FFprobe 路径，脚本会启用 video-acceptance 测试特性并运行真实帧解析与图像协议用例。
