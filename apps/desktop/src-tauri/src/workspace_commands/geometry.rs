@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use dd_infra::geometry_runtime::{
@@ -35,30 +35,8 @@ impl GeometryRunner {
     }
 
     pub(crate) fn configured() -> Option<Arc<Self>> {
-        if let (Some(python), Some(entrypoint)) = (
-            std::env::var_os("DD_WORKER_PYTHON"),
-            std::env::var_os("DD_WORKER_ENTRYPOINT"),
-        ) {
-            let python = PathBuf::from(python);
-            let entrypoint = PathBuf::from(entrypoint);
-            if python.is_absolute() && entrypoint.is_absolute() {
-                return Some(Self::new(python, entrypoint));
-            }
-        }
-        if !cfg!(debug_assertions) {
-            return None;
-        }
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let interpreter = if cfg!(windows) {
-            repo.join("target/dev/worker-venv/Scripts/python.exe")
-        } else {
-            repo.join("target/dev/worker-venv/bin/python")
-        };
-        let entrypoint = repo.join("services/python-worker/src/dd_worker/entrypoint.py");
-        Some(Self::new(
-            interpreter.canonicalize().ok()?,
-            entrypoint.canonicalize().ok()?,
-        ))
+        let (interpreter, entrypoint) = super::configured_worker_script()?;
+        Some(Self::new(interpreter, entrypoint))
     }
 
     async fn execute(

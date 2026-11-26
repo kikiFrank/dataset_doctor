@@ -38,6 +38,7 @@ pub struct VideoImport {
 pub struct VideoImportReceipt {
     pub video_id: Uuid,
     pub task_id: Uuid,
+    pub accepted_at_ms: i64,
 }
 
 #[derive(Debug)]
@@ -250,6 +251,7 @@ fn commit_video(
     Ok(VideoImportReceipt {
         video_id,
         task_id: queued.task_id,
+        accepted_at_ms: queued.created_at_ms,
     })
 }
 
@@ -259,15 +261,15 @@ fn find_existing(
     key: Uuid,
     fingerprint: [u8; 32],
 ) -> Result<Option<VideoImportReceipt>, VideoImportError> {
-    let record: Option<(Uuid, String, String)> = connection
+    let record: Option<(Uuid, String, String, i64)> = connection
         .query_row(
-            "SELECT task_id, request_fingerprint, input_manifest_path FROM main.tasks
+            "SELECT task_id, request_fingerprint, input_manifest_path, created_at_ms FROM main.tasks
          WHERE operation_kind = ?1 AND idempotency_key = ?2",
             params![ACTION, key.to_string()],
-            |row| Ok((row_uuid(row, 0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row_uuid(row, 0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .optional()?;
-    let Some((task_id, stored, relative)) = record else {
+    let Some((task_id, stored, relative, accepted_at_ms)) = record else {
         return Ok(None);
     };
     if stored != format_digest(&fingerprint) {
@@ -293,5 +295,9 @@ fn find_existing(
         .as_str()
         .and_then(|id| Uuid::parse_str(id).ok())
         .ok_or(VideoImportError::InvalidManifest)?;
-    Ok(Some(VideoImportReceipt { video_id, task_id }))
+    Ok(Some(VideoImportReceipt {
+        video_id,
+        task_id,
+        accepted_at_ms,
+    }))
 }

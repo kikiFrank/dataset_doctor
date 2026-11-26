@@ -15,6 +15,7 @@ pub enum PathPurpose {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PathKind {
     Directory,
+    File,
 }
 
 #[derive(Deserialize, TS)]

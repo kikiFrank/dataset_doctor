@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_protocol::v1::{GeometryAuditInput, WorkerInputFile};
-use rusqlite::params;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -22,7 +21,7 @@ use crate::dataset_query::{RegisteredImage, RegisteredInputFile};
 use crate::input_fingerprint::freeze_input_manifest;
 use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
-use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission, format_digest};
+use crate::task_store::{StoredTask, TaskOutcome, TaskSubmission, format_digest};
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -48,48 +47,16 @@ impl GeometryRuntime {
         session: Uuid,
         task: Uuid,
     ) -> Result<TaskOutcome, WorkspaceThreadError> {
-        workspace.workspace_action(session, move |owner| {
-            let exists: bool = owner
-                .connection
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM tasks WHERE task_id=?1 AND capability_id=?2)",
-                    params![task.to_string(), CAPABILITY],
-                    |row| row.get(0),
-                )
-                .map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Database(error)))?;
-            if !exists {
-                return Err(WorkspaceThreadError::Task(TaskStoreError::UnknownTask));
-            }
-            owner.task_outcome(task).map_err(WorkspaceThreadError::Task)
-        })
+        WorkerRuntime::task_outcome(workspace, session, task, CAPABILITY)
     }
 
-    /// A launch failure has no admitted executor. Once started, the caller
-    /// must confirm that its Worker has stopped before marking an interruption.
     pub fn record_unavailable(
         workspace: &WorkspaceThread,
         session: Uuid,
         task: Uuid,
         startup_failed: bool,
     ) -> Result<(), GeometryRuntimeError> {
-        let now = now_ms()?;
-        let (status, code) = if startup_failed {
-            ("FAILED", "WORKER_START_FAILED")
-        } else {
-            ("INTERRUPTED", "WORKER_INTERRUPTED")
-        };
-        workspace.workspace_action(session, move |owner| {
-            owner.connection.execute(
-                "UPDATE tasks SET status=?4, error_code=?5, finished_at_ms=?6, updated_at_ms=?6,
-                    row_revision=row_revision+1,
-                    execution_metadata_json=json_set(execution_metadata_json,'$.grant_state','REVOKED')
-                 WHERE task_id=?1 AND workspace_session_id=?2 AND capability_id=?3
-                   AND (status='QUEUED' OR (?4='INTERRUPTED' AND status IN ('DISPATCHING','RUNNING','CANCELLING')))",
-                params![task.to_string(), session.to_string(), CAPABILITY, status, code, now],
-            ).map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Database(error)))?;
-            Ok(())
-        })?;
-        Ok(())
+        WorkerRuntime::record_unavailable(workspace, session, task, CAPABILITY, startup_failed)
     }
 
     pub async fn launch(

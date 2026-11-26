@@ -6,6 +6,7 @@ import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, works
 import type { OpenWorkspace } from "./api/workspace";
 import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
 import { DatasetBrowser } from "./dataset-browser";
+import { VideoImportPanel } from "./video-import-panel";
 import "./style.css";
 
 function App() {
@@ -84,6 +85,7 @@ function App() {
         {error && <p role="alert">{error}</p>}
         {workspace && <DatasetBrowser key={workspace.workspace_session_id} workspace={workspace}
           reviewBlocked={reviewBlocked} onReviewBlocked={setReviewBlocked} />}
+        {workspace && <VideoImportPanel key={workspace.workspace_session_id} workspace={workspace} />}
       </main>
     </div>
   );

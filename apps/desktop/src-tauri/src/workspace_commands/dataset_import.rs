@@ -208,17 +208,19 @@ impl Commands {
                     Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
                         TaskStoreError::UnknownTask,
                     ))) => {
-                        return match self.geometry_task(session, id) {
-                            Err(error) if error.code == "NOT_FOUND" => {
-                                match self.review_commit_task(session, id) {
-                                    Err(error) if error.code == "NOT_FOUND" => {
-                                        self.export_task(session, id)
-                                    }
-                                    result => result,
-                                }
+                        let queries = [
+                            Self::geometry_task,
+                            Self::review_commit_task,
+                            Self::export_task,
+                            Self::video_task,
+                        ];
+                        for query in queries {
+                            match query(self, session, id) {
+                                Err(error) if error.code == "NOT_FOUND" => {}
+                                result => return result,
                             }
-                            result => result,
-                        };
+                        }
+                        return Err(self.error("NOT_FOUND", "当前工作区中没有此任务。"));
                     }
                     Err(error) => return Err(self.import_error(error)),
                 };

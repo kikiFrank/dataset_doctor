@@ -159,6 +159,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv -VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe
 ```
 
+Windows 开发版的视频入口从启动进程继承已核验的视频工具路径。使用 `$env:DD_WORKER_VIDEO_FFMPEG = $ffmpeg` 和 `$env:DD_WORKER_VIDEO_FFPROBE = $ffprobe` 设置工具路径后启动桌面程序。`tests/desktop/windows/check-command-handlers.ps1` 接受 `-VideoFfmpegExe` 和 `-VideoFfprobeExe` 参数，可在命令行复跑 Windows 桌面命令宿主的真实视频探测。
+
 ## Windows Workspace SQLite 写连接初始化（P01-03）
 
 在已初始化的 x64 VS Developer PowerShell 中，从仓库根目录运行。使用 Rust/Cargo 1.97.1 的 MSVC 工具链和 P00-03 预填的 `target/p00-03/cargo-home/`。当前进程应使用默认的 Cargo/MSVC 编译选项。以下命令清除 SQLite 链接覆盖变量并使用 bundled 源。

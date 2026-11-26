@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,9 +7,9 @@ use dd_infra::workspace::WorkspaceOpenError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::UuidText;
 use dd_ui_contracts::workspace::{
-    AppError, CloseReceipt, CloseState, CommandContext, PathAccess, PathGrant, PathPurpose,
-    PathSelectRequest, WorkspaceCloseRequest, WorkspaceCreateRequest, WorkspaceGetRequest,
-    WorkspaceOpenRequest, WorkspaceSnapshot,
+    AppError, CloseReceipt, CloseState, CommandContext, PathAccess, PathGrant, PathKind,
+    PathPurpose, PathSelectRequest, WorkspaceCloseRequest, WorkspaceCreateRequest,
+    WorkspaceGetRequest, WorkspaceOpenRequest, WorkspaceSnapshot,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -24,6 +25,34 @@ pub(crate) mod dataset_import;
 pub(crate) mod geometry;
 pub(crate) mod review;
 pub(crate) mod review_commit;
+pub(crate) mod video;
+
+fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
+    if let (Some(python), Some(entrypoint)) = (
+        std::env::var_os("DD_WORKER_PYTHON"),
+        std::env::var_os("DD_WORKER_ENTRYPOINT"),
+    ) {
+        let python = PathBuf::from(python);
+        let entrypoint = PathBuf::from(entrypoint);
+        if python.is_absolute() && entrypoint.is_absolute() {
+            return Some((python, entrypoint));
+        }
+    }
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let interpreter = if cfg!(windows) {
+        repo.join("target/dev/worker-venv/Scripts/python.exe")
+    } else {
+        repo.join("target/dev/worker-venv/bin/python")
+    };
+    let entrypoint = repo.join("services/python-worker/src/dd_worker/entrypoint.py");
+    Some((
+        interpreter.canonicalize().ok()?,
+        entrypoint.canonicalize().ok()?,
+    ))
+}
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
@@ -44,6 +73,10 @@ mod import_tests;
 mod geometry_tests;
 
 #[cfg(test)]
+#[path = "../../../../tests/desktop/host/video_import.rs"]
+mod video_import_tests;
+
+#[cfg(test)]
 #[path = "../../../../tests/desktop/host/review.rs"]
 mod review_tests;
 
@@ -60,32 +93,49 @@ pub async fn path_select(
         None
     };
     run(thread, request.request_id, move |commands| {
-        match (&request.purpose, &request.access, &request.context) {
-            (PathPurpose::Workspace, PathAccess::ReadWrite, _) => {}
-            (PathPurpose::Import, PathAccess::Read, Some(context))
-            | (PathPurpose::Export, PathAccess::ReadWrite, Some(context)) => {
+        match (
+            &request.purpose,
+            &request.kind,
+            &request.access,
+            &request.context,
+        ) {
+            (PathPurpose::Workspace, PathKind::Directory, PathAccess::ReadWrite, _) => {}
+            (PathPurpose::Import, _, PathAccess::Read, Some(context))
+            | (PathPurpose::Export, PathKind::Directory, PathAccess::ReadWrite, Some(context)) => {
                 commands.session(context.clone())?;
             }
             _ => {
                 return Err(
-                    commands.error("INVALID_ARGUMENT", "目录用途、访问级别或工作区会话无效。")
+                    commands.error("INVALID_ARGUMENT", "路径用途、访问级别或工作区会话无效。")
                 );
             }
         }
         let selection = if let Some(path) = selected_fixture {
             path
         } else {
-            let Some(path) = app.dialog().file().blocking_pick_folder() else {
+            let selected = if matches!(request.kind, PathKind::File) {
+                app.dialog()
+                    .file()
+                    .add_filter("Video", &["mp4", "mov", "mkv", "webm", "avi", "ts", "m4v"])
+                    .blocking_pick_file()
+            } else {
+                app.dialog().file().blocking_pick_folder()
+            };
+            let Some(path) = selected else {
                 return Ok(None);
             };
             path.into_path()
-                .map_err(|_| commands.error("INVALID_ARGUMENT", "请选择本机目录。"))?
+                .map_err(|_| commands.error("INVALID_ARGUMENT", "请选择本机路径。"))?
         };
         if let PathPurpose::Import = request.purpose {
             let context = request
                 .context
                 .ok_or_else(|| commands.error("INVALID_ARGUMENT", "请选择当前工作区。"))?;
-            return commands.import_directory(context, selection).map(Some);
+            return match request.kind {
+                PathKind::Directory => commands.import_directory(context, selection),
+                PathKind::File => commands.video_file(context, selection),
+            }
+            .map(Some);
         }
         if let PathPurpose::Export = request.purpose {
             let context = request

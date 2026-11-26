@@ -16,6 +16,7 @@ use dd_protocol::v1::{
     core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
+use rusqlite::params;
 use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -27,7 +28,7 @@ use uuid::Uuid;
 use crate::execution_rpc::CoreClaimService;
 use crate::input_fingerprint::InputFingerprintError;
 use crate::paths::scoped_directory;
-use crate::task_store::{TaskOutcome, format_digest};
+use crate::task_store::{TaskOutcome, TaskStoreError, format_digest};
 use crate::worker_process::{CoreClaimEndpoint, WorkerLaunch, WorkerProcess, WorkerProcessError};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -180,6 +181,57 @@ impl WorkerOperation {
 }
 
 impl WorkerRuntime {
+    pub(crate) fn task_outcome(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        capability: &'static str,
+    ) -> Result<TaskOutcome, WorkspaceThreadError> {
+        workspace.workspace_action(session, move |owner| {
+            let exists: bool = owner
+                .connection
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM tasks WHERE task_id=?1 AND capability_id=?2)",
+                    params![task.to_string(), capability],
+                    |row| row.get(0),
+                )
+                .map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Database(error)))?;
+            if !exists {
+                return Err(WorkspaceThreadError::Task(TaskStoreError::UnknownTask));
+            }
+            owner.task_outcome(task).map_err(WorkspaceThreadError::Task)
+        })
+    }
+
+    /// A launch failure has no admitted executor. Once started, the caller
+    /// must confirm that its Worker has stopped before marking an interruption.
+    pub(crate) fn record_unavailable(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        capability: &'static str,
+        startup_failed: bool,
+    ) -> Result<(), WorkerRuntimeError> {
+        let now = now_ms()?;
+        let (status, code) = if startup_failed {
+            ("FAILED", "WORKER_START_FAILED")
+        } else {
+            ("INTERRUPTED", "WORKER_INTERRUPTED")
+        };
+        workspace.workspace_action(session, move |owner| {
+            owner.connection.execute(
+                "UPDATE tasks SET status=?4, error_code=?5, finished_at_ms=?6, updated_at_ms=?6,
+                    row_revision=row_revision+1,
+                    execution_metadata_json=json_set(execution_metadata_json,'$.grant_state','REVOKED')
+                 WHERE task_id=?1 AND workspace_session_id=?2 AND capability_id=?3
+                   AND (status='QUEUED' OR (?4='INTERRUPTED' AND status IN ('DISPATCHING','RUNNING','CANCELLING')))",
+                params![task.to_string(), session.to_string(), capability, status, code, now],
+            ).map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Database(error)))?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
     pub(crate) async fn launch(
         workspace: Arc<WorkspaceThread>,
         expected_session: Uuid,

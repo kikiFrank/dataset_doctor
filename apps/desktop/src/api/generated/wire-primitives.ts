@@ -10,7 +10,7 @@ export type ArtifactOwner = { "kind": "TASK", "id": UuidText } | { "kind": "ASSE
 
 export type PathPurpose = "WORKSPACE" | "IMPORT" | "EXPORT";
 
-export type PathKind = "DIRECTORY";
+export type PathKind = "DIRECTORY" | "FILE";
 
 export type PathAccess = "READ" | "READ_WRITE";
 
@@ -70,7 +70,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "REVIEW_COMMIT" | "DATASET_EXPORT";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -83,6 +83,10 @@ export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: Dec
 export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
+
+export type VideoImportRequest = { context: CommandContext, file_grant_id: UuidText, display_name: string | null, stream_index: number | null, };
+
+export type VideoImportView = { source_video_id: UuidText, operation: ImportOperationRef, };
 
 export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
 

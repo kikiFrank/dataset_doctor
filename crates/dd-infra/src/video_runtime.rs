@@ -33,6 +33,23 @@ pub struct VideoProbeRuntime {
 }
 
 impl VideoProbeRuntime {
+    pub fn task_outcome(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+    ) -> Result<TaskOutcome, WorkspaceThreadError> {
+        WorkerRuntime::task_outcome(workspace, session, task, CAPABILITY)
+    }
+
+    pub fn record_unavailable(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        startup_failed: bool,
+    ) -> Result<(), VideoRuntimeError> {
+        WorkerRuntime::record_unavailable(workspace, session, task, CAPABILITY, startup_failed)
+    }
+
     pub async fn launch(
         workspace: Arc<WorkspaceThread>,
         session: Uuid,

@@ -4,6 +4,7 @@ pub mod annotation;
 pub mod dataset;
 pub mod dataset_export;
 pub mod dataset_import;
+pub mod video;
 pub mod workspace;
 
 use std::fmt::Display;
@@ -164,6 +165,8 @@ pub fn wire_primitives_typescript() -> String {
         dataset_import::DatasetImportRegistration::decl(&config),
         dataset_import::ImportTaskView::decl(&config),
         dataset_import::GeometrySubmitRequest::decl(&config),
+        video::VideoImportRequest::decl(&config),
+        video::VideoImportView::decl(&config),
         dataset_import::GeometryFindingView::decl(&config),
         dataset_import::GeometryReportView::decl(&config),
         annotation::CocoImage::decl(&config),
