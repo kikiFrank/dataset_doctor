@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use dd_core::workspace::{WorkspaceIdentity, WorkspaceStore};
 use rusqlite::{Connection, OpenFlags};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::sqlite::{WorkspaceMigrationError, open_existing_workspace_database};
@@ -140,12 +141,12 @@ struct MarkerIdentity {
     config_revision: u64,
 }
 
-pub struct ExistingWorkspaceStore {
+pub struct SqliteWorkspaceStore {
     contracts: JsonContracts,
     busy_timeout_ms: u32,
 }
 
-impl ExistingWorkspaceStore {
+impl SqliteWorkspaceStore {
     pub fn new(busy_timeout_ms: u32) -> Result<Self, Box<dyn Error + Send + Sync>> {
         Ok(Self {
             contracts: JsonContracts::new()?,
@@ -154,7 +155,7 @@ impl ExistingWorkspaceStore {
     }
 }
 
-impl WorkspaceStore for ExistingWorkspaceStore {
+impl WorkspaceStore for SqliteWorkspaceStore {
     type Handle = OpenedWorkspace;
     type Error = WorkspaceOpenError;
 
@@ -163,6 +164,25 @@ impl WorkspaceStore for ExistingWorkspaceStore {
         authorized_root: &Path,
     ) -> Result<(WorkspaceIdentity, Self::Handle), Self::Error> {
         let workspace = open_workspace(authorized_root, &self.contracts, self.busy_timeout_ms)?;
+        let identity = workspace.identity().clone();
+        Ok((identity, workspace))
+    }
+
+    fn create(
+        &self,
+        authorized_root: &Path,
+        display_name: &str,
+        workspace_id: Uuid,
+        now_ms: i64,
+    ) -> Result<(WorkspaceIdentity, Self::Handle), Self::Error> {
+        let workspace = create_workspace(
+            authorized_root,
+            &self.contracts,
+            self.busy_timeout_ms,
+            display_name,
+            &workspace_id.to_string(),
+            now_ms,
+        )?;
         let identity = workspace.identity().clone();
         Ok((identity, workspace))
     }

@@ -30,6 +30,14 @@ pub trait WorkspaceStore {
         &self,
         authorized_root: &Path,
     ) -> Result<(WorkspaceIdentity, Self::Handle), Self::Error>;
+
+    fn create(
+        &self,
+        authorized_root: &Path,
+        display_name: &str,
+        workspace_id: Uuid,
+        now_ms: i64,
+    ) -> Result<(WorkspaceIdentity, Self::Handle), Self::Error>;
 }
 
 #[derive(Debug)]
@@ -107,7 +115,7 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
     }
 
     /// Accept a directory returned by the trusted native selector. The
-    /// transport layer may expose only the resulting opaque ID to open.
+    /// transport layer exposes only the opaque ID for Workspace open or create.
     pub fn grant_selected_directory(
         &mut self,
         selected: PathBuf,
@@ -133,6 +141,34 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         grant_id: Uuid,
         now: Instant,
     ) -> Result<WorkspaceSession, WorkspaceAccessError<S::Error>> {
+        let root = self.consume_directory_grant(grant_id, now)?;
+        let (identity, handle) = self
+            .store
+            .open(&root)
+            .map_err(WorkspaceAccessError::Storage)?;
+        Ok(self.activate(identity, handle))
+    }
+
+    pub fn create(
+        &mut self,
+        grant_id: Uuid,
+        display_name: &str,
+        now: Instant,
+        now_ms: i64,
+    ) -> Result<WorkspaceSession, WorkspaceAccessError<S::Error>> {
+        let root = self.consume_directory_grant(grant_id, now)?;
+        let (identity, handle) = self
+            .store
+            .create(&root, display_name, Uuid::new_v4(), now_ms)
+            .map_err(WorkspaceAccessError::Storage)?;
+        Ok(self.activate(identity, handle))
+    }
+
+    fn consume_directory_grant(
+        &mut self,
+        grant_id: Uuid,
+        now: Instant,
+    ) -> Result<PathBuf, WorkspaceAccessError<S::Error>> {
         if self.active.is_some() {
             return Err(WorkspaceAccessError::AlreadyOpen);
         }
@@ -146,10 +182,10 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         if now.saturating_duration_since(grant.issued_at) >= self.grant_lifetime {
             return Err(WorkspaceAccessError::ExpiredGrant);
         }
-        let (identity, handle) = self
-            .store
-            .open(&grant.root)
-            .map_err(WorkspaceAccessError::Storage)?;
+        Ok(grant.root)
+    }
+
+    fn activate(&mut self, identity: WorkspaceIdentity, handle: S::Handle) -> WorkspaceSession {
         let session = WorkspaceSession {
             workspace_id: identity.workspace_id,
             display_name: identity.display_name,
@@ -161,7 +197,7 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
             session: session.clone(),
             _handle: handle,
         });
-        Ok(session)
+        session
     }
 
     pub fn current(&self) -> Option<&WorkspaceSession> {

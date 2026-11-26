@@ -51,3 +51,57 @@ fn concurrent_open_requests_are_serialized_and_shutdown_releases_sqlite_and_lock
     drop(actor);
     assert!(WorkspaceLock::acquire(&root).is_ok());
 }
+
+#[test]
+fn create_uses_a_one_shot_grant_and_opens_a_reusable_workspace() {
+    let root = support::workspace_root("create via data thread");
+    let actor = WorkspaceThread::start(250, Duration::from_secs(10)).unwrap();
+    let grant = actor.grant_selected_directory(root.clone()).unwrap();
+    let (left, right) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| actor.create(grant.grant_id, "创建验收".into(), 1000));
+        let second = scope.spawn(|| actor.create(grant.grant_id, "创建验收".into(), 1000));
+        (first.join().unwrap(), second.join().unwrap())
+    });
+    let (created, rejected) = if left.is_ok() {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    let created = created.unwrap();
+    assert!(matches!(
+        rejected,
+        Err(WorkspaceThreadError::Access(
+            WorkspaceAccessError::AlreadyOpen
+        ))
+    ));
+    assert_eq!(created.display_name, "创建验收");
+    assert_eq!(created.offline_asset_count, 0);
+    assert_eq!(actor.current().unwrap(), Some(created.clone()));
+
+    actor.close(created.workspace_session_id).unwrap();
+    assert!(matches!(
+        actor.create(grant.grant_id, "Retry".into(), 2000),
+        Err(WorkspaceThreadError::Access(
+            WorkspaceAccessError::NotAuthorized
+        ))
+    ));
+    let fresh = actor.grant_selected_directory(root).unwrap();
+    let opened = actor.open(fresh.grant_id).unwrap();
+    assert_eq!(opened.workspace_id, created.workspace_id);
+    assert_ne!(opened.workspace_session_id, created.workspace_session_id);
+}
+
+#[test]
+fn expired_creation_grant_leaves_the_directory_untouched() {
+    let root = support::workspace_root("create expired grant");
+    let actor = WorkspaceThread::start(250, Duration::ZERO).unwrap();
+    let grant = actor.grant_selected_directory(root.clone()).unwrap();
+    assert!(matches!(
+        actor.create(grant.grant_id, "Denied".into(), 0),
+        Err(WorkspaceThreadError::Access(
+            WorkspaceAccessError::ExpiredGrant
+        ))
+    ));
+    assert!(actor.current().unwrap().is_none());
+    assert_eq!(fs::read_dir(root).unwrap().count(), 0);
+}

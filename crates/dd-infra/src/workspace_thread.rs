@@ -12,7 +12,7 @@ use dd_core::workspace::{
 };
 use uuid::Uuid;
 
-use crate::workspace::{ExistingWorkspaceStore, WorkspaceOpenError};
+use crate::workspace::{SqliteWorkspaceStore, WorkspaceOpenError};
 
 const QUEUE_CAPACITY: usize = 8;
 type AccessError = WorkspaceAccessError<WorkspaceOpenError>;
@@ -50,6 +50,7 @@ impl Error for WorkspaceThreadError {
 enum Request {
     Grant(PathBuf, AccessReply<WorkspaceDirectoryGrant>),
     Open(Uuid, AccessReply<WorkspaceSession>),
+    Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
     Close(Uuid, AccessReply<()>),
 }
@@ -65,7 +66,7 @@ impl WorkspaceThread {
         grant_lifetime: Duration,
     ) -> Result<Self, WorkspaceThreadError> {
         let store =
-            ExistingWorkspaceStore::new(busy_timeout_ms).map_err(WorkspaceThreadError::Startup)?;
+            SqliteWorkspaceStore::new(busy_timeout_ms).map_err(WorkspaceThreadError::Startup)?;
         let (requests, inbox) = mpsc::sync_channel(QUEUE_CAPACITY);
         let owner = thread::Builder::new()
             .name("dd-workspace-db".into())
@@ -79,6 +80,9 @@ impl WorkspaceThread {
                         }
                         Request::Open(id, reply) => {
                             let _ = reply.send(access.open(id, Instant::now()));
+                        }
+                        Request::Create(id, name, now_ms, reply) => {
+                            let _ = reply.send(access.create(id, &name, Instant::now(), now_ms));
                         }
                         Request::Current(reply) => {
                             let _ = reply.send(access.current().cloned());
@@ -106,6 +110,16 @@ impl WorkspaceThread {
 
     pub fn open(&self, grant_id: Uuid) -> Result<WorkspaceSession, WorkspaceThreadError> {
         self.request(|reply| Request::Open(grant_id, reply))?
+            .map_err(WorkspaceThreadError::Access)
+    }
+
+    pub fn create(
+        &self,
+        grant_id: Uuid,
+        display_name: String,
+        now_ms: i64,
+    ) -> Result<WorkspaceSession, WorkspaceThreadError> {
+        self.request(|reply| Request::Create(grant_id, display_name, now_ms, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 

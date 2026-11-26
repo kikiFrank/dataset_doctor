@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use dd_core::workspace::{WorkspaceAccess, WorkspaceAccessError};
 use dd_infra::sqlite::migrate_workspace_database;
-use dd_infra::workspace::{ExistingWorkspaceStore, WorkspaceLock, WorkspaceLockError};
+use dd_infra::workspace::{SqliteWorkspaceStore, WorkspaceLock, WorkspaceLockError};
 use rusqlite::Connection;
 
 const ID: &str = "2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9";
@@ -39,7 +39,7 @@ fn opens_an_authorized_real_workspace_and_rejects_the_old_session_after_reopen()
     seeded_workspace(&root);
     let other = support::workspace_root("access another directory");
     seeded_workspace(&other);
-    let mut core = WorkspaceAccess::new(ExistingWorkspaceStore::new(250).unwrap(), TIME_TO_LIVE);
+    let mut core = WorkspaceAccess::new(SqliteWorkspaceStore::new(250).unwrap(), TIME_TO_LIVE);
     let now = Instant::now();
     let grant = core.grant_selected_directory(root.clone(), now).unwrap();
     let opened = core.open(grant.grant_id, now).unwrap();
@@ -78,7 +78,7 @@ fn opens_an_authorized_real_workspace_and_rejects_the_old_session_after_reopen()
 fn replaced_or_expired_grants_cannot_touch_workspace_files() {
     let root = support::workspace_root("access expired");
     seeded_workspace(&root);
-    let mut core = WorkspaceAccess::new(ExistingWorkspaceStore::new(250).unwrap(), TIME_TO_LIVE);
+    let mut core = WorkspaceAccess::new(SqliteWorkspaceStore::new(250).unwrap(), TIME_TO_LIVE);
     let now = Instant::now();
     assert!(matches!(
         core.grant_selected_directory(PathBuf::from("relative"), now),
