@@ -149,6 +149,8 @@ $LASTEXITCODE
 
 迁移入口复用写连接初始化，并在同一事务里应用 [Workspace v1 SQL](migrations/workspace/0001_initial.sql)、写入带版本的 Workspace 身份及时间戳、执行完整性与外键检查。合成库验证 8 张业务表、12 个显式索引、重开保留数据、拒绝身份或版本不符，以及校验阶段故障时回滚到空 schema 并可重试。验收要求 `integrity_check` 返回唯一的 `ok`，`foreign_key_check` 返回零行。构建、迁移样本和本次日志位于 `target/p01-04/`，P01-03 的连接样本仍位于 `target/p01-03/runs/`。
 
+同一入口还运行 `app.db` 的 3 项迁移用例。用 `-Suite AppMigration` 单独运行。全局库使用独立的 `main.user_version`，初始化 Workspace 注册表和非秘密设置，故障回滚后可重新迁移。[全局库 v1 SQL](migrations/app/0001_initial.sql)
+
 ## 已有可执行验证
 
 ```sh

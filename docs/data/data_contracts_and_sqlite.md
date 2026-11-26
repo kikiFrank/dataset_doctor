@@ -461,6 +461,8 @@ TASK 归属的 Artifact 由 tasks.output_manifest_path 中已接受的产物清�
 
 以下两张表位于独立 app.db，不加入 Workspace 八业务表，也不存图片、标注或任务正文。它们落实 L1 已确认的全局注册与设置职责。
 
+可执行全局结构以 [app.db v1 迁移](../../migrations/app/0001_initial.sql) 为权威。全局库使用 `main.user_version`，在同一事务内创建两表、写入初始设置、推进版本并执行完整性及外键检查。
+
 ```sql
 CREATE TABLE workspace_registry (
     workspace_id TEXT PRIMARY KEY NOT NULL,

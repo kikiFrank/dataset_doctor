@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
-    [ValidateSet('All', 'Connection', 'Migration')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,7 +40,7 @@ if ($Suite -in @('All', 'Connection')) {
     $env:DD_SQLITE_INIT_RUN_DIR = Join-Path $repo "target\p01-03\runs\$run"
     $directories += $env:DD_SQLITE_INIT_RUN_DIR
 }
-if ($Suite -in @('All', 'Migration')) {
+if ($Suite -in @('All', 'Migration', 'AppMigration')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
@@ -51,6 +51,7 @@ $cargoArgs = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--loc
 switch ($Suite) {
     'Connection' { $cargoArgs += @('-p', 'dd-sqlite-connection-init-tests', '--test', 'workspace_connection') }
     'Migration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_migration') }
+    'AppMigration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'app_migration') }
     'All' { $cargoArgs += @('--workspace', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')

@@ -11,3 +11,7 @@ rusqlite.workspace = true
 [[test]]
 name = "workspace_migration"
 path = "../../tests/storage/sqlite/migration/workspace_migration.rs"
+
+[[test]]
+name = "app_migration"
+path = "../../tests/storage/sqlite/migration/app_migration.rs"

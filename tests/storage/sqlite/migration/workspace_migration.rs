@@ -1,34 +1,17 @@
-use std::env;
-use std::ffi::{CStr, c_char, c_int, c_void};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::ptr;
+use std::path::Path;
+
+mod support;
 
 use dd_infra::sqlite::{
     WorkspaceMigrationError, WorkspaceMigrationStage, migrate_workspace_database,
 };
 use rusqlite::{Connection, Error, ffi};
+use support::{database_path, fail_foreign_key_check};
 
 const WORKSPACE: &str = "2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9";
 const OTHER_WORKSPACE: &str = "76afdb2d-0900-4528-b303-0fca0f864235";
 const CREATED_AT: i64 = 1_794_000_000_000;
 const BUSY_TIMEOUT_MS: u32 = 250;
-
-fn database_path(case: &str) -> PathBuf {
-    let run = PathBuf::from(
-        env::var_os("DD_SQLITE_MIGRATION_RUN_DIR").expect("set the SQLite migration run directory"),
-    )
-    .canonicalize()
-    .expect("existing migration run directory");
-    let runs = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/p01-04/runs")
-        .canonicalize()
-        .expect("canonical SQLite migration runs directory");
-    assert_eq!(run.parent(), Some(runs.as_path()));
-    let directory = run.join(case);
-    fs::create_dir(&directory).expect("fresh synthetic case directory");
-    directory.join("workspace.db")
-}
 
 fn migrate(path: &Path) -> Result<Connection, WorkspaceMigrationError> {
     migrate_workspace_database(
@@ -80,7 +63,7 @@ fn journal_mode(connection: &Connection) -> String {
 
 #[test]
 fn empty_file_has_v1_schema_and_passes_integrity_and_foreign_key_checks() {
-    let path = database_path("empty");
+    let path = database_path("empty", "workspace.db");
     let connection = Connection::open(&path).unwrap();
     connection
         .execute_batch(
@@ -164,7 +147,7 @@ fn empty_file_has_v1_schema_and_passes_integrity_and_foreign_key_checks() {
 
 #[test]
 fn reopening_a_matching_v1_preserves_metadata_and_business_rows() {
-    let path = database_path("reopen");
+    let path = database_path("reopen", "workspace.db");
     let connection = migrate(&path).unwrap();
     connection
         .execute(
@@ -193,7 +176,7 @@ fn reopening_a_matching_v1_preserves_metadata_and_business_rows() {
 
 #[test]
 fn rejects_unrecognized_schema_without_changing_its_journal_or_tables() {
-    let path = database_path("unrecognized");
+    let path = database_path("unrecognized", "workspace.db");
     let connection = Connection::open(&path).unwrap();
     connection
         .execute("CREATE TABLE unrelated(id INT)", [])
@@ -210,7 +193,7 @@ fn rejects_unrecognized_schema_without_changing_its_journal_or_tables() {
 
 #[test]
 fn rejects_foreign_identity_and_future_version_without_changing_metadata() {
-    let path = database_path("identity-and-version");
+    let path = database_path("identity-and-version", "workspace.db");
     let connection = migrate(&path).unwrap();
     connection.close().unwrap();
     let error = migrate_workspace_database(
@@ -240,38 +223,11 @@ fn rejects_foreign_identity_and_future_version_without_changing_metadata() {
     );
 }
 
-unsafe extern "C" fn deny_foreign_key_check(
-    _: *mut c_void,
-    action: c_int,
-    name: *const c_char,
-    _: *const c_char,
-    _: *const c_char,
-    _: *const c_char,
-) -> c_int {
-    // SAFETY: For SQLITE_PRAGMA, SQLite provides a callback-scoped C string.
-    if action == ffi::SQLITE_PRAGMA
-        && !name.is_null()
-        && unsafe { CStr::from_ptr(name) }.to_bytes() == b"foreign_key_check"
-    {
-        ffi::SQLITE_DENY
-    } else {
-        ffi::SQLITE_OK
-    }
-}
-
 #[test]
 fn late_migration_failure_rolls_back_schema_and_metadata_then_allows_retry() {
-    let path = database_path("rollback");
+    let path = database_path("rollback", "workspace.db");
     let connection = Connection::open(&path).unwrap();
-    // SAFETY: The live connection owns the SQLite handle. The callback holds no state.
-    let status = unsafe {
-        ffi::sqlite3_set_authorizer(
-            connection.handle(),
-            Some(deny_foreign_key_check),
-            ptr::null_mut(),
-        )
-    };
-    assert_eq!(status, ffi::SQLITE_OK);
+    fail_foreign_key_check(&connection);
     let error =
         migrate_workspace_database(connection, BUSY_TIMEOUT_MS, WORKSPACE, CREATED_AT).unwrap_err();
     assert!(matches!(
