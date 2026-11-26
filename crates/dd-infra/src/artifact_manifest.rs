@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use dd_protocol::v1::{ArtifactRef, artifact_ref::Owner};
 use serde::Deserialize;
@@ -15,7 +15,7 @@ use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{is_portable_relative_file, open_scoped_file};
 use crate::task_store::format_digest;
 
-const MANIFEST_FILE: &str = "result-manifest.json";
+pub(crate) const MANIFEST_FILE: &str = "result-manifest.json";
 const MANIFEST_LIMIT: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,7 +75,7 @@ impl From<io::Error> for ArtifactValidationError {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct TaskArtifactEntry {
     pub artifact_id: String,
     pub relative_path: String,
@@ -94,8 +94,10 @@ struct Manifest {
     entries: Vec<TaskArtifactEntry>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VerifiedTaskManifest {
+    pub(crate) scope: TaskManifestScope,
+    pub(crate) path: PathBuf,
     reference: ArtifactRef,
     entries: Vec<TaskArtifactEntry>,
 }
@@ -182,6 +184,8 @@ pub fn verify_task_result_manifest(
         }
     }
     Ok(VerifiedTaskManifest {
+        scope: *scope,
+        path: root.join(manifest_path),
         reference: reference.clone(),
         entries: manifest.entries,
     })

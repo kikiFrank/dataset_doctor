@@ -1,5 +1,10 @@
 //! Persistence for Core-authorized task submissions in the current Workspace.
 
+#[cfg(feature = "execution-rpc")]
+mod result;
+#[cfg(feature = "execution-rpc")]
+pub use result::{ResultSubmission, TerminalReceipt};
+
 use std::error::Error;
 use std::fmt::{self, Display, Write};
 use std::path::PathBuf;
@@ -37,6 +42,8 @@ pub enum TaskStoreError {
     AttemptConflict,
     IdempotencyConflict,
     InvalidManifestPath,
+    InvalidTimestamp,
+    Receipt(serde_json::Error),
     Database(rusqlite::Error),
 }
 
@@ -50,6 +57,8 @@ impl Display for TaskStoreError {
             Self::InvalidManifestPath => {
                 formatter.write_str("Task manifest must be a Workspace-relative file")
             }
+            Self::InvalidTimestamp => formatter.write_str("Invalid terminal result timestamp"),
+            Self::Receipt(error) => write!(formatter, "Read Task terminal receipt: {error}"),
             Self::Database(error) => write!(formatter, "Persist Workspace task: {error}"),
         }
     }
@@ -59,6 +68,7 @@ impl Error for TaskStoreError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Database(error) => Some(error),
+            Self::Receipt(error) => Some(error),
             _ => None,
         }
     }

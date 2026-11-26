@@ -4,19 +4,20 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use dd_core::execution_grant::{GrantBook, GrantScope};
+use dd_core::execution_grant::{ClaimReceipt, GrantBook, GrantScope};
 use dd_infra::artifact_manifest::{
     ArtifactValidationError, TaskManifestScope, verify_task_result_manifest,
 };
 use dd_infra::execution_rpc::CoreClaimService;
 use dd_infra::json::JsonContracts;
-use dd_infra::task_store::TaskSubmission;
-use dd_infra::workspace_thread::WorkspaceThread;
+use dd_infra::task_store::{ResultSubmission, TaskStoreError, TaskSubmission};
+use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_protocol::v1::{
     self as wire, ArtifactRef, ExecutionLookup, GeometryAuditInput, GeometryAuditRequest,
     TaskContext, WorkerInputFile,
 };
 use prost::Message;
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -53,8 +54,6 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let core_key = Uuid::new_v4();
     let worker_key = Uuid::new_v4();
     let mut grants = GrantBook::new(session);
-    let output = root.join("task output");
-    fs::create_dir(&output).unwrap();
     let image_path = root.join("synthetic.png");
     let annotation_path = root.join("synthetic.json");
     let manifest_path = root.join("input.json");
@@ -69,13 +68,6 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     fs::write(&image_path, PNG).unwrap();
     fs::write(&annotation_path, annotation).unwrap();
     fs::write(&manifest_path, &manifest).unwrap();
-    let input = GeometryAuditInput {
-        image: Some(locator(&image_path, PNG)),
-        annotation: Some(locator(&annotation_path, annotation)),
-        input_manifest: Some(locator(&manifest_path, &manifest)),
-        output_directory: output.to_str().unwrap().into(),
-        max_pixels: 100,
-    };
     let task = thread
         .enqueue_task(
             TaskSubmission {
@@ -92,6 +84,16 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         )
         .unwrap();
     let attempt = Uuid::new_v4();
+    let result_directory = format!("artifacts/tasks/{}/{attempt}", task.task_id);
+    let output = root.join(&result_directory);
+    fs::create_dir_all(&output).unwrap();
+    let input = GeometryAuditInput {
+        image: Some(locator(&image_path, PNG)),
+        annotation: Some(locator(&annotation_path, annotation)),
+        input_manifest: Some(locator(&manifest_path, &manifest)),
+        output_directory: output.to_str().unwrap().into(),
+        max_pixels: 100,
+    };
     let mut operation = Sha256::new();
     operation.update(b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0");
     operation.update(input.encode_to_vec());
@@ -252,6 +254,66 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         verify_task_result_manifest(&output, &contracts, &stale, &manifest_ref),
         Err(ArtifactValidationError::ScopeMismatch)
     ));
+    let execution = ClaimReceipt {
+        task: task.task_id,
+        attempt,
+        execution: Uuid::parse_str(&first.worker_execution_id).unwrap(),
+    };
+    let done = ResultSubmission {
+        workspace_session: session,
+        grant,
+        execution,
+        node_spec_fingerprint: [0x34; 32],
+        execution_event_id: Uuid::new_v4(),
+        verified,
+    };
+    assert!(matches!(
+        thread.record_success(done.clone(), 5000),
+        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+    ));
+    thread
+        .record_running(session, grant, execution, 4000)
+        .unwrap();
+    let stale_session = ResultSubmission {
+        workspace_session: Uuid::new_v4(),
+        ..done.clone()
+    };
+    assert!(matches!(
+        thread.record_success(stale_session, 5000),
+        Err(WorkspaceThreadError::Access(_))
+    ));
+    let stale_node = ResultSubmission {
+        node_spec_fingerprint: [0xff; 32],
+        ..done.clone()
+    };
+    assert!(matches!(
+        thread.record_success(stale_node, 5000),
+        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+    ));
+    let saved = thread.record_success(done.clone(), 5000).unwrap();
+    assert_eq!(saved.accepted_at, "1970-01-01T00:00:05Z");
+    assert_eq!(thread.record_success(done.clone(), 6000).unwrap(), saved);
+    let conflicting = ResultSubmission {
+        execution_event_id: Uuid::new_v4(),
+        ..done.clone()
+    };
+    assert!(matches!(
+        thread.record_success(conflicting, 7000),
+        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+    ));
+    let replaced_reference = ArtifactRef {
+        artifact_id: Uuid::new_v4().to_string(),
+        ..manifest_ref.clone()
+    };
+    let replaced = ResultSubmission {
+        verified: verify_task_result_manifest(&output, &contracts, &scope, &replaced_reference)
+            .unwrap(),
+        ..done.clone()
+    };
+    assert!(matches!(
+        thread.record_success(replaced, 7000),
+        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+    ));
 
     let result_path = output.join("geometry-result.json");
     fs::write(&result_path, b"changed after publication").unwrap();
@@ -291,6 +353,17 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     stop.send(()).unwrap();
     timeout(TIMEOUT, core_server).await.unwrap().unwrap();
     thread.close(session).unwrap();
+    let db = Connection::open(root.join("workspace.db")).unwrap();
+    let (status, path, finished, revision, event): (String, String, i64, i64, String) = db.query_row(
+        "SELECT status, output_manifest_path, finished_at_ms, row_revision, json_extract(execution_metadata_json,'$.last_execution_event_id') FROM tasks WHERE task_id=?1",
+        [task.task_id.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    ).unwrap();
+    assert_eq!(status, "SUCCEEDED");
+    assert_eq!(path, format!("{result_directory}/result-manifest.json"));
+    assert_eq!(
+        (finished, revision, event),
+        (5000, 4, done.execution_event_id.to_string())
+    );
 }
 
 fn authorized<T>(message: T, token: Uuid) -> Request<T> {
