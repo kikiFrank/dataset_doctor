@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use dd_protocol::v1::{
     ColorPreviewRequest, ExecutionHandle, ExecutionLookup, ExecutionSnapshot, FrameResolveRequest,
     GeometryAuditRequest, HealthRequest, HealthSnapshot, ShutdownRequest, VideoProbeRequest,
-    python_worker_client::PythonWorkerClient,
+    VideoTrackingRequest, python_worker_client::PythonWorkerClient,
 };
 use tokio::{process::Command, time::timeout};
 use tonic::transport::Channel;
@@ -134,6 +134,18 @@ impl WorkerProcess {
             .map(|reply| reply.into_inner())
             .map_err(WorkerProcessError::Rpc)
     }
+
+    pub async fn start_tracking(
+        &mut self,
+        request: VideoTrackingRequest,
+    ) -> Result<ExecutionHandle, WorkerProcessError> {
+        self.client
+            .start_tracking(self.process.request(request))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
+
     pub async fn shutdown(mut self) -> Result<(), WorkerProcessError> {
         let receipt = self
             .client

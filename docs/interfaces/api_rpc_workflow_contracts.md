@@ -331,6 +331,8 @@ Core 管理 API Key 的安全持久化，并通过受控方式让已授权 Agent
 
 所有 Start 方法都包含相同 TaskContext 与 Grant，并迅速返回 ExecutionHandle，计算在后台完成。显式方法增加时更新 Protobuf 和对应适配器，编译期可发现大部分参数不一致。Embed 分析可注册为可选能力；缺少依赖时返回 UNSUPPORTED，不为维持 API 名单强制 MVP 装入所有模型。
 
+`StartTracking` 使用 `resolved_config.tracking_binding` 核对授权的流、显示索引和原始 PTS、首尾人工框、追踪参数及处理上限。Worker 复查解码尺寸，封存 `VIDEO_TRACK_BUNDLE`，包含候选、待审核区间及尾框核对。当前平移适配器每次接受最多 512 个显示帧及 128 个首帧种子。
+
 #### C5.5 专用 Worker RPC 的 Protobuf 示例
 
 能力清单继续用于握手、配置与输入校验。CapabilityDescriptor 包含 capability_id、contract_version、executor_role、input_type、output_type、resource_profile、checkpoint_support、idempotency_class、side_effect_class、allowed_template_stages。它描述当前发布的内置工具，不启用通用节点端口组合。

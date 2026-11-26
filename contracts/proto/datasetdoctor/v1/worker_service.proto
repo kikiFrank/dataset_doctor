@@ -130,6 +130,43 @@ message FrameResolveRequest {
   FrameResolveInput parameters = 3;
 }
 
+message TrackingFrameInput {
+  optional uint64 frame_index = 1;
+  optional sint64 expected_raw_pts = 2;
+  uint32 display_width = 3;
+  uint32 display_height = 4;
+}
+
+message TrackingSeedInput {
+  string track_id = 1;
+  uint64 category_id = 2;
+  repeated double bbox_xywh = 3;
+}
+
+message VideoTrackingInput {
+  WorkerInputFile source_video = 1;
+  WorkerInputFile input_manifest = 2;
+  string output_directory = 3;
+  uint32 stream_index = 4;
+  repeated TrackingFrameInput frames = 5;
+  string segment_id = 6;
+  string tracker_profile_id = 7;
+  repeated TrackingSeedInput seeds = 8;
+  repeated TrackingSeedInput tail_anchors = 9;
+  uint32 search_radius = 10;
+  double max_error = 11;
+  double min_margin = 12;
+  uint64 max_pixels = 13;
+  uint32 max_frames = 14;
+  uint32 timeout_ms = 15;
+}
+
+message VideoTrackingRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  VideoTrackingInput parameters = 3;
+}
+
 message ExecutionLookup {
   string task_id = 1;
   string attempt_id = 2;
@@ -147,6 +184,7 @@ service PythonWorker {
   rpc StartColorPreview(ColorPreviewRequest) returns (ExecutionHandle);
   rpc StartVideoProbe(VideoProbeRequest) returns (ExecutionHandle);
   rpc StartFrameResolve(FrameResolveRequest) returns (ExecutionHandle);
+  rpc StartTracking(VideoTrackingRequest) returns (ExecutionHandle);
   rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);

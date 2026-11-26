@@ -220,6 +220,72 @@ class FrameResolveRequest(_message.Message):
     parameters: FrameResolveInput
     def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[FrameResolveInput, _Mapping]] = ...) -> None: ...
 
+class TrackingFrameInput(_message.Message):
+    __slots__ = ("frame_index", "expected_raw_pts", "display_width", "display_height")
+    FRAME_INDEX_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_RAW_PTS_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_WIDTH_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_HEIGHT_FIELD_NUMBER: _ClassVar[int]
+    frame_index: int
+    expected_raw_pts: int
+    display_width: int
+    display_height: int
+    def __init__(self, frame_index: _Optional[int] = ..., expected_raw_pts: _Optional[int] = ..., display_width: _Optional[int] = ..., display_height: _Optional[int] = ...) -> None: ...
+
+class TrackingSeedInput(_message.Message):
+    __slots__ = ("track_id", "category_id", "bbox_xywh")
+    TRACK_ID_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_ID_FIELD_NUMBER: _ClassVar[int]
+    BBOX_XYWH_FIELD_NUMBER: _ClassVar[int]
+    track_id: str
+    category_id: int
+    bbox_xywh: _containers.RepeatedScalarFieldContainer[float]
+    def __init__(self, track_id: _Optional[str] = ..., category_id: _Optional[int] = ..., bbox_xywh: _Optional[_Iterable[float]] = ...) -> None: ...
+
+class VideoTrackingInput(_message.Message):
+    __slots__ = ("source_video", "input_manifest", "output_directory", "stream_index", "frames", "segment_id", "tracker_profile_id", "seeds", "tail_anchors", "search_radius", "max_error", "min_margin", "max_pixels", "max_frames", "timeout_ms")
+    SOURCE_VIDEO_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DIRECTORY_FIELD_NUMBER: _ClassVar[int]
+    STREAM_INDEX_FIELD_NUMBER: _ClassVar[int]
+    FRAMES_FIELD_NUMBER: _ClassVar[int]
+    SEGMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    TRACKER_PROFILE_ID_FIELD_NUMBER: _ClassVar[int]
+    SEEDS_FIELD_NUMBER: _ClassVar[int]
+    TAIL_ANCHORS_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_RADIUS_FIELD_NUMBER: _ClassVar[int]
+    MAX_ERROR_FIELD_NUMBER: _ClassVar[int]
+    MIN_MARGIN_FIELD_NUMBER: _ClassVar[int]
+    MAX_PIXELS_FIELD_NUMBER: _ClassVar[int]
+    MAX_FRAMES_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_MS_FIELD_NUMBER: _ClassVar[int]
+    source_video: WorkerInputFile
+    input_manifest: WorkerInputFile
+    output_directory: str
+    stream_index: int
+    frames: _containers.RepeatedCompositeFieldContainer[TrackingFrameInput]
+    segment_id: str
+    tracker_profile_id: str
+    seeds: _containers.RepeatedCompositeFieldContainer[TrackingSeedInput]
+    tail_anchors: _containers.RepeatedCompositeFieldContainer[TrackingSeedInput]
+    search_radius: int
+    max_error: float
+    min_margin: float
+    max_pixels: int
+    max_frames: int
+    timeout_ms: int
+    def __init__(self, source_video: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., input_manifest: _Optional[_Union[WorkerInputFile, _Mapping]] = ..., output_directory: _Optional[str] = ..., stream_index: _Optional[int] = ..., frames: _Optional[_Iterable[_Union[TrackingFrameInput, _Mapping]]] = ..., segment_id: _Optional[str] = ..., tracker_profile_id: _Optional[str] = ..., seeds: _Optional[_Iterable[_Union[TrackingSeedInput, _Mapping]]] = ..., tail_anchors: _Optional[_Iterable[_Union[TrackingSeedInput, _Mapping]]] = ..., search_radius: _Optional[int] = ..., max_error: _Optional[float] = ..., min_margin: _Optional[float] = ..., max_pixels: _Optional[int] = ..., max_frames: _Optional[int] = ..., timeout_ms: _Optional[int] = ...) -> None: ...
+
+class VideoTrackingRequest(_message.Message):
+    __slots__ = ("context", "input_manifest_ref", "parameters")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    INPUT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
+    context: _core_execution_pb2.TaskContext
+    input_manifest_ref: _common_pb2.ArtifactRef
+    parameters: VideoTrackingInput
+    def __init__(self, context: _Optional[_Union[_core_execution_pb2.TaskContext, _Mapping]] = ..., input_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., parameters: _Optional[_Union[VideoTrackingInput, _Mapping]] = ...) -> None: ...
+
 class ExecutionLookup(_message.Message):
     __slots__ = ("task_id", "attempt_id")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]

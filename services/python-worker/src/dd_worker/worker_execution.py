@@ -180,7 +180,7 @@ class WorkerExecutions:
             item.status = "FAILED"
 
 
-def verified_manifest_asset(request, capability):
+def verified_manifest(request, capability):
     manifest_data = verified_bytes(request.parameters.input_manifest, JSON_LIMIT)
     manifest = strict_json(manifest_data)
     if (
@@ -189,7 +189,11 @@ def verified_manifest_asset(request, capability):
         or manifest["capability_id"] != capability or len(manifest["assets"]) != 1
     ):
         raise ValueError("invalid input manifest")
-    return manifest["assets"][0]
+    return manifest
+
+
+def verified_manifest_asset(request, capability):
+    return verified_manifest(request, capability)["assets"][0]
 
 
 def seal_result(request, directory, entries):

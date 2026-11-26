@@ -6,14 +6,17 @@ from pathlib import Path
 from uuid import UUID
 
 from video_decoder import VideoDecodeError, VideoDecoder
+from video_tracking import TrackSeed, TranslationPolicy, track_indexed_video
 from worker_execution import (
-    InputChanged, seal_result, verified_manifest_asset, verified_path, write_bytes, write_json,
+    InputChanged, seal_result, verified_manifest, verified_manifest_asset, verified_path, write_bytes, write_json,
 )
 
 CAPABILITY = "video_probe.v1"
 PROBE_DOMAIN = b"datasetdoctor.v1.PythonWorker.StartVideoProbe\0"
 RESOLVE_CAPABILITY = "frame_resolve.v1"
 RESOLVE_DOMAIN = b"datasetdoctor.v1.PythonWorker.StartFrameResolve\0"
+TRACK_CAPABILITY = "video_tracking.v1"
+TRACK_DOMAIN = b"datasetdoctor.v1.PythonWorker.StartTracking\0"
 FAILURES = {
     "source_changed": "input_changed",
     "source_unavailable": "file_io_failed",
@@ -40,6 +43,10 @@ def compute_resolve(request, *, tools):
     return _compute(request, tools, _resolve)
 
 
+def compute_tracking(request, *, tools):
+    return _compute(request, tools, _track)
+
+
 def _compute(request, tools, operation):
     try:
         return operation(request, tools), None
@@ -55,7 +62,7 @@ def _compute(request, tools, operation):
 
 def _probe(request, tools):
     inputs = request.parameters
-    source, video_id, decoder = _read_source(request, tools, CAPABILITY)
+    source, video_id, decoder = _read_source(request, tools, verified_manifest_asset(request, CAPABILITY))
     selected = inputs.stream_index if inputs.HasField("stream_index") else None
     index = decoder.probe(source, inputs.source_video.sha256, stream_index=selected)
     directory = verified_path(inputs.output_directory)
@@ -83,7 +90,7 @@ def _resolve(request, tools):
     inputs = request.parameters
     if not inputs.HasField("frame_index"):
         raise ValueError("Frame location is required")
-    source, video_id, decoder = _read_source(request, tools, RESOLVE_CAPABILITY)
+    source, video_id, decoder = _read_source(request, tools, verified_manifest_asset(request, RESOLVE_CAPABILITY))
     index = decoder.probe(source, inputs.source_video.sha256, stream_index=inputs.stream_index)
     offset = inputs.frame_index
     if offset >= len(index.frames):
@@ -114,9 +121,99 @@ def _resolve(request, tools):
     ])
 
 
-def _read_source(request, tools, capability):
+def _track(request, tools):
+    parameters = request.parameters
+    manifest = verified_manifest(request, TRACK_CAPABILITY)
+    source, video_id, decoder = _read_source(request, tools, manifest["assets"][0])
+    if (not 1 <= len(parameters.frames) <= 512 or not 1 <= len(parameters.seeds) <= 128
+            or len(parameters.tail_anchors) > len(parameters.seeds)):
+        raise ValueError("Invalid size of tracking selection or anchor lists")
+    segment_id = _canonical_id(parameters.segment_id)
+    profile_id = _canonical_id(parameters.tracker_profile_id)
+    selected = _tracking_config(parameters, segment_id, profile_id)
+    if selected != manifest["resolved_config"].get("tracking_binding"):
+        raise InputChanged("Tracking request differs from its frozen manifest")
+    index = decoder.probe(source, parameters.source_video.sha256, stream_index=parameters.stream_index)
+    offsets = []
+    for expected in parameters.frames:
+        if not expected.HasField("frame_index") or expected.frame_index >= len(index.frames):
+            raise ValueError("Tracking frame has no valid display index")
+        observed = index.frames[expected.frame_index]
+        dimensions = (observed.width, observed.height)
+        if index.rotation_ccw in (90, 270):
+            dimensions = dimensions[::-1]
+        pts = expected.expected_raw_pts if expected.HasField("expected_raw_pts") else None
+        if observed.raw_pts != pts or dimensions != (expected.display_width, expected.display_height):
+            raise InputChanged("Tracking frame no longer matches its indexed display metadata")
+        offsets.append(expected.frame_index)
+
+    policy = TranslationPolicy(parameters.search_radius, parameters.max_error, parameters.min_margin)
+    def seed(entry):
+        return TrackSeed(entry.track_id, entry.category_id, tuple(entry.bbox_xywh))
+
+    result = track_indexed_video(
+        decoder, source, index, offsets, [seed(entry) for entry in parameters.seeds], policy,
+        tail_anchors=[seed(entry) for entry in parameters.tail_anchors],
+    )
+    directory = verified_path(parameters.output_directory)
+    entry = write_json(directory, "video-tracks.json", {
+        "contract_version": 1,
+        "source_video_id": str(video_id),
+        "source_digest": index.source_sha256,
+        "stream_index": index.stream_index,
+        "segment_id": segment_id,
+        "tracker_profile_id": profile_id,
+        "algorithm": "translation_template.v1",
+        "input_fingerprint": request.context.input_fingerprint,
+        "processed_frame_count": result.processed_frame_count,
+        "observations": [
+            {"frame_index": str(item.frame_index), "track_id": item.track_id, "category_id": str(item.category_id),
+             "bbox_xywh": item.bbox, "source": item.source, "mean_absolute_error": item.mean_absolute_error}
+            for item in result.observations
+        ],
+        "uncertain_ranges": [
+            {"track_id": span.track_id, "first_frame_index": str(span.first_frame_index),
+             "last_frame_index": str(span.last_frame_index), "reason": span.reason}
+            for span in result.uncertain_ranges
+        ],
+        "tail_checks": [asdict(check) for check in result.tail_checks],
+    })
+    return seal_result(request, directory, [dict(entry, kind="VIDEO_TRACK_BUNDLE", media_type="application/json")])
+
+
+def _tracking_config(parameters, segment_id, profile_id):
+    def anchors(entries):
+        return [{"track_id": entry.track_id, "category_id": str(entry.category_id), "bbox_xywh": list(entry.bbox_xywh)}
+                for entry in entries]
+
+    return {
+        "segment_id": segment_id,
+        "tracker_profile_id": profile_id,
+        "stream_index": parameters.stream_index,
+        "frames": [
+            {"frame_index": str(frame.frame_index),
+             "raw_pts": str(frame.expected_raw_pts) if frame.HasField("expected_raw_pts") else None,
+             "width": frame.display_width, "height": frame.display_height}
+            for frame in parameters.frames
+        ],
+        "seeds": anchors(parameters.seeds),
+        "tail_anchors": anchors(parameters.tail_anchors),
+        "policy": {"search_radius": parameters.search_radius,
+                   "max_error": parameters.max_error, "min_margin": parameters.min_margin},
+        "limits": {"max_pixels": str(parameters.max_pixels), "max_frames": parameters.max_frames,
+                   "timeout_ms": parameters.timeout_ms},
+    }
+
+
+def _canonical_id(value):
+    identifier = UUID(value)
+    if identifier.int == 0 or str(identifier) != value:
+        raise ValueError("Invalid tracking identity")
+    return value
+
+
+def _read_source(request, tools, expected):
     inputs = request.parameters
-    expected = verified_manifest_asset(request, capability)
     video_id = UUID(expected["asset_id"])
     if (
         expected["media_digest"] != inputs.source_video.sha256

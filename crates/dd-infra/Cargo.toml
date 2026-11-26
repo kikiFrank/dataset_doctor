@@ -255,3 +255,8 @@ required-features = ["execution-rpc"]
 name = "staging_commit"
 path = "../../tests/integration/rpc/staging_commit.rs"
 required-features = ["execution-rpc"]
+
+[[test]]
+name = "worker_tracking"
+path = "../../tests/integration/rpc/worker_tracking.rs"
+required-features = ["execution-rpc"]
