@@ -7,6 +7,7 @@ import { getTask, startGeometry } from "./task";
 import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
 import { makeDraft, seedBoxes } from "../review-document";
+import { verifyWorkspaceColorPanel } from "./workspace-color-smoke";
 
 const activeStates = new Set(["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"]);
 
@@ -21,7 +22,7 @@ async function completed(workspace: OpenWorkspace, taskId: string) {
   throw new Error("Task did not finish in time");
 }
 
-export async function verifyWorkspaceBusinessIpc() {
+export async function verifyWorkspaceBusinessIpc(verifyColor = false) {
   const name = "WebView2 Business Acceptance";
   let phase = "create Workspace";
   try {
@@ -96,6 +97,12 @@ export async function verifyWorkspaceBusinessIpc() {
         || reopened.workspace_session_id === workspace.workspace_session_id
         || (await getAnnotation(reopened, asset)).annotation_state !== "CONFIRMED_POSITIVE") {
       throw new Error("Final did not survive reopening the Workspace");
+    }
+    if (verifyColor) {
+      phase = "apply a verified candidate through the color panel";
+      const current = (await listAssets(reopened, dataset)).items.find(item => item.asset_id === asset);
+      if (!current) throw new Error("Registered asset missing after reopen");
+      await verifyWorkspaceColorPanel(reopened, current);
     }
     await closeWorkspace(reopened);
     await acknowledgeWorkspaceVerification();

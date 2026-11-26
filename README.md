@@ -2,7 +2,7 @@
 
 Local-first desktop application for computer-vision dataset quality governance. Rust Core + Rust Agent Service (Rig) + Python algorithm Worker; Tauri 2 / React / TypeScript frontend. Windows, Linux and macOS are target platforms.
 
-L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线构建与启动，命令宿主已通过导入、检查、Final 和 COCO 读取验收。完整 WebView2 业务闭环和桌面安装器仍待验收。Rig SDK 独立 PoC 有三平台验证记录。
+L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线构建与启动。导入、检查、Final 和 COCO 读取已通过命令宿主和 WebView2 验收。原生窗口交互和桌面安装器仍待验收。Rig SDK 独立 PoC 有三平台验证记录。
 
 - [项目文档入口](docs/README.md)
 - [开发工作守则](docs/development/coding_guidelines.md)（AI Coding 自动阅读入口：[AGENTS.md](AGENTS.md)）
@@ -31,6 +31,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Desktop launch smoke failed.' }
 冒烟测试在独立 WebView2 数据目录加载内嵌的 React 前端，经真实 Tauri IPC 握手后退出。普通启动后可用 Windows 文件夹选择器创建或打开工作区，查看离线资源数，再关闭工作区。传入 `-Suite Workspace -PythonExe $py312` 复跑已有工作区的打开、查询、关闭、重开和旧会话拒绝。传入 `-Suite WorkspaceCreate` 复跑空目录创建、拒绝重复创建和重开。完整业务和安装器另有验收。详见 [MVP 进度与证据](docs/development/mvp_progress.md)。
 
 Windows 开发版的自动化业务验收使用 `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceBusiness -PythonExe $readerPython`。读取器环境需安装 Pillow 和 pycocotools 2.0.11，开发版需能启动本机 Worker。隐藏的 WebView2 通过真实 IPC 创建合成工作区、导入、检查、修正 Final、导出 COCO 和重开工作区。脚本使用专用夹具目录提供选择路径，并用目标读取器复核导出文件。系统选择器与画布鼠标操作有单独的原生窗口验收。
+
+将上述命令的 `-Suite` 改为 `WorkspaceColor` 可继续验收颜色修复。测试操作真实 WebView2 面板和 Worker，比较原图、候选和掩膜，核验明确批准后才替换图片，旧审核随之过期，复检读取新图片。同一套读取器复核原 COCO 包。
 
 打开已有 Workspace 后可分页浏览 Dataset 和样本，查看正式标注与受限的本地图像。命令宿主验收使用 `tests/desktop/windows/check-command-handlers.ps1 -RustBin $rustBin`，图像授权和标注读取可用 `scripts/storage/windows/check-workspace-sqlite.ps1 -RustBin $rustBin -Suite MediaDisplay` 或 `-Suite AnnotationView` 单独复跑。这些命令均可在命令行执行。样本页面的新交互与自定义图像协议仍需实际 WebView2 验收。
 

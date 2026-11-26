@@ -40,6 +40,18 @@ impl GeometryRunner {
         Some(Self::new(interpreter, entrypoint))
     }
 
+    pub(crate) fn wait_for_idle(&self, timeout: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match self.active.lock() {
+                Ok(active) if active.is_none() => return true,
+                Ok(_) if std::time::Instant::now() < deadline => (),
+                _ => return false,
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+    }
+
     async fn execute(
         self: Arc<Self>,
         workspace: Arc<WorkspaceThread>,

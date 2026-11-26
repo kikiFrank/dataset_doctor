@@ -28,7 +28,7 @@ function App() {
       setRuntimeConnected(true);
       if (runtime.verify_workspace) await verifyWorkspaceIpc();
       if (runtime.verify_workspace_create) await verifyWorkspaceCreationIpc();
-      if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc();
+      if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc(runtime.verify_workspace_color);
     }).catch((failure: unknown) => setError(workspaceCommandError(failure)));
   }, []);
 
