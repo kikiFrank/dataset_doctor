@@ -116,7 +116,9 @@ fn commands_page_only_current_workspace_data_and_report_invalid_arguments() {
             &media,
             MediaGetLocatorRequest {
                 context: context(),
-                asset_id: first.items[0].asset_id.clone(),
+                asset_id: Some(first.items[0].asset_id.clone()),
+                artifact_id: None,
+                owner_task_id: None,
                 purpose: MediaPurpose::Display,
             },
         )

@@ -165,7 +165,11 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv -VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe
 ```
 
+视频详情支持按时间（毫秒）或从 0 开始的显示帧序号请求精确帧。时间定位可选最近帧或该时间及之后的帧，显示结果保留实际帧序号和规范化微秒时间。后台解析成功后取得会话显示授权，缓存命中时复用已核验的帧。
+
 视频登记后可查询时长、视频流、旋转、帧率节奏和来源状态。刷新信息会重新核对视频摘要，离线时保留已经封存的元数据。视频片段与抽帧工作台仍在开发。
+
+桌面命令宿主的完整视频验收需要同时传入已核验的 FFmpeg、FFprobe 路径，脚本会启用 video-acceptance 测试特性并运行真实帧解析与图像协议用例。
 
 Windows 开发版的视频入口从启动进程继承已核验的视频工具路径。使用 `$env:DD_WORKER_VIDEO_FFMPEG = $ffmpeg` 和 `$env:DD_WORKER_VIDEO_FFPROBE = $ffprobe` 设置工具路径后启动桌面程序。`tests/desktop/windows/check-command-handlers.ps1` 接受 `-VideoFfmpegExe` 和 `-VideoFfprobeExe` 参数，可在命令行复跑 Windows 桌面命令宿主的真实视频探测。
 

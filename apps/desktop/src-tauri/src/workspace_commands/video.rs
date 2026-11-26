@@ -34,6 +34,49 @@ impl VideoRunner {
         })
     }
 
+    pub(super) async fn execute_frame(
+        self: Arc<Self>,
+        workspace: Arc<WorkspaceThread>,
+        session: Uuid,
+        job: dd_infra::frame_runtime::FrameResolveJob,
+    ) {
+        use dd_infra::frame_runtime::FrameResolveRuntime;
+        let task = job.task_id();
+        let _slot = self.slot.lock().await;
+        let owner = Arc::clone(&workspace);
+        let state = async_runtime::spawn_blocking(move || {
+            FrameResolveRuntime::task_outcome(&owner, session, task)
+        })
+        .await;
+        if !matches!(state, Ok(Ok(outcome)) if outcome.status == "QUEUED") {
+            return;
+        }
+        let started = FrameResolveRuntime::launch(
+            Arc::clone(&workspace),
+            session,
+            self.interpreter.clone(),
+            self.entrypoint.clone(),
+        )
+        .await;
+        let startup_failed = match started {
+            Ok(mut worker) => {
+                if worker.run(job).await.is_ok() {
+                    let _ = worker.shutdown().await;
+                    return;
+                }
+                if worker.terminate().await.is_err() {
+                    return;
+                }
+                false
+            }
+            Err(_) => true,
+        };
+        let _ = async_runtime::spawn_blocking(move || {
+            FrameResolveRuntime::record_unavailable(&workspace, session, task, startup_failed)
+        })
+        .await;
+    }
+
     pub(crate) fn configured() -> Option<Arc<Self>> {
         let (interpreter, entrypoint) = configured_worker_script()?;
         Some(Self::new(interpreter, entrypoint))
@@ -195,6 +238,7 @@ impl Commands {
             operation_kind: ImportOperationKind::VideoProbe,
             status: outcome.status,
             error_code: outcome.error_code,
+            video_frame: None,
             preview: None,
             registration: None,
             geometry_report: None,

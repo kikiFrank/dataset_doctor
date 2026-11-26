@@ -166,6 +166,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::geometry::annotation_geometry_submit,
             workspace_commands::video::video_import,
             workspace_commands::video::video_get,
+            workspace_commands::video_frames::video_resolve_frame,
             workspace_commands::review::review_open,
             workspace_commands::review::review_save_draft,
             workspace_commands::review::review_cancel,

@@ -76,11 +76,20 @@ impl Commands {
         request: MediaGetLocatorRequest,
     ) -> Result<DisplayLocator, AppError> {
         let session = self.session(request.context)?;
-        let asset = self.parse_uuid(request.asset_id)?;
         let now = Instant::now();
-        let grant = media
-            .issue(session, asset, now)
-            .map_err(|_| self.error("FAILED_PRECONDITION", "无法授权显示此图像。"))?;
+        let grant = match (request.asset_id, request.artifact_id, request.owner_task_id) {
+            (Some(asset), None, None) => media
+                .issue(session, self.parse_uuid(asset)?, now)
+                .map_err(|_| self.error("FAILED_PRECONDITION", "无法授权显示此图像。"))?,
+            (None, Some(artifact), Some(task)) => {
+                let task = self.parse_uuid(task)?;
+                let artifact = self.parse_uuid(artifact)?;
+                dd_infra::frame_runtime::FrameService::new(Arc::clone(&self.thread))
+                    .and_then(|frames| frames.image_locator(media, session, task, artifact, now))
+                    .map_err(|_| self.error("FAILED_PRECONDITION", "无法核验此帧产物。"))?
+            }
+            _ => return Err(self.error("INVALID_ARGUMENT", "请选择图片或明确归属的帧产物。")),
+        };
         let image = media
             .resolve(grant.grant_id, now)
             .map_err(|_| self.error("FAILED_PRECONDITION", "图像已改变或无法读取。"))?;

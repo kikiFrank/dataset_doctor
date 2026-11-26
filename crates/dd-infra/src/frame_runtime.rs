@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use dd_domain::video::{FrameRef, SeekPolicy};
+use dd_domain::video::FrameRef;
+pub use dd_domain::video::SeekPolicy;
 use dd_protocol::v1::{FrameResolveInput, WorkerInputFile};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,8 @@ use crate::worker_runtime::{
     WorkerJob, WorkerOperation, WorkerRuntime, WorkerRuntimeError, now_ms,
 };
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
+
+pub use crate::worker_runtime::WorkerRuntimeError as FrameResolveError;
 
 pub(crate) const CAPABILITY: &str = "frame_resolve.v1";
 const KIND: &str = "FRAME_RESOLVE";
@@ -52,8 +55,15 @@ pub struct FrameResolveJob {
     task_id: Uuid,
 }
 
+impl FrameResolveJob {
+    pub fn task_id(&self) -> Uuid {
+        self.task_id
+    }
+}
+
 pub struct FrameTaskSnapshot {
     pub task_id: Uuid,
+    pub accepted_at_ms: i64,
     pub status: String,
     pub error_code: Option<String>,
     pub frame: Option<ResolvedVideoFrame>,
@@ -212,6 +222,7 @@ impl FrameService {
         Ok((
             FrameTaskSnapshot {
                 task_id: task.task_id,
+                accepted_at_ms: task.created_at_ms,
                 status: task.status,
                 error_code: None,
                 frame: None,
@@ -220,6 +231,34 @@ impl FrameService {
                 task_id: task.task_id,
             }),
         ))
+    }
+
+    pub fn image_locator(
+        &self,
+        media: &crate::media_display::MediaDisplayService,
+        session: Uuid,
+        task: Uuid,
+        artifact: Uuid,
+        now: std::time::Instant,
+    ) -> Result<crate::media_display::MediaLocator, FrameResolveError> {
+        let resolved = self
+            .snapshot(session, task)?
+            .frame
+            .ok_or(FrameResolveError::ResultUnconfirmed)?;
+        if resolved.reference.artifact_id != artifact.to_string() {
+            return Err(FrameResolveError::InvalidBinding);
+        }
+        let root = self.owner.storage_root(session)?;
+        media
+            .issue_verified_image(
+                session,
+                crate::dataset_query::RegisteredInputFile {
+                    path: root.join(resolved.relative_path),
+                    sha256: resolved.reference.sha256,
+                },
+                now,
+            )
+            .map_err(|error| FrameResolveError::TaskEvidence(Box::new(error)))
     }
 
     pub fn snapshot(
@@ -280,6 +319,7 @@ impl FrameService {
         };
         Ok(FrameTaskSnapshot {
             task_id: task,
+            accepted_at_ms: loaded.created_at_ms,
             status: loaded.status,
             error_code: loaded.error_code,
             frame,
@@ -293,6 +333,23 @@ pub struct FrameResolveRuntime {
 }
 
 impl FrameResolveRuntime {
+    pub fn task_outcome(
+        owner: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+    ) -> Result<TaskOutcome, WorkspaceThreadError> {
+        WorkerRuntime::task_outcome(owner, session, task, CAPABILITY)
+    }
+
+    pub fn record_unavailable(
+        owner: &WorkspaceThread,
+        session: Uuid,
+        task: Uuid,
+        startup_failed: bool,
+    ) -> Result<(), FrameResolveError> {
+        WorkerRuntime::record_unavailable(owner, session, task, CAPABILITY, startup_failed)
+    }
+
     pub async fn launch(
         owner: Arc<WorkspaceThread>,
         session: Uuid,
@@ -417,6 +474,7 @@ impl FrameResolveRuntime {
 
 struct StoredFrameTask {
     root: PathBuf,
+    created_at_ms: i64,
     session: Uuid,
     status: String,
     error_code: Option<String>,
@@ -429,6 +487,7 @@ struct StoredFrameTask {
 
 struct LoadedFrameTask {
     root: PathBuf,
+    created_at_ms: i64,
     session: Uuid,
     status: String,
     error_code: Option<String>,
@@ -449,14 +508,14 @@ fn load_task(
     let record = owner.workspace_action(session, move |workspace| {
         workspace.connection.query_row(
             "SELECT workspace_session_id,status,error_code,input_manifest_path,input_fingerprint,current_attempt_id,
-                output_manifest_path,json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
+                output_manifest_path,json_extract(execution_metadata_json,'$.terminal_receipt.result_manifest_ref'),created_at_ms
              FROM tasks WHERE task_id=?1 AND capability_id=?2 AND operation_kind=?3",
             params![task.to_string(),CAPABILITY,KIND],
             |row| {
                 let attempt = row.get::<_, Option<String>>(5)?.map(|value| Uuid::parse_str(&value)
                     .map_err(|_| rusqlite::Error::InvalidQuery)).transpose()?;
                 Ok(StoredFrameTask {
-                    root: workspace.root().to_owned(),session: row_uuid(row,0)?,status:row.get(1)?,
+                    root: workspace.root().to_owned(),created_at_ms:row.get(8)?,session: row_uuid(row,0)?,status:row.get(1)?,
                     error_code:row.get(2)?,input_path:PathBuf::from(row.get::<_, String>(3)?),
                     input_fingerprint:row.get(4)?,attempt,output:row.get(6)?,result_reference:row.get(7)?,
                 })
@@ -496,6 +555,7 @@ fn load_task(
     let frame = config.frame(digest)?;
     Ok(LoadedFrameTask {
         root: record.root,
+        created_at_ms: record.created_at_ms,
         session: record.session,
         status: record.status,
         error_code: record.error_code,

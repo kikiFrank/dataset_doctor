@@ -385,7 +385,7 @@ fn read_task(row: &Row<'_>) -> rusqlite::Result<StoredTask> {
     })
 }
 
-pub(crate) fn format_digest(digest: &[u8; 32]) -> String {
+pub fn format_digest(digest: &[u8; 32]) -> String {
     let mut encoded = String::with_capacity(64);
     for byte in digest {
         write!(encoded, "{byte:02x}").expect("writing to a String does not fail");

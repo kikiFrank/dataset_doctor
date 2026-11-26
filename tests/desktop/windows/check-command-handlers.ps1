@@ -27,7 +27,7 @@ if ($VideoFfmpegExe) {
 $log = Join-Path $run 'check.log'
 $args = @('test', '--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
     '--target', 'x86_64-pc-windows-msvc', '-p', 'dd-desktop', 'workspace_commands::')
-if ($VideoFfmpegExe) { $args += @('--', '--nocapture') }
+if ($VideoFfmpegExe) { $args += @('--features', 'video-acceptance', '--', '--nocapture') }
 "Running desktop host tests without starting WebView2. Log: $log" | Tee-Object -FilePath $log
 $ErrorActionPreference = 'Continue'
 & $cargo @args 2>&1 | ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append

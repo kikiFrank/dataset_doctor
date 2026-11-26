@@ -28,6 +28,7 @@ pub(crate) mod geometry;
 pub(crate) mod review;
 pub(crate) mod review_commit;
 pub(crate) mod video;
+pub(crate) mod video_frames;
 
 fn configured_worker_script() -> Option<(PathBuf, PathBuf)> {
     if let (Some(python), Some(entrypoint)) = (
@@ -85,6 +86,10 @@ mod geometry_tests;
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/video_import.rs"]
 mod video_import_tests;
+#[cfg(all(test, feature = "video-acceptance"))]
+#[path = "../../../../tests/desktop/host/video_frame.rs"]
+mod video_frame_tests;
+
 
 #[cfg(test)]
 #[path = "../../../../tests/desktop/host/video_resume.rs"]

@@ -8,6 +8,8 @@ export type UuidText = string;
 
 export type ArtifactOwner = { "kind": "TASK", "id": UuidText } | { "kind": "ASSET", "id": UuidText } | { "kind": "REVIEW", "id": UuidText };
 
+export type ArtifactReference = { artifact_id: UuidText, owner: ArtifactOwner, kind: string, media_type: string, sha256: string, size_bytes: DecimalU64, schema_id: string | null, };
+
 export type PathPurpose = "WORKSPACE" | "IMPORT" | "EXPORT" | "BACKUP";
 
 export type PathKind = "DIRECTORY" | "FILE";
@@ -78,7 +80,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -88,7 +90,7 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, };
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 
@@ -103,6 +105,16 @@ export type VideoAvailability = "ONLINE" | "OFFLINE" | "CHANGED";
 export type VideoStreamView = { stream_index: number, codec: string | null, width: number | null, height: number | null, duration_ms: DecimalU64 | null, };
 
 export type VideoDetail = { source_video_id: UuidText, display_name: string, row_revision: DecimalU64, source_digest: string, source_availability: VideoAvailability, probe_status: string | null, duration_ms: DecimalU64 | null, streams: Array<VideoStreamView>, rotation_ccw: number | null, variable_frame_rate: boolean | null, };
+
+export type VideoFrameTarget = { frame_index: DecimalU64, } | { timestamp_ms: DecimalU64, };
+
+export type VideoSeekPolicy = "NEAREST" | "AT_OR_AFTER";
+
+export type VideoResolveFrameRequest = { context: CommandContext, source_video_id: UuidText, target: VideoFrameTarget, seek_policy: VideoSeekPolicy, };
+
+export type VideoFrame = { source_video_id: UuidText, source_digest: string, stream_index: number, frame_index: DecimalU64, pts_us: DecimalI64 | null, timestamp_ms: DecimalU64 | null, width: number, height: number, image_ref: ArtifactReference, };
+
+export type FrameResolution = { "kind": "ready", frame: VideoFrame, } | { "kind": "accepted", operation: ImportOperationRef, };
 
 export type GeometryFindingView = { code: string, annotation_id: DecimalU64 | null, };
 
@@ -138,6 +150,6 @@ export type ReviewEditorView = { review: ReviewSession, categories: Array<CocoCa
 
 export type MediaPurpose = "DISPLAY";
 
-export type MediaGetLocatorRequest = { context: CommandContext, asset_id: UuidText, purpose: MediaPurpose, };
+export type MediaGetLocatorRequest = { context: CommandContext, asset_id?: UuidText, artifact_id?: UuidText, owner_task_id?: UuidText, purpose: MediaPurpose, };
 
 export type DisplayLocator = { locator: string, media_type: string, expires_at: string, resource_digest: string, };

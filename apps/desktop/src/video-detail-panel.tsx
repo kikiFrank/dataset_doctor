@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { VideoFramePanel } from "./video-frame-panel";
 
 import type { VideoDetail } from "./api/generated/wire-primitives";
 import { getVideo } from "./api/video";
@@ -48,6 +49,8 @@ export function VideoDetailPanel({ workspace, sourceVideoId }: {
             <td>{stream.duration_ms === null ? "未知" : `${Number(stream.duration_ms) / 1000} 秒`}</td>
           </tr>)}</tbody>
         </table>}
+        <VideoFramePanel key={detail.source_video_id + detail.source_digest} workspace={workspace}
+          sourceVideoId={sourceVideoId} enabled={detail.source_availability === "ONLINE" && detail.probe_status === "SUCCEEDED"} />
       </>}
     </section>
   );

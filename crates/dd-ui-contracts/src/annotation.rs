@@ -136,7 +136,15 @@ pub enum MediaPurpose {
 #[derive(Deserialize, TS)]
 pub struct MediaGetLocatorRequest {
     pub context: CommandContext,
-    pub asset_id: UuidText,
+    #[serde(default)]
+    #[ts(optional)]
+    pub asset_id: Option<UuidText>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub artifact_id: Option<UuidText>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub owner_task_id: Option<UuidText>,
     pub purpose: MediaPurpose,
 }
 

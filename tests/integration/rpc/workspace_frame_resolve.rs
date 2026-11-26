@@ -53,6 +53,7 @@ async fn workspace_frame_tasks_decode_the_selected_pixels_and_reopen_a_verified_
     assert!(queued.frame.is_none());
     let (same, duplicate) = service.submit(session, request, 221).unwrap();
     assert_eq!(same.task_id, queued.task_id);
+    assert_eq!(same.accepted_at_ms, queued.accepted_at_ms);
     assert!(duplicate.is_none());
     assert!(
         service

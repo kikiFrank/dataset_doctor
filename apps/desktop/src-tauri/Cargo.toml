@@ -22,3 +22,4 @@ tauri-build = "=2.7.6"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+video-acceptance = []

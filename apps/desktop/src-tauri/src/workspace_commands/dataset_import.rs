@@ -195,6 +195,7 @@ impl Commands {
                     status: task.status,
                     error_code: task.error_code,
                     registration: None,
+                    video_frame: None,
                     preview,
                     geometry_report: None,
                     coco_export: None,
@@ -215,6 +216,7 @@ impl Commands {
                             Self::export_task,
                             Self::video_task,
                             Self::backup_task,
+                            Self::frame_task,
                         ];
                         for query in queries {
                             match query(self, session, id) {
@@ -243,6 +245,7 @@ impl Commands {
                     status: task.status,
                     error_code: task.error_code,
                     registration,
+                    video_frame: None,
                     preview: None,
                     geometry_report: None,
                     coco_export: None,

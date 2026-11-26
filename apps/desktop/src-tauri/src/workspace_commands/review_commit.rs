@@ -92,6 +92,7 @@ impl Commands {
             operation_kind: ImportOperationKind::ReviewCommit,
             status: task.status,
             error_code: task.error_code,
+            video_frame: None,
             preview: None,
             registration: None,
             geometry_report: None,

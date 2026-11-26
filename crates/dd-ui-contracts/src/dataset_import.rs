@@ -44,6 +44,7 @@ pub enum ImportOperationKind {
     ReviewCommit,
     DatasetExport,
     WorkspaceBackup,
+    FrameResolve,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -93,6 +94,9 @@ pub struct ImportTaskView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub workspace_backup: Option<WorkspaceBackupView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub video_frame: Option<crate::video::VideoFrame>,
 }
 
 #[derive(Deserialize, TS)]

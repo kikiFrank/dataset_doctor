@@ -110,6 +110,16 @@ impl MediaDisplayService {
                     .map_err(WorkspaceThreadError::Dataset)
             })
             .map_err(MediaDisplayError::Storage)?;
+        self.issue_verified_image(session, image, now)
+    }
+
+    pub(crate) fn issue_verified_image(
+        &self,
+        session: Uuid,
+        image: RegisteredInputFile,
+        now: Instant,
+    ) -> Result<MediaLocator, MediaDisplayError> {
+        self.require_session(session)?;
         let mut grants = self
             .grants
             .lock()

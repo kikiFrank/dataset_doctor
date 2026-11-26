@@ -225,6 +225,8 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 | staging_commit | asset_ids[]、target_dataset_id、quality_report_ref、acknowledged_findings[]、expected_schema_fingerprint | 异步 | 用户明确确认；核对当前摘要、Final 与报告新鲜度；更新关系不复制帧 |
 | staging_remove_submit | asset_ids[]、delete_generated_files | 异步 | 删除关系和明确指定的已生成文件；不删除源视频 |
 
+帧解析的 accepted 返回持久 Task，成功后通过 task_get 的 video_frame 读取精确 FrameRef。已核验的缓存直接返回 ready。帧图像使用 media_get_locator 的 artifact_id 与 owner_task_id 申请当前会话显示授权，Core 核对已接纳的帧任务和实际图像摘要。旧 asset_id 图片请求继续兼容。混用两种定位范围返回 INVALID_ARGUMENT。
+
 FrameRef 结构见视频章节。video_resolve_frame 响应是明确的判别联合：{kind:"ready",frame:FrameRef} 或 {kind:"accepted",operation:OperationRef}，前端不能把 accepted 当作已有图片。其余长期计算统一使用异步接口，避免客户端猜测是否已完成。
 
 本稿建议在开始某次视频标注时选定目标 Dataset；需要“新建独立 Dataset”时先创建空 Dataset，再标注和注入。这样类别来源明确，同时满足导出新数据集或合入已有数据集两种选择。
