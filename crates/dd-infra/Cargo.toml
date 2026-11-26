@@ -80,6 +80,10 @@ name = "import_plan"
 path = "../../tests/storage/import/plan.rs"
 
 [[test]]
+name = "dataset_browse"
+path = "../../tests/storage/dataset/browse.rs"
+
+[[test]]
 name = "core_claim_loopback"
 path = "../../tests/integration/rpc/core_claim_loopback.rs"
 required-features = ["execution-rpc"]

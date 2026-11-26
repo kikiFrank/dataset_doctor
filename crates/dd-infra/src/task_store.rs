@@ -12,10 +12,11 @@ use std::fmt::{self, Display, Write};
 use std::path::PathBuf;
 
 use dd_core::execution_grant::{ClaimReceipt, GrantScope};
-use rusqlite::{OptionalExtension, Row, TransactionBehavior, params, types::Type};
+use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 use uuid::Uuid;
 
 use crate::paths::is_portable_relative_file;
+use crate::sqlite::row_uuid;
 use crate::workspace::OpenedWorkspace;
 
 #[derive(Clone, Debug)]
@@ -341,13 +342,6 @@ fn read_task(row: &Row<'_>) -> rusqlite::Result<StoredTask> {
         workspace_session: row_uuid(row, 2)?,
         status: row.get(3)?,
         created_at_ms: row.get(4)?,
-    })
-}
-
-fn row_uuid(row: &Row<'_>, index: usize) -> rusqlite::Result<Uuid> {
-    let value: String = row.get(index)?;
-    Uuid::parse_str(&value).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(error))
     })
 }
 

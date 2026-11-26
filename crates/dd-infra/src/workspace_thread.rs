@@ -13,6 +13,7 @@ use dd_core::workspace::{
 };
 use uuid::Uuid;
 
+use crate::dataset_query::{AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary};
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
@@ -30,6 +31,7 @@ pub enum WorkspaceThreadError {
     Access(AccessError),
     Task(TaskStoreError),
     Import(ImportRegistrationError),
+    Dataset(DatasetQueryError),
     Busy,
     Stopped,
 }
@@ -41,6 +43,7 @@ impl Display for WorkspaceThreadError {
             Self::Access(error) => Display::fmt(error, formatter),
             Self::Task(error) => Display::fmt(error, formatter),
             Self::Import(error) => Display::fmt(error, formatter),
+            Self::Dataset(error) => Display::fmt(error, formatter),
             Self::Busy => write!(formatter, "Workspace request queue is full"),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
@@ -54,6 +57,7 @@ impl Error for WorkspaceThreadError {
             Self::Access(error) => Some(error),
             Self::Task(error) => Some(error),
             Self::Import(error) => Some(error),
+            Self::Dataset(error) => Some(error),
             _ => None,
         }
     }
@@ -173,6 +177,33 @@ impl WorkspaceThread {
 
     pub fn current(&self) -> Result<Option<WorkspaceSession>, WorkspaceThreadError> {
         self.request(Request::Current)
+    }
+
+    pub fn list_datasets(
+        &self,
+        session: Uuid,
+        after: Option<Uuid>,
+        size: u16,
+    ) -> Result<DatasetPage<DatasetSummary>, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .list_datasets(after, size)
+                .map_err(WorkspaceThreadError::Dataset)
+        })
+    }
+
+    pub fn list_assets(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        after: Option<Uuid>,
+        size: u16,
+    ) -> Result<DatasetPage<AssetSummary>, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .list_assets(dataset, after, size)
+                .map_err(WorkspaceThreadError::Dataset)
+        })
     }
 
     pub fn close(&self, expected_session_id: Uuid) -> Result<(), WorkspaceThreadError> {
