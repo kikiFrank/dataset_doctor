@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender, SyncSender, TrySendError};
 #[cfg(feature = "execution-rpc")]
@@ -11,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use dd_core::execution_grant::{ClaimReceipt, GrantScope};
 use dd_core::workspace::{
-    WorkspaceAccess, WorkspaceAccessError, WorkspaceDirectoryGrant, WorkspaceDirectoryPurpose,
+    WorkspaceAccess, WorkspaceAccessError, WorkspacePathGrant, WorkspacePathPurpose,
     WorkspaceSession,
 };
 use uuid::Uuid;
@@ -21,11 +22,12 @@ use crate::dataset_query::{
     RegisteredImage,
 };
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
+use crate::paths::open_registered_file;
 use crate::review_store::{ReviewBaseline, ReviewSession, ReviewStoreError};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission};
-use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError};
+use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError, ordinary_file};
 
 const QUEUE_CAPACITY: usize = 8;
 type AccessError = WorkspaceAccessError<WorkspaceOpenError>;
@@ -79,14 +81,14 @@ impl Error for WorkspaceThreadError {
 }
 
 enum Request {
-    Grant(PathBuf, AccessReply<WorkspaceDirectoryGrant>),
-    GrantDirectory(
+    Grant(PathBuf, AccessReply<WorkspacePathGrant>),
+    GrantPath(
         Uuid,
-        WorkspaceDirectoryPurpose,
+        WorkspacePathPurpose,
         PathBuf,
-        AccessReply<WorkspaceDirectoryGrant>,
+        AccessReply<WorkspacePathGrant>,
     ),
-    ConsumeDirectory(Uuid, WorkspaceDirectoryPurpose, Uuid, AccessReply<PathBuf>),
+    ConsumePath(Uuid, WorkspacePathPurpose, Uuid, AccessReply<PathBuf>),
     Open(Uuid, AccessReply<WorkspaceSession>),
     Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
@@ -119,7 +121,7 @@ impl WorkspaceThread {
                             let _ =
                                 reply.send(access.grant_selected_directory(path, Instant::now()));
                         }
-                        Request::GrantDirectory(session, purpose, path, reply) => {
+                        Request::GrantPath(session, purpose, path, reply) => {
                             let _ = reply.send(access.grant_for(
                                 session,
                                 purpose,
@@ -127,7 +129,7 @@ impl WorkspaceThread {
                                 Instant::now(),
                             ));
                         }
-                        Request::ConsumeDirectory(session, purpose, grant, reply) => {
+                        Request::ConsumePath(session, purpose, grant, reply) => {
                             let _ = reply.send(access.consume_for(
                                 session,
                                 purpose,
@@ -163,7 +165,7 @@ impl WorkspaceThread {
     pub fn grant_selected_directory(
         &self,
         selected: PathBuf,
-    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
         self.request(|reply| Request::Grant(selected, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
@@ -177,8 +179,25 @@ impl WorkspaceThread {
         &self,
         session: Uuid,
         selected: PathBuf,
-    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
-        self.grant_directory(session, WorkspaceDirectoryPurpose::Import, selected)
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        self.grant_path(session, WorkspacePathPurpose::Import, selected)
+    }
+
+    /// Grant one file selected by the trusted video chooser.
+    pub fn grant_video_file(
+        &self,
+        session: Uuid,
+        selected: PathBuf,
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        let invalid = || WorkspaceThreadError::Access(WorkspaceAccessError::InvalidSelection);
+        if !selected.is_absolute()
+            || !fs::symlink_metadata(&selected).is_ok_and(|metadata| ordinary_file(&metadata))
+        {
+            return Err(invalid());
+        }
+        let selected = selected.canonicalize().map_err(|_| invalid())?;
+        open_registered_file(&selected).map_err(|_| invalid())?;
+        self.grant_path(session, WorkspacePathPurpose::VideoImport, selected)
     }
 
     #[cfg(feature = "execution-rpc")]
@@ -186,7 +205,7 @@ impl WorkspaceThread {
         &self,
         session: Uuid,
         selected: PathBuf,
-    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
         let selected = selected
             .canonicalize()
             .ok()
@@ -194,16 +213,16 @@ impl WorkspaceThread {
             .ok_or(WorkspaceThreadError::Access(
                 WorkspaceAccessError::InvalidSelection,
             ))?;
-        self.grant_directory(session, WorkspaceDirectoryPurpose::Export, selected)
+        self.grant_path(session, WorkspacePathPurpose::Export, selected)
     }
 
-    fn grant_directory(
+    fn grant_path(
         &self,
         session: Uuid,
-        purpose: WorkspaceDirectoryPurpose,
+        purpose: WorkspacePathPurpose,
         selected: PathBuf,
-    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
-        self.request(|reply| Request::GrantDirectory(session, purpose, selected, reply))?
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        self.request(|reply| Request::GrantPath(session, purpose, selected, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 
@@ -212,7 +231,15 @@ impl WorkspaceThread {
         session: Uuid,
         grant: Uuid,
     ) -> Result<PathBuf, WorkspaceThreadError> {
-        self.consume_directory(session, WorkspaceDirectoryPurpose::Import, grant)
+        self.consume_path(session, WorkspacePathPurpose::Import, grant)
+    }
+
+    pub fn consume_video_file(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.consume_path(session, WorkspacePathPurpose::VideoImport, grant)
     }
 
     #[cfg(feature = "execution-rpc")]
@@ -221,16 +248,16 @@ impl WorkspaceThread {
         session: Uuid,
         grant: Uuid,
     ) -> Result<PathBuf, WorkspaceThreadError> {
-        self.consume_directory(session, WorkspaceDirectoryPurpose::Export, grant)
+        self.consume_path(session, WorkspacePathPurpose::Export, grant)
     }
 
-    fn consume_directory(
+    fn consume_path(
         &self,
         session: Uuid,
-        purpose: WorkspaceDirectoryPurpose,
+        purpose: WorkspacePathPurpose,
         grant: Uuid,
     ) -> Result<PathBuf, WorkspaceThreadError> {
-        self.request(|reply| Request::ConsumeDirectory(session, purpose, grant, reply))?
+        self.request(|reply| Request::ConsumePath(session, purpose, grant, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 

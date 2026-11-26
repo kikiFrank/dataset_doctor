@@ -71,6 +71,10 @@ name = "workspace_access"
 path = "../../tests/storage/workspace/access.rs"
 
 [[test]]
+name = "video_file_grants"
+path = "../../tests/storage/workspace/video_file_grants.rs"
+
+[[test]]
 name = "workspace_thread"
 path = "../../tests/storage/workspace/thread.rs"
 
