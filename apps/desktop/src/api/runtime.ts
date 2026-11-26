@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 interface RuntimeStatus {
   version: string;
   verify_workspace: boolean;
+  verify_workspace_create: boolean;
 }
 
 export function acknowledgeDesktopRuntime(): Promise<RuntimeStatus> {

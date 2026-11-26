@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate')][string]$Suite = 'Runtime',
     [string]$PythonExe
 )
 
@@ -30,6 +30,12 @@ try {
         $start.Arguments += ' --workspace-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_VERIFIED'
+    } elseif ($Suite -eq 'WorkspaceCreate') {
+        $workspace = Join-Path $run 'New Workspace'
+        New-Item -ItemType Directory -Path $workspace | Out-Null
+        $start.Arguments += ' --workspace-create-smoke'
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
+        $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
     }
     $process = [Diagnostics.Process]::Start($start)
     try {
@@ -45,6 +51,11 @@ try {
         $stdout.Result, $stderr.Result | Set-Content -LiteralPath $log -Encoding UTF8
         if ($process.ExitCode -ne 0 -or $stdout.Result -notmatch "(?m)^$expected version=0\.1\.0\s*$") {
             throw "Desktop exit=$($process.ExitCode). Missing $expected. See $log."
+        }
+        if ($Suite -eq 'WorkspaceCreate' -and (
+            -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.json') -PathType Leaf) -or
+            -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
+            throw 'The native application did not publish both Workspace files.'
         }
         "Native desktop $Suite completed Tauri IPC and exited: $log"
     } finally {

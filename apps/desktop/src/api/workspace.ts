@@ -6,6 +6,7 @@ import type {
   PathGrant,
   PathSelectRequest,
   WorkspaceCloseRequest,
+  WorkspaceCreateRequest,
   WorkspaceGetRequest,
   WorkspaceOpenRequest,
   WorkspaceSnapshot,
@@ -14,16 +15,33 @@ import type {
 export type OpenWorkspace = Extract<WorkspaceSnapshot, { status: "OPEN" }>;
 
 export async function selectAndOpenWorkspace(): Promise<OpenWorkspace | null> {
-  const pick: PathSelectRequest = {
-    request_id: crypto.randomUUID(), purpose: "WORKSPACE", kind: "DIRECTORY", access: "READ_WRITE",
-  };
-  const grant = await invoke<PathGrant | null>("path_select", { request: pick });
+  const grant = await pickWorkspaceDirectory();
   if (!grant) return null;
   const request: WorkspaceOpenRequest = {
     request_id: crypto.randomUUID(), directory_grant_id: grant.grant_id,
   };
-  const workspace = await invoke<WorkspaceSnapshot>("workspace_open", { request });
-  if (workspace.status !== "OPEN") throw new Error("Workspace open returned no active session");
+  return requireOpen(await invoke<WorkspaceSnapshot>("workspace_open", { request }));
+}
+
+export async function selectAndCreateWorkspace(displayName: string): Promise<OpenWorkspace | null> {
+  const grant = await pickWorkspaceDirectory();
+  if (!grant) return null;
+  const request: WorkspaceCreateRequest = {
+    request_id: crypto.randomUUID(), directory_grant_id: grant.grant_id,
+    display_name: displayName,
+  };
+  return requireOpen(await invoke<WorkspaceSnapshot>("workspace_create", { request }));
+}
+
+function pickWorkspaceDirectory(): Promise<PathGrant | null> {
+  const pick: PathSelectRequest = {
+    request_id: crypto.randomUUID(), purpose: "WORKSPACE", kind: "DIRECTORY", access: "READ_WRITE",
+  };
+  return invoke("path_select", { request: pick });
+}
+
+function requireOpen(workspace: WorkspaceSnapshot): OpenWorkspace {
+  if (workspace.status !== "OPEN") throw new Error("Workspace command returned no active session");
   return workspace;
 }
 

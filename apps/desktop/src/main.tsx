@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { acknowledgeDesktopRuntime } from "./api/runtime";
-import { closeWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./api/workspace";
+import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
-import { verifyWorkspaceIpc } from "./api/workspace-smoke";
+import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
 import "./style.css";
 
 function App() {
@@ -12,6 +12,7 @@ function App() {
   const [runtimeConnected, setRuntimeConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [workspace, setWorkspace] = useState<OpenWorkspace | null>(null);
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,13 +20,24 @@ function App() {
       setStatus(`桌面运行时已连接 · ${runtime.version}`);
       setRuntimeConnected(true);
       if (runtime.verify_workspace) await verifyWorkspaceIpc();
+      if (runtime.verify_workspace_create) await verifyWorkspaceCreationIpc();
     }).catch((failure: unknown) => setError(workspaceCommandError(failure)));
   }, []);
 
-  async function toggleWorkspace() {
+  async function runWorkspaceAction(action: () => Promise<void>) {
     setError(null);
     setBusy(true);
     try {
+      await action();
+    } catch (failure) {
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleWorkspace() {
+    await runWorkspaceAction(async () => {
       if (workspace) {
         const closed = await closeWorkspace(workspace);
         if (closed.close_state === "CLOSED") setWorkspace(null);
@@ -33,11 +45,17 @@ function App() {
         const opened = await selectAndOpenWorkspace();
         if (opened) setWorkspace(opened);
       }
-    } catch (failure) {
-      setError(workspaceCommandError(failure));
-    } finally {
-      setBusy(false);
-    }
+    });
+  }
+
+  async function createWorkspace() {
+    await runWorkspaceAction(async () => {
+      const created = await selectAndCreateWorkspace(name.trim());
+      if (created) {
+        setName("");
+        setWorkspace(created);
+      }
+    });
   }
 
   return (
@@ -50,6 +68,17 @@ function App() {
         <button type="button" disabled={busy || !runtimeConnected} onClick={() => void toggleWorkspace()}>
           {workspace ? "关闭工作区" : "打开工作区"}
         </button>
+        {!workspace && (
+          <form className="workspace-create-form" onSubmit={(event) => { event.preventDefault(); void createWorkspace(); }}>
+            <label htmlFor="workspace-name">工作区名称</label>
+            <div className="workspace-create">
+              <input id="workspace-name" value={name} required disabled={busy} onChange={(event) => setName(event.target.value)} />
+              <button type="submit" disabled={busy || !runtimeConnected || !name.trim() || [...name.trim()].length > 128}>
+                选择目录并创建
+              </button>
+            </div>
+          </form>
+        )}
         {error && <p role="alert">{error}</p>}
       </main>
     </div>

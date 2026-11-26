@@ -1,5 +1,5 @@
 import { acknowledgeWorkspaceVerification } from "./runtime";
-import { closeWorkspace, getWorkspace, selectAndOpenWorkspace } from "./workspace";
+import { closeWorkspace, getWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace } from "./workspace";
 
 export async function verifyWorkspaceIpc() {
   const first = await selectAndOpenWorkspace();
@@ -25,5 +25,25 @@ export async function verifyWorkspaceIpc() {
   }
   await closeWorkspace(reopened);
   if ((await getWorkspace()).status !== "CLOSED") throw new Error("Workspace is still open");
+  await acknowledgeWorkspaceVerification();
+}
+
+export async function verifyWorkspaceCreationIpc() {
+  const name = "创建验收 Workspace";
+  const created = await selectAndCreateWorkspace(name);
+  if (!created || created.display_name !== name || created.config_revision !== "0" || created.offline_asset_count !== "0") {
+    throw new Error("Workspace creation did not return an empty active Workspace");
+  }
+  await closeWorkspace(created);
+
+  const duplicate = await selectAndCreateWorkspace("Different").catch((error: unknown) => error);
+  if (!duplicate || typeof duplicate !== "object" || !("code" in duplicate) || duplicate.code !== "FAILED_PRECONDITION") {
+    throw new Error("Duplicate Workspace creation was not rejected");
+  }
+  const reopened = await selectAndOpenWorkspace();
+  if (!reopened || reopened.workspace_id !== created.workspace_id || reopened.workspace_session_id === created.workspace_session_id) {
+    throw new Error("The created Workspace could not be reopened with a fresh session");
+  }
+  await closeWorkspace(reopened);
   await acknowledgeWorkspaceVerification();
 }

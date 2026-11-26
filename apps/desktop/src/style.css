@@ -50,4 +50,15 @@ button {
 }
 
 button:disabled { opacity: 0.58; cursor: wait; }
+.workspace-create-form { margin-top: 24px; }
+.workspace-create { display: flex; align-items: stretch; gap: 8px; margin-top: 8px; }
+
+.workspace-create input {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #7b8ba0;
+  border-radius: 7px;
+  font: inherit;
+}
+
 [role="alert"] { color: #9a343e; }

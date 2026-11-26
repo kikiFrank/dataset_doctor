@@ -2,11 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_core::workspace::{WorkspaceAccessError, WorkspaceSession};
+use dd_infra::workspace::WorkspaceOpenError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::UuidText;
 use dd_ui_contracts::workspace::{
     AppError, CloseReceipt, CloseState, CommandContext, PathGrant, PathSelectRequest,
-    WorkspaceCloseRequest, WorkspaceGetRequest, WorkspaceOpenRequest, WorkspaceSnapshot,
+    WorkspaceCloseRequest, WorkspaceCreateRequest, WorkspaceGetRequest, WorkspaceOpenRequest,
+    WorkspaceSnapshot,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -16,6 +18,10 @@ use uuid::Uuid;
 use crate::RuntimeMode;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
+
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/workspace_create.rs"]
+mod create_tests;
 
 #[tauri::command]
 pub async fn path_select(
@@ -51,7 +57,7 @@ pub async fn path_select(
         Ok(Some(PathGrant {
             grant_id: commands.uuid_text(grant.grant_id.to_string())?,
             display_path: selection.to_string_lossy().into_owned(),
-            allowed_operations: vec!["WORKSPACE_OPEN".into()],
+            allowed_operations: vec!["WORKSPACE_OPEN".into(), "WORKSPACE_CREATE".into()],
             expires_at,
         }))
     })
@@ -70,6 +76,17 @@ pub async fn workspace_open(
             .open(grant)
             .map_err(|failure| commands.map_error(failure))?;
         commands.snapshot(opened)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn workspace_create(
+    request: WorkspaceCreateRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<WorkspaceSnapshot, AppError> {
+    run(thread, request.request_id.clone(), move |commands| {
+        commands.create(request)
     })
     .await
 }
@@ -155,6 +172,48 @@ struct Commands {
 }
 
 impl Commands {
+    fn create(&self, request: WorkspaceCreateRequest) -> Result<WorkspaceSnapshot, AppError> {
+        let grant = self.parse_uuid(request.directory_grant_id)?;
+        let now_ms = i64::try_from(
+            OffsetDateTime::now_utc()
+                .unix_timestamp_nanos()
+                .div_euclid(1_000_000),
+        )
+        .map_err(|_| self.error("INTERNAL", "无法获取创建时间。"))?;
+        let created = self
+            .thread
+            .create(grant, request.display_name, now_ms)
+            .map_err(|failure| match failure {
+                WorkspaceThreadError::Access(WorkspaceAccessError::Storage(
+                    WorkspaceOpenError::ExistingWorkspace,
+                )) => self.error(
+                    "FAILED_PRECONDITION",
+                    "此目录已有工作区，请使用打开工作区。",
+                ),
+                WorkspaceThreadError::Access(WorkspaceAccessError::Storage(
+                    WorkspaceOpenError::Marker(_),
+                )) => self.error("INVALID_ARGUMENT", "请输入 1 至 128 个字符的工作区名称。"),
+                WorkspaceThreadError::Access(WorkspaceAccessError::Storage(
+                    WorkspaceOpenError::PendingNameMismatch,
+                )) => self.error(
+                    "FAILED_PRECONDITION",
+                    "此目录有未完成的创建，请使用原工作区名称重试。",
+                ),
+                WorkspaceThreadError::Access(WorkspaceAccessError::Storage(
+                    WorkspaceOpenError::UnownedDatabase,
+                )) => self.error(
+                    "FAILED_PRECONDITION",
+                    "目录包含未归属的数据库文件，请选择其他目录。",
+                ),
+                WorkspaceThreadError::Access(WorkspaceAccessError::Storage(_)) => self.error(
+                    "FAILED_PRECONDITION",
+                    "无法创建工作区，请检查目录的访问权限和使用状态。",
+                ),
+                failure => self.map_error(failure),
+            })?;
+        self.snapshot(created)
+    }
+
     fn verify_context(
         &self,
         current: &WorkspaceSession,

@@ -26,7 +26,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Desktop launch smoke failed.' }
 & $exe
 ```
 
-冒烟测试在独立 WebView2 数据目录加载内嵌的 React 前端，经真实 Tauri IPC 握手后退出。普通启动后可通过 Windows 文件夹选择器打开已有工作区，查看配置版本和离线资源数，再关闭工作区。传入 `-Suite Workspace -PythonExe $py312` 可使用合成库复跑打开、查询、关闭、重开和旧会话拒绝。完整业务和安装器另有验收。详见 [MVP 进度与证据](docs/development/mvp_progress.md)。
+冒烟测试在独立 WebView2 数据目录加载内嵌的 React 前端，经真实 Tauri IPC 握手后退出。普通启动后可用 Windows 文件夹选择器创建或打开工作区，查看离线资源数，再关闭工作区。传入 `-Suite Workspace -PythonExe $py312` 复跑已有工作区的打开、查询、关闭、重开和旧会话拒绝。传入 `-Suite WorkspaceCreate` 复跑空目录创建、拒绝重复创建和重开。完整业务和安装器另有验收。详见 [MVP 进度与证据](docs/development/mvp_progress.md)。
 
 ## Windows 工具链预检（P00-01）
 

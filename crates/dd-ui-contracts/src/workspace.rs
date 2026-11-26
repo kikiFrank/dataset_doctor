@@ -44,6 +44,13 @@ pub struct WorkspaceOpenRequest {
 }
 
 #[derive(Deserialize, TS)]
+pub struct WorkspaceCreateRequest {
+    pub request_id: UuidText,
+    pub directory_grant_id: UuidText,
+    pub display_name: String,
+}
+
+#[derive(Deserialize, TS)]
 pub struct CommandContext {
     pub request_id: UuidText,
     pub workspace_id: UuidText,

@@ -20,6 +20,8 @@ export type PathGrant = { grant_id: UuidText, display_path: string, allowed_oper
 
 export type WorkspaceOpenRequest = { request_id: UuidText, directory_grant_id: UuidText, };
 
+export type WorkspaceCreateRequest = { request_id: UuidText, directory_grant_id: UuidText, display_name: string, };
+
 export type CommandContext = { request_id: UuidText, workspace_id: UuidText, workspace_session_id: UuidText, idempotency_key?: UuidText, };
 
 export type WorkspaceGetRequest = { request_id: UuidText, context?: CommandContext, };

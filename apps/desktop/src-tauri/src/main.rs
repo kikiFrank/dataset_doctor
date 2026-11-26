@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 struct RuntimeMode {
     smoke_root: Option<PathBuf>,
     smoke_workspace: Option<PathBuf>,
+    smoke_workspace_create: bool,
 }
 
 #[derive(Deserialize)]
@@ -24,6 +25,7 @@ struct DesktopReadyRequest {
 struct DesktopReadyResponse {
     version: String,
     verify_workspace: bool,
+    verify_workspace_create: bool,
 }
 
 #[tauri::command]
@@ -44,7 +46,8 @@ fn desktop_ready(
     }
     Ok(DesktopReadyResponse {
         version,
-        verify_workspace: runtime.smoke_workspace.is_some(),
+        verify_workspace: runtime.smoke_workspace.is_some() && !runtime.smoke_workspace_create,
+        verify_workspace_create: runtime.smoke_workspace_create,
     })
 }
 
@@ -56,7 +59,12 @@ fn desktop_workspace_verified(
     if runtime.smoke_workspace.is_none() {
         return Err("Workspace verification mode is inactive".into());
     }
-    finish_smoke(&app, "DESKTOP_WORKSPACE_VERIFIED")
+    let marker = if runtime.smoke_workspace_create {
+        "DESKTOP_WORKSPACE_CREATE_VERIFIED"
+    } else {
+        "DESKTOP_WORKSPACE_VERIFIED"
+    };
+    finish_smoke(&app, marker)
 }
 
 fn finish_smoke(app: &AppHandle, marker: &str) -> Result<(), String> {
@@ -77,8 +85,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
+    let smoke_workspace_create = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-create-smoke");
     let smoke_workspace = if cfg!(debug_assertions)
-        && std::env::args_os().any(|argument| argument == "--workspace-smoke")
+        && (smoke_workspace_create
+            || std::env::args_os().any(|argument| argument == "--workspace-smoke"))
     {
         let path = PathBuf::from(
             std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
@@ -98,6 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(RuntimeMode {
             smoke_root,
             smoke_workspace,
+            smoke_workspace_create,
         })
         .setup(|app| {
             let runtime = app.state::<RuntimeMode>();
@@ -117,6 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             desktop_workspace_verified,
             workspace_commands::path_select,
             workspace_commands::workspace_open,
+            workspace_commands::workspace_create,
             workspace_commands::workspace_get,
             workspace_commands::workspace_close,
         ])
