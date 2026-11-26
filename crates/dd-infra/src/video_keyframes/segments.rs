@@ -9,8 +9,6 @@ use crate::video_annotation_store::{
     UnassignedKeyframe, VideoAnnotationManifest, VideoArtifactReference, VideoKeyframe,
     VideoSegment, VideoTargetContext,
 };
-use crate::video_query::{VideoSourceAvailability, registered_video_detail};
-use crate::video_runtime::read_registered_video_index;
 
 #[derive(Clone)]
 pub struct SegmentRequest {
@@ -46,22 +44,7 @@ impl VideoAnnotationService {
         }
         let _guard = self.owner.lock_final_operations()?;
         let snapshot = self.snapshot(session, request.source_video_id)?;
-        let detail = registered_video_detail(&self.owner, session, request.source_video_id)
-            .map_err(|e| VideoAnnotationError::Evidence(Box::new(e)))?;
-        if detail.source_availability != VideoSourceAvailability::Online
-            || detail.source_digest != snapshot.digest
-            || detail.probe_status.as_deref() != Some("SUCCEEDED")
-        {
-            return Err(VideoAnnotationError::InvalidInput);
-        }
-        let index = read_registered_video_index(
-            &self.owner,
-            session,
-            detail
-                .probe_receipt
-                .ok_or(VideoAnnotationError::InvalidInput)?,
-        )
-        .map_err(|e| VideoAnnotationError::Evidence(Box::new(e)))?;
+        let index = self.online_video_index(session, request.source_video_id, &snapshot.digest)?;
         let source_digest =
             parse_digest(&snapshot.digest).ok_or(VideoAnnotationError::InvalidInput)?;
         index

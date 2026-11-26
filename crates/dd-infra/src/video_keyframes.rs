@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use dd_domain::video::FrameIndex;
 use rusqlite::params;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -24,9 +25,14 @@ use crate::video_annotation_store::{
     VideoTargetContext, read_keyframe, read_video_work, work_path,
 };
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
+use crate::video_runtime::read_registered_video_index;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
+mod sampling;
 mod segments;
+pub use sampling::{
+    ResolvedVideoSampling, VideoSamplingMode, VideoSamplingPurpose, VideoSamplingRequest,
+};
 pub use segments::{SegmentReceipt, SegmentRequest};
 
 #[derive(Clone)]
@@ -99,6 +105,27 @@ struct Snapshot {
 }
 
 impl VideoAnnotationService {
+    fn online_video_index(
+        &self,
+        session: Uuid,
+        video: Uuid,
+        digest: &str,
+    ) -> Result<FrameIndex, VideoAnnotationError> {
+        let detail = registered_video_detail(&self.owner, session, video)
+            .map_err(|error| VideoAnnotationError::Evidence(Box::new(error)))?;
+        if detail.source_availability != VideoSourceAvailability::Online
+            || detail.source_digest != digest
+            || detail.probe_status.as_deref() != Some("SUCCEEDED")
+        {
+            return Err(VideoAnnotationError::InvalidInput);
+        }
+        let probe = detail
+            .probe_receipt
+            .ok_or(VideoAnnotationError::InvalidInput)?;
+        read_registered_video_index(&self.owner, session, probe)
+            .map_err(|error| VideoAnnotationError::Evidence(Box::new(error)))
+    }
+
     pub fn new(owner: Arc<WorkspaceThread>) -> Result<Self, VideoAnnotationError> {
         Ok(Self {
             owner,

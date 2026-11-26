@@ -88,7 +88,7 @@ if ($PackagedWorkerExe) {
 if ($VideoFfmpegExe) {
     $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve')
     if (-not $PackagedWorkerExe) {
-        $tests += @('--test', 'workspace_video_probe', '--test', 'workspace_frame_resolve', '--test', 'video_keyframes', '--test', 'video_segments')
+        $tests += @('--test', 'workspace_video_probe', '--test', 'workspace_frame_resolve', '--test', 'video_keyframes', '--test', 'video_segments', '--test', 'video_sampling')
     }
 }
 if ($CocoReaderPythonExe) {
