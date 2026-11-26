@@ -15,6 +15,17 @@
       "minLength": 64,
       "maxLength": 64,
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "track_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local_annotation_id", "track_id", "tracking_task_id", "tracking_attempt_id"],
+      "properties": {
+        "local_annotation_id": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "track_id": { "$ref": "#/$defs/uuid" },
+        "tracking_task_id": { "$ref": "#/$defs/uuid" },
+        "tracking_attempt_id": { "$ref": "#/$defs/uuid" }
+      }
     }
   }
 }

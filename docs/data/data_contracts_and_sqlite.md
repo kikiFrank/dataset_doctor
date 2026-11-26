@@ -182,6 +182,8 @@ video_annotation_manifest_ref 指向当前视频工作清单，包含已保存�
 
 正式 track map、视频帧索引和视频工作清单是当前数据依赖，备份时包含，候选清理时排除。候选自己的 track map 可以清理。MVP 不强制另外建立 tracks 业务表，也不将 track_id 硬塞进标准 COCO annotations。
 
+对采用轨迹的 Final，Core 将当前映射封存为 `artifacts/images/<asset_id>/track-maps/<artifact_id>.json`，绑定正式标注摘要、原视频片段与精确 FrameRef。文件操作清单记录映射的摘要和内部位置，SQLite 在确认 Final 的事务中发布当前引用。恢复重新核验同一映射，正式备份依该引用收录和校验文件。 [Track Map v1 Schema](../../contracts/json-schema/v1/track-map.schema.json)
+
 #### 4.3 输入指纹是审核、复查与恢复的依据
 
 任务输入 manifest 保存下述逻辑结构，实际 UUID 和摘要必须有效：

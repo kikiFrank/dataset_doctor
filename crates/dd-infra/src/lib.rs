@@ -40,6 +40,7 @@ pub mod staging_commit;
 #[cfg(feature = "execution-rpc")]
 pub mod staging_report;
 pub mod task_store;
+mod track_map;
 pub mod video_annotation_store;
 #[cfg(feature = "execution-rpc")]
 pub mod video_index;

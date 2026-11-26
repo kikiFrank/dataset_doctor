@@ -4,6 +4,7 @@ mod apply;
 mod tasks;
 pub use tasks::FinalTaskSnapshot;
 
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs;
@@ -16,13 +17,16 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::artifact_reference::ArtifactOwner;
 use crate::dataset_query::RegisteredImage;
 use crate::input_fingerprint::{InputFingerprintError, freeze_input_manifest};
 use crate::paths::{open_scoped_file, publish_immutable};
-use crate::review_draft::{ReviewDraftError, ReviewDraftService, draft_path};
+use crate::review_draft::{ReviewDraftError, ReviewDraftService, ReviewTrackBinding, draft_path};
 use crate::review_store::{ReviewSession, ReviewStatus, ReviewStoreError};
 use crate::review_validation::{ReviewValidationError, confirm_negative};
 use crate::task_store::{TaskSubmission, enqueue_task_in, format_digest};
+use crate::track_map::{TrackMap, TrackMapEntry};
+use crate::video_keyframes::VideoAnnotationService;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const KIND: &str = "REVIEW_COMMIT";
@@ -116,6 +120,8 @@ struct FinalManifest {
     payload_path: String,
     local_image_id: i64,
     confirmed_negative: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    track_map: Option<TrackMapEntry>,
 }
 
 struct FinalTarget {
@@ -238,6 +244,14 @@ impl ReviewFinalService {
         let prefix = format!("artifacts/file-operations/{operation_id}");
         let payload_path = format!("{prefix}/annotation.json");
         let payload = serde_json::to_vec(&draft.coco_document).map_err(ReviewFinalError::Json)?;
+        let new_annotation_digest = digest(&payload);
+        let track_map = self.prepare_track_map(
+            session,
+            &target,
+            operation_id,
+            &new_annotation_digest,
+            draft.track_bindings,
+        )?;
         let review_revision =
             i64::try_from(review.row_revision).map_err(|_| ReviewFinalError::InvalidOperation)?;
         let next_review_revision = review_revision
@@ -257,10 +271,11 @@ impl ReviewFinalService {
             target_path: annotation,
             registry_path,
             old_annotation_digest: review.base_annotation_digest.clone(),
-            new_annotation_digest: digest(&payload),
+            new_annotation_digest,
             payload_path,
             local_image_id,
             confirmed_negative: request.confirmed_negative,
+            track_map,
         };
         let manifest_path = format!("{prefix}/operation.json");
         let manifest_bytes = serde_json::to_vec(&manifest).map_err(ReviewFinalError::Json)?;
@@ -331,6 +346,58 @@ impl ReviewFinalService {
             transaction.commit().map_err(database)?;
             Ok(Ok(FinalOperation { operation_id, state: FinalOperationState::Prepared }))
         }).map_err(ReviewFinalError::Storage)?
+    }
+
+    fn prepare_track_map(
+        &self,
+        session: Uuid,
+        target: &FinalTarget,
+        operation: Uuid,
+        annotation_digest: &str,
+        bindings: Vec<ReviewTrackBinding>,
+    ) -> Result<Option<TrackMapEntry>, ReviewFinalError> {
+        if bindings.is_empty() {
+            return Ok(None);
+        }
+        let invalid = || ReviewFinalError::Draft(ReviewDraftError::InvalidTrackingSelection);
+        let work = VideoAnnotationService::new(Arc::clone(&self.owner)).map_err(|_| invalid())?;
+        let candidates = work
+            .staging_tracking_candidates_locked(
+                session,
+                target.review.dataset_id,
+                target.review.asset_id,
+            )
+            .map_err(|_| invalid())?
+            .ok_or_else(invalid)?;
+        let ArtifactOwner::Task(task) = candidates.reference.owner else {
+            return Err(invalid());
+        };
+        let observed: BTreeSet<_> = candidates
+            .observations
+            .iter()
+            .map(|item| item.track_id)
+            .collect();
+        if bindings.iter().any(|binding| {
+            binding.tracking_task_id != task
+                || binding.tracking_attempt_id != candidates.tracking_attempt_id
+                || !observed.contains(&binding.track_id)
+        }) {
+            return Err(invalid());
+        }
+        let map = TrackMap {
+            contract_version: 1,
+            asset_id: target.review.asset_id,
+            annotation_digest: annotation_digest.to_owned(),
+            segment_id: candidates.segment_id,
+            frame: candidates.frame,
+            bindings,
+        };
+        Ok(Some(TrackMapEntry::publish(
+            &target.root,
+            &self.drafts.contracts,
+            &map,
+            operation,
+        )?))
     }
 }
 

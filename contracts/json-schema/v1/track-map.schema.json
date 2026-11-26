@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/track-map.schema.json",
+  "title": "Current tracked annotations for a registered video frame",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "asset_id", "annotation_digest", "segment_id", "frame", "bindings"],
+  "properties": {
+    "contract_version": { "const": 1 },
+    "asset_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "annotation_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "segment_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "frame": { "$ref": "#/$defs/frame" },
+    "bindings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": { "$ref": "common.schema.json#/$defs/track_binding" }
+    }
+  },
+  "$defs": {
+    "decimal": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" },
+    "nullable_decimal": { "anyOf": [{ "$ref": "#/$defs/decimal" }, { "type": "null" }] },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_video_id", "source_digest", "stream_index", "frame_index", "pts_us",
+        "timestamp_ms", "width", "height", "image_ref"],
+      "properties": {
+        "source_video_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "source_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+        "stream_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "frame_index": { "$ref": "#/$defs/decimal" },
+        "pts_us": { "$ref": "#/$defs/nullable_decimal" },
+        "timestamp_ms": { "$ref": "#/$defs/nullable_decimal" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "image_ref": { "$ref": "#/$defs/frame_image" }
+      }
+    },
+    "frame_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "owner", "kind", "media_type", "sha256", "size_bytes"],
+      "properties": {
+        "artifact_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "owner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "const": "TASK" },
+            "id": { "$ref": "common.schema.json#/$defs/uuid" }
+          }
+        },
+        "kind": { "const": "VIDEO_FRAME_IMAGE" },
+        "media_type": { "const": "image/png" },
+        "sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+        "size_bytes": { "$ref": "#/$defs/decimal" },
+        "schema_id": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

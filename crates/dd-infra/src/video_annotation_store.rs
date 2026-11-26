@@ -247,16 +247,16 @@ pub(crate) fn read_keyframe(
     serde_json::from_slice(&bytes).map_err(|_| invalid())
 }
 
-fn read_asset_artifact(
+pub(crate) fn read_asset_artifact(
     root: &Path,
-    video: Uuid,
+    asset: Uuid,
     kind: &str,
     path: &str,
     reference: &VideoArtifactReference,
 ) -> io::Result<Vec<u8>> {
     let size = reference.size_bytes.parse::<u64>().map_err(|_| invalid())?;
     if reference.artifact_id.is_nil()
-        || reference.owner != VideoArtifactOwner::Asset(video)
+        || reference.owner != VideoArtifactOwner::Asset(asset)
         || reference.kind != kind
         || reference.media_type != "application/json"
         || reference.schema_id.is_some()

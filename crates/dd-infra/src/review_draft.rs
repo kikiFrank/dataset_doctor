@@ -20,6 +20,7 @@ use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::review_store::{ReviewSession, ReviewStatus, ReviewStoreError};
 use crate::review_validation::{ReviewImage, ReviewValidationError, validate_review_document};
+pub use crate::track_map::ReviewTrackBinding;
 use crate::video_keyframes::VideoAnnotationService;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -38,15 +39,6 @@ pub struct ReviewDraftRequest {
 pub struct ReviewTrackSelection {
     pub local_annotation_id: u64,
     pub track_id: Uuid,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReviewTrackBinding {
-    pub local_annotation_id: u64,
-    pub track_id: Uuid,
-    pub tracking_task_id: Uuid,
-    pub tracking_attempt_id: Uuid,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -85,6 +85,17 @@ impl ReviewFinalService {
             &manifest.new_annotation_digest,
             MAX_ANNOTATION,
         )?;
+        if let Some(entry) = &manifest.track_map {
+            if entry.reference.artifact_id != operation {
+                return Err(ReviewFinalError::InvalidOperation);
+            }
+            entry.read(
+                &pending.root,
+                &self.drafts.contracts,
+                stored_uuid(&manifest.asset_id)?,
+                &manifest.new_annotation_digest,
+            )?;
+        }
         let binding = self.current_binding(session, &manifest)?;
         let state = if binding {
             apply_files(&manifest, &payload)?
@@ -177,10 +188,16 @@ impl ReviewFinalService {
         now_ms: i64,
     ) -> Result<(), ReviewFinalError> {
         let annotation_path = path_string(&manifest.registry_path)?.to_owned();
+        let track_entry = manifest
+            .track_map
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(ReviewFinalError::Json)?;
         self.owner.workspace_action(session, move |owner| {
             let transaction = owner.connection.transaction().map_err(database)?;
             let (task_status, error_code) = if state == FinalOperationState::Committed {
-                commit_rows(&transaction, &manifest, &annotation_path, now_ms)?;
+                commit_rows(&transaction, &manifest, &annotation_path, track_entry.as_deref(), now_ms)?;
                 let result = json!({
                     "operation_id": operation.to_string(),
                     "review_id": manifest.review_id,
@@ -282,15 +299,21 @@ fn commit_rows(
     transaction: &Transaction<'_>,
     manifest: &FinalManifest,
     registry_path: &str,
+    track_entry: Option<&str>,
     now_ms: i64,
 ) -> Result<(), WorkspaceThreadError> {
     expect_one(transaction.execute(
         "UPDATE assets SET annotation_path=?1, annotation_digest=?2, annotation_format='COCO_IMAGE_BBOX',
              annotation_origin=CASE WHEN annotation_origin='NONE' THEN 'APP_CREATED' ELSE annotation_origin END,
-             annotation_local_image_id=?3, row_revision=row_revision+1, updated_at_ms=?4
+             annotation_local_image_id=?3, row_revision=row_revision+1, updated_at_ms=?4,
+             metadata_json=CASE WHEN ?9 IS NULL THEN
+                 json_remove(metadata_json,'$.current_track_map_ref','$.current_track_map_entry')
+             ELSE json_set(metadata_json,'$.current_track_map_ref',json_extract(?9,'$.reference'),
+                 '$.current_track_map_entry',json(?9)) END
          WHERE asset_id=?5 AND row_revision=?6 AND media_digest=?7 AND annotation_digest IS ?8",
         params![registry_path, manifest.new_annotation_digest, manifest.local_image_id, now_ms,
-            manifest.asset_id, manifest.asset_revision, manifest.old_image_digest, manifest.old_annotation_digest],
+            manifest.asset_id, manifest.asset_revision, manifest.old_image_digest, manifest.old_annotation_digest,
+            track_entry],
     ).map_err(database)?)?;
     transaction.execute(
         "UPDATE review_sessions SET status='STALE', row_revision=row_revision+1, updated_at_ms=?1

@@ -22,6 +22,7 @@ const TASK_RESULT: &str =
     include_str!("../../../../contracts/json-schema/v1/task-result-manifest.schema.json");
 const REVIEW_DRAFT: &str =
     include_str!("../../../../contracts/json-schema/v1/review-draft.schema.json");
+const TRACK_MAP: &str = include_str!("../../../../contracts/json-schema/v1/track-map.schema.json");
 
 #[derive(Clone, Copy, Debug)]
 pub enum JsonProfile {
@@ -30,6 +31,7 @@ pub enum JsonProfile {
     CocoSingleImage,
     TaskResultManifest,
     ReviewDraft,
+    TrackMap,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -64,6 +66,7 @@ pub struct JsonContracts {
     coco_single_image: Validator,
     task_result_manifest: Validator,
     review_draft: Validator,
+    track_map: Validator,
 }
 
 impl JsonContracts {
@@ -93,6 +96,7 @@ impl JsonContracts {
             coco_single_image: build(COCO)?,
             task_result_manifest: build(TASK_RESULT)?,
             review_draft: build(REVIEW_DRAFT)?,
+            track_map: build(TRACK_MAP)?,
         })
     }
 
@@ -105,6 +109,7 @@ impl JsonContracts {
             JsonProfile::CocoSingleImage => &self.coco_single_image,
             JsonProfile::TaskResultManifest => &self.task_result_manifest,
             JsonProfile::ReviewDraft => &self.review_draft,
+            JsonProfile::TrackMap => &self.track_map,
         };
         let issues: Vec<_> = validator
             .iter_errors(&document)

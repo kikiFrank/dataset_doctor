@@ -10,10 +10,13 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, Row};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
+use crate::artifact_reference::ArtifactReference;
 use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::paths::{copy_and_hash, is_portable_relative_file, open_scoped_file};
 use crate::task_store::parse_digest;
+use crate::track_map::TrackMapEntry;
 use crate::video_annotation_store::{VideoArtifactReference, VideoManifestEntry, read_video_work};
 
 const RESULT_LIMIT: u64 = 4 * 1024 * 1024;
@@ -174,6 +177,40 @@ pub(crate) fn formal_backup_inventory(
             let size = reference.size_bytes.parse().map_err(|_| invalid())?;
             staged.copy(&path, Some(&reference.sha256), Some(size))?;
         }
+    }
+    let mut tracks = snapshot.prepare(
+        "SELECT asset_id, annotation_digest, json_extract(metadata_json,'$.current_track_map_ref'),
+                json_extract(metadata_json,'$.current_track_map_entry')
+         FROM assets WHERE kind='IMAGE'
+           AND (json_type(metadata_json,'$.current_track_map_ref') IS NOT NULL
+                OR json_type(metadata_json,'$.current_track_map_entry') IS NOT NULL)",
+    )?;
+    for row in tracks.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))
+    })? {
+        let (asset, digest, reference, entry) = row?;
+        let invalid = || BackupArtifactError::InvalidManifest(PathBuf::from("current_track_map"));
+        let asset = Uuid::parse_str(&asset).map_err(|_| invalid())?;
+        let digest = digest.ok_or_else(invalid)?;
+        let reference: ArtifactReference =
+            serde_json::from_str(&reference.ok_or_else(invalid)?).map_err(|_| invalid())?;
+        let entry: TrackMapEntry =
+            serde_json::from_str(&entry.ok_or_else(invalid)?).map_err(|_| invalid())?;
+        if entry.reference != reference {
+            return Err(invalid());
+        }
+        entry.read(workspace_root, &contracts, asset, &digest)?;
+        let size = reference.size_bytes.parse().map_err(|_| invalid())?;
+        staged.copy(
+            Path::new(&entry.relative_path),
+            Some(&reference.sha256),
+            Some(size),
+        )?;
     }
     Ok(staged.files.into_values().collect())
 }

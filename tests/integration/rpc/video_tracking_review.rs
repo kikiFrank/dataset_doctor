@@ -1,13 +1,16 @@
-use std::sync::Arc;
+use std::{fs, path::Path, sync::Arc};
 
 use dd_infra::annotation_view::AnnotationReader;
 use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime};
 use dd_infra::review_draft::{ReviewDraftRequest, ReviewDraftService, ReviewTrackSelection};
+use dd_infra::review_final::{FinalOperationState, ReviewFinalRequest, ReviewFinalService};
 use dd_infra::video_keyframes::{
     VideoAnnotationService, VideoSampleService, VideoSampleSubmission, VideoSamplingMode,
     VideoSamplingPurpose, VideoSamplingRequest,
 };
 use dd_infra::video_tracking_runtime::{VideoTrackingRuntime, VideoTrackingService};
+use dd_infra::workspace_backup::task::{BackupService, BackupSubmission};
+use rusqlite::Connection;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -17,7 +20,7 @@ mod tracking_workspace_fixture;
 use tracking_workspace_fixture::TrackingWorkspace;
 
 #[tokio::test]
-async fn only_explicit_exact_frame_adoption_survives_a_reopened_review_draft() {
+async fn explicit_adoption_and_the_recoverable_final_track_map_survive_reopen_and_restore() {
     let setup = TrackingWorkspace::create().await;
     let fixture = &setup.fixture;
     let session = fixture.session;
@@ -237,4 +240,181 @@ async fn only_explicit_exact_frame_adoption_survives_a_reopened_review_draft() {
             .formal_coco
             .is_none()
     );
+
+    let latest = service.read(reopened, review.review_id).unwrap().unwrap();
+    let linked = service
+        .save_with_tracks(
+            reopened,
+            continuation(&latest.receipt, latest.coco_document),
+            &[ReviewTrackSelection {
+                local_annotation_id: 10,
+                ..choice
+            }],
+            258,
+        )
+        .unwrap();
+    let finals = ReviewFinalService::new(Arc::clone(owner)).unwrap();
+    let prepared = finals
+        .prepare(
+            reopened,
+            ReviewFinalRequest {
+                review_id: review.review_id,
+                expected_review_revision: linked.review_revision,
+                base_image_digest: review.base_image_digest,
+                base_annotation_digest: None,
+                draft_digest: linked.draft_digest,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                confirmed_negative: false,
+            },
+            259,
+        )
+        .unwrap();
+    let read_metadata = |root: &Path| {
+        let database = Connection::open(root.join("workspace.db")).unwrap();
+        let metadata: String = database
+            .query_row(
+                "SELECT metadata_json FROM assets WHERE asset_id=?1",
+                [asset.to_string()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        serde_json::from_str::<serde_json::Value>(&metadata).unwrap()
+    };
+    assert!(read_metadata(&fixture.root)["current_track_map_ref"].is_null());
+    let prepared_map = fixture.root.join(format!(
+        "artifacts/images/{asset}/track-maps/{}.json",
+        prepared.operation_id
+    ));
+    let sealed_map = fs::read(&prepared_map).unwrap();
+    fs::write(&prepared_map, b"modified track map before Final").unwrap();
+    assert!(finals.resume(reopened, prepared.operation_id, 260).is_err());
+    assert!(
+        annotation
+            .read(reopened, asset)
+            .unwrap()
+            .formal_coco
+            .is_none()
+    );
+    assert!(read_metadata(&fixture.root)["current_track_map_ref"].is_null());
+    fs::write(&prepared_map, sealed_map).unwrap();
+    let database = Connection::open(fixture.root.join("workspace.db")).unwrap();
+    database
+        .execute_batch(
+            "CREATE TRIGGER abort_tracking_final BEFORE UPDATE OF annotation_digest ON assets
+         BEGIN SELECT RAISE(ABORT,'synthetic failure publishing tracked Final'); END;",
+        )
+        .unwrap();
+    assert!(finals.resume(reopened, prepared.operation_id, 260).is_err());
+    assert!(read_metadata(&fixture.root)["current_track_map_ref"].is_null());
+    database
+        .execute_batch("DROP TRIGGER abort_tracking_final")
+        .unwrap();
+    drop(database);
+    owner.close(reopened).unwrap();
+    let grant = owner
+        .grant_selected_directory(fixture.root.clone())
+        .unwrap();
+    let recovered = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    assert_eq!(
+        finals
+            .resume(recovered, prepared.operation_id, 261)
+            .unwrap()
+            .state,
+        FinalOperationState::Committed
+    );
+    let current = annotation.read(recovered, asset).unwrap();
+    let metadata = read_metadata(&fixture.root);
+    let reference = &metadata["current_track_map_ref"];
+    assert_eq!(reference["owner"]["kind"], "ASSET");
+    assert_eq!(reference["owner"]["id"], asset.to_string());
+    let relative = metadata["current_track_map_entry"]["relative_path"]
+        .as_str()
+        .unwrap();
+    let map_path = fixture.root.join(relative);
+    let bytes = fs::read(&map_path).unwrap();
+    let map: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(map["asset_id"], asset.to_string());
+    assert_eq!(
+        map["annotation_digest"],
+        current.annotation_digest.as_deref().unwrap()
+    );
+    assert_eq!(map["segment_id"], setup.segment.segment_id.to_string());
+    assert_eq!(
+        map["frame"]["source_video_id"],
+        fixture.video_id.to_string()
+    );
+    assert_eq!(map["frame"]["frame_index"], "2");
+    assert_eq!(map["bindings"][0]["local_annotation_id"], 10);
+    assert_eq!(
+        map["bindings"][0]["track_id"],
+        candidate.track_id.to_string()
+    );
+    let coco = current.formal_coco.unwrap();
+    assert_eq!(coco["annotations"][0]["bbox"], json!([13, 9, 5, 5]));
+    assert!(coco["annotations"][0].get("track_id").is_none());
+
+    let backup_folder = fixture.root.parent().unwrap().join("Tracked Final backup");
+    fs::create_dir(&backup_folder).unwrap();
+    let grant = owner
+        .grant_backup_directory(recovered, backup_folder)
+        .unwrap();
+    let backups = BackupService::new(Arc::clone(owner));
+    let (backup, job) = backups
+        .submit(
+            recovered,
+            BackupSubmission {
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                destination_grant_id: grant.grant_id,
+                include_reports: true,
+            },
+            262,
+        )
+        .unwrap();
+    backups
+        .run_admitted(recovered, job.unwrap(), || 263)
+        .unwrap();
+    let package = backups
+        .snapshot(recovered, backup.task_id, 264)
+        .unwrap()
+        .unwrap()
+        .receipt
+        .unwrap()
+        .package;
+    owner.close(recovered).unwrap();
+    let restored = fixture
+        .root
+        .parent()
+        .unwrap()
+        .join("Restored tracked Final");
+    let restored_session = owner
+        .restore_backup(package.clone(), restored.clone())
+        .unwrap()
+        .workspace_session_id;
+    assert_eq!(
+        read_metadata(&restored)["current_track_map_ref"],
+        *reference
+    );
+    assert_eq!(fs::read(restored.join(relative)).unwrap(), bytes);
+    assert_eq!(
+        annotation
+            .read(restored_session, asset)
+            .unwrap()
+            .formal_coco
+            .unwrap(),
+        coco
+    );
+    owner.close(restored_session).unwrap();
+    let rejected = fixture
+        .root
+        .parent()
+        .unwrap()
+        .join("Rejected tracked backup");
+    let package_map = package.join(relative);
+    fs::write(&package_map, b"modified map in backup").unwrap();
+    assert!(owner.restore_backup(package, rejected.clone()).is_err());
+    assert!(!rejected.exists());
+    fs::write(&package_map, bytes).unwrap();
+    assert_eq!(fs::read(&fixture.source).unwrap(), fixture.original);
 }

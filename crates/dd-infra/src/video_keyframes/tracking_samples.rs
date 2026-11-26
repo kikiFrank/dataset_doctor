@@ -10,7 +10,9 @@ use crate::frame_runtime::FrameService;
 use crate::sqlite::row_uuid;
 use crate::staging::parse_source;
 use crate::task_store::format_digest;
-use crate::video_annotation_store::{VideoArtifactOwner, VideoArtifactReference};
+use crate::video_annotation_store::{
+    VideoArtifactOwner, VideoArtifactReference, VideoFrameReference,
+};
 use crate::video_tracking_runtime::{TrackObservation, VideoTrackBundle, VideoTrackingService};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -19,6 +21,8 @@ pub struct StagingTrackCandidates {
     pub reference: VideoArtifactReference,
     pub tracking_attempt_id: Uuid,
     pub frame_index: u64,
+    pub segment_id: Uuid,
+    pub frame: VideoFrameReference,
     pub observations: Vec<TrackObservation>,
 }
 
@@ -35,8 +39,17 @@ impl VideoAnnotationService {
         dataset: Uuid,
         asset: Uuid,
     ) -> Result<Option<StagingTrackCandidates>, VideoAnnotationError> {
+        let _guard = self.owner.lock_final_operations()?;
+        self.staging_tracking_candidates_locked(session, dataset, asset)
+    }
+
+    pub(crate) fn staging_tracking_candidates_locked(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        asset: Uuid,
+    ) -> Result<Option<StagingTrackCandidates>, VideoAnnotationError> {
         let owner = &self.owner;
-        let _guard = owner.lock_final_operations()?;
         let candidate = owner.workspace_action(session, move |workspace| {
             let record = workspace
                 .connection
@@ -110,6 +123,8 @@ impl VideoAnnotationService {
             reference,
             tracking_attempt_id: bundle.attempt_id,
             frame_index: source.frame_index,
+            segment_id: data.segment_id,
+            frame: VideoFrameReference::from_resolved(frame_task, &resolved)?,
             observations,
         }))
     }
