@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use dd_core::import_plan::{Approval, ImportApprovalBook, ImportApprovalError};
@@ -88,6 +88,27 @@ impl DatasetImportCoordinator {
         dataset_name: String,
         selected: Vec<PathBuf>,
     ) -> Result<ImportPlan, DatasetImportError> {
+        self.inspect_selection(session, directory_grant, dataset_name, Some(selected))
+    }
+
+    /// Discover JPEG/PNG inputs below a trusted directory before the same
+    /// read-only preview used by explicit image selections.
+    pub fn inspect_directory(
+        &self,
+        session: Uuid,
+        directory_grant: Uuid,
+        dataset_name: String,
+    ) -> Result<ImportPlan, DatasetImportError> {
+        self.inspect_selection(session, directory_grant, dataset_name, None)
+    }
+
+    fn inspect_selection(
+        &self,
+        session: Uuid,
+        directory_grant: Uuid,
+        dataset_name: String,
+        selected: Option<Vec<PathBuf>>,
+    ) -> Result<ImportPlan, DatasetImportError> {
         let dataset_name = dataset_name.trim().to_owned();
         if dataset_name.is_empty() {
             return Err(DatasetImportError::Registration(
@@ -98,6 +119,10 @@ impl DatasetImportCoordinator {
             .workspace
             .consume_import_directory(session, directory_grant)
             .map_err(DatasetImportError::Workspace)?;
+        let selected = match selected {
+            Some(selected) => selected,
+            None => discover_images(&root).map_err(DatasetImportError::Source)?,
+        };
         let preview = Arc::new(
             inspect_single_image_coco(&root, &self.contracts, &selected)
                 .map_err(DatasetImportError::Source)?,
@@ -181,6 +206,71 @@ impl DatasetImportCoordinator {
         Err(DatasetImportError::Workspace(WorkspaceThreadError::Access(
             error,
         )))
+    }
+}
+
+fn discover_images(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let root = root.canonicalize()?;
+    let mut directories = vec![root.clone()];
+    let mut images = Vec::new();
+    let mut entries_seen = 0;
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(directory)? {
+            let entry = entry?;
+            entries_seen += 1;
+            if entries_seen > 100_000 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Import directory exceeds 100000 entries",
+                ));
+            }
+            let path = entry.path();
+            let metadata = std::fs::symlink_metadata(&path)?;
+            if redirected(&metadata) {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "Import directory contains a symbolic link or junction",
+                ));
+            }
+            if metadata.is_dir() {
+                directories.push(path);
+            } else if metadata.is_file()
+                && path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| {
+                        ["png", "jpg", "jpeg"]
+                            .iter()
+                            .any(|supported| value.eq_ignore_ascii_case(supported))
+                    })
+            {
+                if images.len() >= 1000 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Select at most 1000 images per import",
+                    ));
+                }
+                images.push(
+                    path.strip_prefix(&root)
+                        .map_err(io::Error::other)?
+                        .to_owned(),
+                );
+            }
+        }
+    }
+    images.sort_unstable();
+    Ok(images)
+}
+
+fn redirected(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0 // FILE_ATTRIBUTE_REPARSE_POINT
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
     }
 }
 
