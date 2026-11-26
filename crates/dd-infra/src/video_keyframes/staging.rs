@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use dd_domain::video::{FrameRef, TimeBase};
 use rusqlite::{OptionalExtension, Transaction, params};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -24,7 +25,7 @@ use crate::workspace_thread::WorkspaceThreadError;
 
 const MAX_FRAME_BYTES: u64 = 128 * 1024 * 1024;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StagedVideoSample {
     pub asset_id: Uuid,
     pub frame_index: u64,
@@ -56,6 +57,23 @@ impl VideoAnnotationService {
         plan: &ResolvedVideoSampling,
         frame_tasks: &[Uuid],
         now_ms: i64,
+    ) -> Result<Vec<StagedVideoSample>, VideoAnnotationError> {
+        self.stage_dataset_samples_with(session, plan, frame_tasks, now_ms, |_, _, _| Ok(()))
+    }
+
+    pub(super) fn stage_dataset_samples_with(
+        &self,
+        session: Uuid,
+        plan: &ResolvedVideoSampling,
+        frame_tasks: &[Uuid],
+        now_ms: i64,
+        finish: impl FnOnce(
+            &Transaction<'_>,
+            &Path,
+            &[StagedVideoSample],
+        ) -> Result<(), WorkspaceThreadError>
+        + Send
+        + 'static,
     ) -> Result<Vec<StagedVideoSample>, VideoAnnotationError> {
         let VideoSamplingPurpose::Dataset {
             include_keyframes,
@@ -144,6 +162,7 @@ impl VideoAnnotationService {
         let schema_digest = plan.label_schema_digest.clone();
         self.owner
             .workspace_action(session, move |workspace| {
+                let root = workspace.root().to_owned();
                 let tx = workspace.connection.transaction().map_err(database)?;
                 let categories: String = tx
                     .query_row(
@@ -170,6 +189,7 @@ impl VideoAnnotationService {
                     .iter()
                     .map(|sample| sample.register(&tx, dataset, video, now_ms))
                     .collect::<Result<Vec<_>, _>>()?;
+                finish(&tx, &root, &staged)?;
                 tx.commit().map_err(database)?;
                 Ok(staged)
             })

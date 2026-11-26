@@ -28,9 +28,14 @@ use crate::video_query::{VideoSourceAvailability, registered_video_detail};
 use crate::video_runtime::read_registered_video_index;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
+mod sample_task;
 mod sampling;
 mod segments;
 mod staging;
+pub use sample_task::{
+    VideoSampleJob, VideoSampleReceipt, VideoSampleService, VideoSampleSnapshot,
+    VideoSampleSubmission,
+};
 pub use sampling::{
     ResolvedVideoSampling, VideoSamplingMode, VideoSamplingPurpose, VideoSamplingRequest,
 };

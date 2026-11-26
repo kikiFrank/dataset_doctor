@@ -54,6 +54,15 @@ impl VideoAnnotationService {
         session: Uuid,
         request: VideoSamplingRequest,
     ) -> Result<ResolvedVideoSampling, VideoAnnotationError> {
+        let _guard = self.owner.lock_final_operations()?;
+        self.resolve_sampling_locked(session, request)
+    }
+
+    pub(super) fn resolve_sampling_locked(
+        &self,
+        session: Uuid,
+        request: VideoSamplingRequest,
+    ) -> Result<ResolvedVideoSampling, VideoAnnotationError> {
         let mode = request.sampling_mode()?;
         let purpose = match request.purpose {
             VideoSamplingPurpose::Tracking { .. } => SamplePurpose::Tracking,
@@ -61,7 +70,6 @@ impl VideoAnnotationService {
                 include_keyframes, ..
             } => SamplePurpose::Dataset { include_keyframes },
         };
-        let _guard = self.owner.lock_final_operations()?;
         let snapshot = self.snapshot(session, request.source_video_id)?;
         let (Some(manifest), Some(reference)) =
             self.load_manifest(&snapshot, request.source_video_id)?
