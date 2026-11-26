@@ -13,5 +13,7 @@ pub mod json;
 mod paths;
 pub mod sqlite;
 pub mod task_store;
+#[cfg(feature = "execution-rpc")]
+pub mod worker_process;
 pub mod workspace;
 pub mod workspace_thread;

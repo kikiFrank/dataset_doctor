@@ -1,6 +1,6 @@
 use std::fs;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -12,6 +12,9 @@ use dd_infra::artifact_manifest::{
 use dd_infra::execution_rpc::CoreClaimService;
 use dd_infra::json::JsonContracts;
 use dd_infra::task_store::{ResultSubmission, TaskStoreError, TaskSubmission};
+use dd_infra::worker_process::{
+    CoreClaimEndpoint, WorkerLaunch, WorkerProcess, WorkerProcessError,
+};
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_protocol::v1::core_execution_control_server::CoreExecutionControl;
 use dd_protocol::v1::{
@@ -23,9 +26,7 @@ use prost::Message;
 use rusqlite::Connection;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
-use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
 use tokio_stream::wrappers::TcpListenerStream;
@@ -55,7 +56,6 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let session = workspace.workspace_session_id;
     let executor = Uuid::new_v4();
     let core_key = Uuid::new_v4();
-    let worker_key = Uuid::new_v4();
     let mut grants = GrantBook::new(session);
     let image_path = root.join("synthetic.png");
     let annotation_path = root.join("synthetic.json");
@@ -136,20 +136,24 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
             .await
             .unwrap();
     });
-    let (mut child, port) =
-        start_worker(executor, worker_key, &core_address.to_string(), core_key).await;
-    let mut client = timeout(
-        TIMEOUT,
-        wire::python_worker_client::PythonWorkerClient::connect(format!("http://127.0.0.1:{port}")),
-    )
+    let SocketAddr::V4(claim_address) = core_address else {
+        panic!("expected IPv4 loopback")
+    };
+    let mut worker = WorkerProcess::launch(WorkerLaunch {
+        interpreter: PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap()),
+        entrypoint: Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../services/python-worker/src/dd_worker/entrypoint.py")
+            .canonicalize()
+            .unwrap(),
+        executor_session: executor,
+        core: Some(CoreClaimEndpoint {
+            address: claim_address,
+            claim_token: core_key,
+        }),
+    })
     .await
-    .unwrap()
     .unwrap();
-    let health = client
-        .health(authorized(wire::HealthRequest {}, worker_key))
-        .await
-        .unwrap()
-        .into_inner();
+    let health = worker.health().await.unwrap();
     assert_eq!(health.loaded_capability_ids, ["annotation_geometry.v1"]);
 
     let request = GeometryAuditRequest {
@@ -180,41 +184,21 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let context = request.context.clone().unwrap();
     let mut altered = request.clone();
     altered.parameters.as_mut().unwrap().max_pixels = 101;
-    assert_eq!(
-        client
-            .start_annotation_geometry_audit(authorized(altered, worker_key))
-            .await
-            .unwrap_err()
-            .code(),
-        Code::PermissionDenied
+    assert!(
+        matches!(worker.start_geometry(altered).await, Err(WorkerProcessError::Rpc(status)) if status.code() == Code::PermissionDenied)
     );
     assert!(fs::read_dir(&output).unwrap().next().is_none());
-    let first = client
-        .start_annotation_geometry_audit(authorized(request.clone(), worker_key))
-        .await
-        .unwrap()
-        .into_inner();
-    assert_eq!(
-        client
-            .start_annotation_geometry_audit(authorized(request.clone(), worker_key))
-            .await
-            .unwrap()
-            .into_inner(),
-        first
-    );
+    let first = worker.start_geometry(request.clone()).await.unwrap();
+    assert_eq!(worker.start_geometry(request.clone()).await.unwrap(), first);
     let snapshot = timeout(TIMEOUT, async {
         loop {
-            let snapshot = client
-                .get_execution(authorized(
-                    ExecutionLookup {
-                        task_id: first.task_id.clone(),
-                        attempt_id: first.attempt_id.clone(),
-                    },
-                    worker_key,
-                ))
+            let snapshot = worker
+                .execution(ExecutionLookup {
+                    task_id: first.task_id.clone(),
+                    attempt_id: first.attempt_id.clone(),
+                })
                 .await
-                .unwrap()
-                .into_inner();
+                .unwrap();
             if snapshot.status == "FAILED" {
                 panic!("worker failed: {}", snapshot.error_code);
             }
@@ -285,24 +269,16 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         Err(ArtifactValidationError::ScopeMismatch)
     ));
     let changed = prepare_changed_source(&thread, &grants, &root, request);
-    let changed_handle = client
-        .start_annotation_geometry_audit(authorized(changed, worker_key))
-        .await
-        .unwrap()
-        .into_inner();
+    let changed_handle = worker.start_geometry(changed).await.unwrap();
     let failure = timeout(TIMEOUT, async {
         loop {
-            let observed = client
-                .get_execution(authorized(
-                    ExecutionLookup {
-                        task_id: changed_handle.task_id.clone(),
-                        attempt_id: changed_handle.attempt_id.clone(),
-                    },
-                    worker_key,
-                ))
+            let observed = worker
+                .execution(ExecutionLookup {
+                    task_id: changed_handle.task_id.clone(),
+                    attempt_id: changed_handle.attempt_id.clone(),
+                })
                 .await
-                .unwrap()
-                .into_inner();
+                .unwrap();
             assert_ne!(
                 observed.status, "SUCCEEDED",
                 "modified source produced an accepted result"
@@ -547,21 +523,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         Err(ArtifactValidationError::InvalidEntryPath)
     ));
 
-    assert!(
-        client
-            .shutdown(authorized(wire::ShutdownRequest {}, worker_key))
-            .await
-            .unwrap()
-            .into_inner()
-            .accepted
-    );
-    assert!(
-        timeout(TIMEOUT, child.wait())
-            .await
-            .unwrap()
-            .unwrap()
-            .success()
-    );
+    worker.shutdown().await.unwrap();
     drop(reporter);
     stop.send(()).unwrap();
     timeout(TIMEOUT, core_server).await.unwrap().unwrap();
@@ -803,42 +765,6 @@ fn authorized<T>(message: T, token: Uuid) -> Request<T> {
         format!("Bearer {}", token.simple()).parse().unwrap(),
     );
     request
-}
-
-async fn start_worker(
-    executor: Uuid,
-    token: Uuid,
-    core_address: &str,
-    core_key: Uuid,
-) -> (Child, u64) {
-    let python = std::env::var_os("DD_WORKER_PYTHON").unwrap();
-    let entrypoint = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../services/python-worker/src/dd_worker/entrypoint.py");
-    let mut worker = Command::new(python)
-        .args(["-I", "-B"])
-        .arg(entrypoint)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
-    let bootstrap = json!({"token": token.simple().to_string(), "executor_session_id": executor.to_string(), "protocol_major": 1,
-        "core": {"address": core_address, "claim_token": core_key.simple().to_string()}});
-    let mut input = worker.stdin.take().unwrap();
-    input
-        .write_all(format!("{bootstrap}\n").as_bytes())
-        .await
-        .unwrap();
-    drop(input);
-    let mut output = BufReader::new(worker.stdout.take().unwrap());
-    let mut ready = String::new();
-    timeout(TIMEOUT, output.read_line(&mut ready))
-        .await
-        .unwrap()
-        .unwrap();
-    let ready: Value = serde_json::from_str(&ready).expect("Worker startup frame");
-    (worker, ready["port"].as_u64().unwrap())
 }
 
 fn digest(bytes: &[u8]) -> String {
