@@ -1,0 +1,21 @@
+[package]
+name = "dataset-doctor-rig-poc"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+# Standalone validation package, not a production workspace member.
+[workspace]
+
+[dependencies]
+# v0.47.1 resolves to f4d73dacdfabb3d9daa3f1de091efa490a84c601.
+# Explicit SDK subset: never enable the facade's default CLI feature.
+rig = { version = "=0.47.1", default-features = false, features = ["agent", "reqwest", "rustls"] }
+
+[dev-dependencies]
+rig = { version = "=0.47.1", default-features = false, features = ["agent", "reqwest", "rustls", "test-utils"] }
+schemars = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

@@ -1,0 +1,44 @@
+name: Rig SDK compatibility
+
+on:
+  push:
+    paths:
+      - 'tests/rig-poc/**'
+      - '.github/workflows/rig-validation.yml'
+  pull_request:
+    paths:
+      - 'tests/rig-poc/**'
+      - '.github/workflows/rig-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: Rig SDK / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install the version required by Rig v0.47.1
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Record toolchain
+        run: rustc +1.97.1 --version --verbose
+      - name: Validate real Rig APIs with deterministic model responses
+        working-directory: tests/rig-poc
+        run: cargo +1.97.1 test --all-targets -- --nocapture
+      - name: Preserve the resolved dependency lock
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rig-lock-${{ matrix.os }}
+          path: tests/rig-poc/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7
