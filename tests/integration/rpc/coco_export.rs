@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use dd_infra::annotation_view::AnnotationReader;
 use dd_infra::coco_export::{
-    CocoExportPolicy, CocoExportRequest, CocoExportService, ExclusionReason,
+    CocoExportPolicy, CocoExportRequest, CocoExportService, CocoExportSubmission, ExclusionReason,
 };
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::dataset_query::AssetAnnotationState;
@@ -14,6 +14,7 @@ use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime};
 use dd_infra::review_draft::{ReviewDraftRequest, ReviewDraftService};
 use dd_infra::review_final::{FinalOperationState, ReviewFinalRequest, ReviewFinalService};
 use dd_infra::workspace_thread::WorkspaceThread;
+use rusqlite::Connection;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -74,7 +75,7 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
         .unwrap();
     }
     let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
-    let grant = owner.grant_selected_directory(root).unwrap();
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
     let session = owner
         .create(grant.grant_id, "Export fixture".into(), 10)
         .unwrap()
@@ -277,6 +278,85 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
         assert_eq!(fs::read(source.join(asset)).unwrap(), PNG);
     }
     assert_reader(&repository, &receipt.package);
+
+    let recovery = run.join("Export recovery");
+    fs::create_dir(&recovery).unwrap();
+    let db = Connection::open(root.join("workspace.db")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER fail_export_receipt BEFORE UPDATE OF status ON tasks
+         WHEN NEW.status='SUCCEEDED' AND NEW.operation_kind='DATASET_EXPORT'
+         BEGIN SELECT RAISE(ABORT, 'synthetic export receipt failure'); END;",
+    )
+    .unwrap();
+    let publish = || {
+        let grant = owner
+            .grant_export_directory(session, recovery.clone())
+            .unwrap();
+        let (task, job) = export
+            .submit(
+                session,
+                CocoExportSubmission {
+                    request: request(grant.grant_id, CocoExportPolicy::ExcludeIneligible),
+                    request_id: Uuid::new_v4(),
+                    idempotency_key: Uuid::new_v4(),
+                },
+                16,
+            )
+            .unwrap();
+        let error = export
+            .run_admitted(session, job.unwrap(), || 17)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("synthetic export receipt failure"),
+            "{error}"
+        );
+        (
+            task.task_id,
+            recovery.join(format!("dataset-{}", task.task_id)),
+        )
+    };
+    let (complete, package) = publish();
+    let (tampered, changed_package) = publish();
+    assert!(package.join("annotations.json").is_file());
+    let changed_media = fs::read_dir(changed_package.join("images"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    fs::write(&changed_media, b"changed output").unwrap();
+    owner.close(session).unwrap();
+    db.execute_batch("DROP TRIGGER fail_export_receipt;")
+        .unwrap();
+    drop(db);
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    let recovered = export
+        .task_snapshot(session, complete, 18)
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered.status, "SUCCEEDED");
+    let recovered_receipt = recovered.receipt.unwrap();
+    assert_eq!(
+        recovered_receipt.package.canonicalize().unwrap(),
+        package.canonicalize().unwrap()
+    );
+    assert_eq!(recovered_receipt.image_count, 2);
+    assert_reader(&repository, &recovered_receipt.package);
+    let interrupted = export
+        .task_snapshot(session, tampered, 18)
+        .unwrap()
+        .unwrap();
+    assert_eq!(interrupted.status, "INTERRUPTED");
+    assert_eq!(
+        interrupted.error_code.as_deref(),
+        Some("EXPORT_OUTPUT_UNVERIFIED")
+    );
+    assert!(interrupted.receipt.is_none());
+    assert_eq!(fs::read(changed_media).unwrap(), b"changed output");
+    assert_eq!(fs::read_dir(recovery).unwrap().count(), 2);
 
     owner
         .open_review(session, dataset, find("positive.png"), 16)

@@ -1,5 +1,6 @@
 //! Package current, explicitly confirmed single-image annotations as standard COCO.
 
+mod publication;
 mod selection;
 mod task;
 pub use task::{CocoExportJob, CocoExportSubmission, CocoExportTaskSnapshot};
@@ -142,7 +143,13 @@ impl CocoExportService {
             .owner
             .consume_export_directory(session, request.destination_grant_id)
             .map_err(CocoExportError::Storage)?;
-        self.export_to(session, request, &destination, Uuid::new_v4())
+        self.export_to(
+            session,
+            request,
+            &destination,
+            Uuid::new_v4(),
+            |_, _| Ok(()),
+        )
     }
 
     fn export_to(
@@ -151,6 +158,7 @@ impl CocoExportService {
         request: CocoExportRequest,
         destination: &Path,
         publication: Uuid,
+        before_publish: impl FnOnce(&Path, &CocoExportReceipt) -> Result<(), CocoExportError>,
     ) -> Result<CocoExportReceipt, CocoExportError> {
         let selection = collect(&self.owner, &self.contracts, session, request.dataset_id)?;
         if request.policy == CocoExportPolicy::Strict && !selection.exclusions.is_empty() {
@@ -184,8 +192,7 @@ impl CocoExportService {
         if package.try_exists()? {
             return Err(CocoExportError::InputChanged);
         }
-        fs::rename(stage.path(), &package)?;
-        Ok(CocoExportReceipt {
+        let receipt = CocoExportReceipt {
             package,
             image_count: selection.images.len(),
             annotation_count: annotations["annotations"]
@@ -193,7 +200,10 @@ impl CocoExportService {
                 .ok_or(CocoExportError::InvalidData)?
                 .len(),
             exclusions: selection.exclusions,
-        })
+        };
+        before_publish(stage.path(), &receipt)?;
+        fs::rename(stage.path(), &receipt.package)?;
+        Ok(receipt)
     }
 }
 

@@ -15,7 +15,7 @@ use crate::sqlite::row_uuid;
 use crate::task_store::{TaskStoreError, TaskSubmission, format_digest};
 use crate::workspace_thread::WorkspaceThreadError;
 
-const KIND: &str = "DATASET_EXPORT";
+pub(super) const KIND: &str = "DATASET_EXPORT";
 const CAPABILITY: &str = "dataset_export_coco.v1";
 
 pub struct CocoExportSubmission {
@@ -155,7 +155,15 @@ impl CocoExportService {
             if current.input_fingerprint != job.input_fingerprint {
                 return Err(CocoExportError::InputChanged);
             }
-            self.export_to(session, job.request, &job.destination, job.task_id)
+            self.export_to(
+                session,
+                job.request,
+                &job.destination,
+                job.task_id,
+                |stage, receipt| {
+                    self.prepare_publication(session, job.task_id, stage, receipt, now())
+                },
+            )
         });
         let (status, error, payload) = match result {
             Ok(receipt) => (
@@ -166,10 +174,11 @@ impl CocoExportService {
             Err(error) => ("FAILED", Some(error_code(&error)), "{}".to_owned()),
         };
         let finished = now();
-        self.owner
+        let updated = self
+            .owner
             .workspace_action(session, move |owner| {
-                owner
-                    .connection
+                let transaction = owner.connection.transaction().map_err(database)?;
+                transaction
                     .execute(
                         "UPDATE tasks SET status=?3, error_code=?4, execution_metadata_json=?5,
                      finished_at_ms=?6, updated_at_ms=?6, row_revision=row_revision+1
@@ -183,10 +192,29 @@ impl CocoExportService {
                             finished
                         ],
                     )
-                    .map(|_| ())
-                    .map_err(database)
+                    .map_err(database)?;
+                super::publication::finish_publication(
+                    &transaction,
+                    job.task_id,
+                    status,
+                    error,
+                    &payload,
+                    finished,
+                )?;
+                transaction.commit().map_err(database)
             })
-            .map_err(CocoExportError::Storage)
+            .map_err(CocoExportError::Storage);
+        if updated.is_err() {
+            let _ = self.owner.workspace_action(session, move |owner| {
+                owner.connection.execute(
+                    "UPDATE tasks SET status='INTERRUPTED',error_code='EXPORT_RECOVERY_REQUIRED',
+                        finished_at_ms=?3,updated_at_ms=?3,row_revision=row_revision+1
+                     WHERE task_id=?1 AND operation_kind=?2 AND status='RUNNING'",
+                    params![job.task_id.to_string(), KIND, finished],
+                ).map(|_| ()).map_err(database)
+            });
+        }
+        updated
     }
 
     pub fn task_snapshot(
@@ -195,6 +223,7 @@ impl CocoExportService {
         task: Uuid,
         now_ms: i64,
     ) -> Result<Option<CocoExportTaskSnapshot>, CocoExportError> {
+        self.recover_publication(session, task, now_ms)?;
         self.owner
             .workspace_action(session, move |owner| {
                 let task = task.to_string();
@@ -300,7 +329,7 @@ fn policy_text(policy: CocoExportPolicy) -> &'static str {
     }
 }
 
-fn database(error: rusqlite::Error) -> WorkspaceThreadError {
+pub(super) fn database(error: rusqlite::Error) -> WorkspaceThreadError {
     WorkspaceThreadError::Task(TaskStoreError::Database(error))
 }
 

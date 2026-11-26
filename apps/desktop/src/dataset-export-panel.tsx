@@ -10,6 +10,8 @@ const errors: Record<string, string> = {
   NO_ELIGIBLE_IMAGES: "没有符合导出条件的已确认样本。",
   INPUT_CHANGED: "导出期间样本或目录已变化。请重新检查后再导出。",
   SESSION_ENDED: "导出会话已结束，请检查目标目录。",
+  EXPORT_RECOVERY_REQUIRED: "导出回执待恢复，请重新打开工作区并检查目标目录。",
+  EXPORT_OUTPUT_UNVERIFIED: "无法核验目标目录中的数据包，请检查文件后重新导出。",
 };
 
 export function DatasetExportPanel({ workspace, datasetId }: { workspace: OpenWorkspace; datasetId: string }) {
