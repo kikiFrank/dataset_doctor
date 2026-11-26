@@ -94,6 +94,17 @@ pub struct ReviewCancelRequest {
     pub expected_revision: DecimalU64,
 }
 
+#[derive(Deserialize, TS)]
+pub struct ReviewCommitRequest {
+    pub context: CommandContext,
+    pub review_id: UuidText,
+    pub expected_review_revision: DecimalU64,
+    pub base_image_digest: String,
+    pub base_annotation_digest: Option<String>,
+    pub draft_digest: String,
+    pub confirmed_negative: bool,
+}
+
 #[derive(Debug, Serialize, TS)]
 pub struct DraftReceipt {
     pub review_id: UuidText,

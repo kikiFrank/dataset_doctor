@@ -88,6 +88,7 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const refreshAssets = useCallback(() => setRefresh((value) => value + 1), []);
 
   useEffect(() => {
     let current = true;
@@ -136,7 +137,7 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
       )}
       {page?.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void more()}>更多资源</button>}
       {selected && <AnnotationDetails key={selected.asset_id} workspace={workspace} asset={selected}
-        reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} onChanged={() => setRefresh((value) => value + 1)} />}
+        reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} onChanged={refreshAssets} />}
     </div>
   );
 }
@@ -151,6 +152,7 @@ function AnnotationDetails({ workspace, asset, reviewBlocked, onReviewBlocked, o
   const [refresh, setRefresh] = useState(0);
   const [view, setView] = useState<AnnotationView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshAnnotation = useCallback(() => { setRefresh((value) => value + 1); onChanged(); }, [onChanged]);
   useEffect(() => {
     let current = true;
     setMedia(null);
@@ -193,7 +195,7 @@ function AnnotationDetails({ workspace, asset, reviewBlocked, onReviewBlocked, o
       <GeometryCheckPanel workspace={workspace} asset={asset} onEvidence={setEvidence} />
       {view && <ReviewPanel workspace={workspace} asset={asset} annotation={view} media={imageError ? null : media}
         evidence={evidence} onBlocked={onReviewBlocked} onImageError={markImageError}
-        onChanged={() => { setRefresh((value) => value + 1); onChanged(); }} />}
+        onChanged={refreshAnnotation} />}
       {document && (
         <>
           <p>标注尺寸 {document.images[0].width} × {document.images[0].height} 像素</p>

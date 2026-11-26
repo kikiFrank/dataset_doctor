@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { cancelReview, openReview, saveReviewDraft } from "./api/review";
+import { cancelReview, openReview, saveReviewDraft, submitReviewCommit } from "./api/review";
+import { getTask } from "./api/task";
 import type { AnnotationView, AssetSummary, CocoCategory, CocoImage, DisplayLocator, DraftReceipt, ReviewSession } from "./api/generated/wire-primitives";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
@@ -36,13 +37,51 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [negative, setNegative] = useState(false);
+  const [approval, setApproval] = useState<{ key: string; negative: boolean } | null>(null);
+  const [commitTask, setCommitTask] = useState<string | null>(null);
+  const [queryRetry, setQueryRetry] = useState(0);
   const dirty = editor !== null && editor.boxes !== editor.savedBoxes;
-  const blocked = dirty || busy;
+  const blocked = dirty || busy || commitTask !== null;
+  const editingLocked = busy || approval !== null;
 
   useEffect(() => {
     onBlocked(blocked);
     return () => onBlocked(false);
   }, [blocked, onBlocked]);
+
+  useEffect(() => {
+    if (!commitTask) return;
+    const id = commitTask;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll() {
+      try {
+        const task = await getTask(workspace, id);
+        if (!active) return;
+        if (task.status === "QUEUED" || task.status === "RUNNING") {
+          timer = setTimeout(() => void poll(), 500);
+          return;
+        }
+        setCommitTask(null);
+        if (task.status === "SUCCEEDED") {
+          setApproval(null);
+          setEditor(null);
+          onChanged();
+        } else if (task.error_code === "FINAL_RESUME_REQUIRED") {
+          setError("提交需要恢复。可以重试或重新打开工作区。");
+        } else {
+          setApproval(null);
+          setEditor(null);
+          setError("样本已变化，无法发布 Final。请刷新样本并处理冲突。");
+        }
+      } catch (failure) {
+        if (active) setError(workspaceCommandError(failure));
+      }
+    }
+    void poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [workspace, commitTask, queryRetry, onChanged]);
 
   const report = evidence?.report;
   const currentEvidence = report?.image_digest === annotation.image_digest
@@ -74,6 +113,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
         savedBoxes: boxes,
       });
       setSelected(boxes.length ? 0 : null);
+      setNegative(false);
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -82,6 +122,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   }
 
   function update(index: number, box: EditableBox) {
+    if (editingLocked) return;
     setEditor((current) => current && {
       ...current, boxes: current.boxes.map((original, position) => position === index ? box : original),
     });
@@ -89,7 +130,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   }
 
   function draw(coordinates: BoxCoordinates) {
-    if (!editor) return;
+    if (!editor || editingLocked) return;
     const used = new Set(editor.boxes.map(({ id }) => id));
     let id = 1;
     while (used.has(id)) id += 1;
@@ -101,7 +142,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   }
 
   async function save() {
-    if (!editor || busy) return;
+    if (!editor || editingLocked) return;
     setBusy(true);
     setNotice(null);
     setError(null);
@@ -110,7 +151,27 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
       const receipt = await saveReviewDraft(workspace, editor.review, editor.taskId, editor.receipt, document);
       setEditor({ ...editor, receipt, savedBoxes: editor.boxes,
         review: { ...editor.review, row_revision: receipt.review_revision } });
+      setNegative(false);
       setNotice("草稿已保存。");
+    } catch (failure) {
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commit() {
+    if (!editor?.receipt || dirty || busy || commitTask) return;
+    const empty = editor.boxes.length === 0;
+    if (empty && !negative && !approval) return;
+    const decision = approval ?? { key: crypto.randomUUID(), negative: empty && negative };
+    setApproval(decision);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const task = await submitReviewCommit(workspace, editor.review, editor.receipt, decision.negative, decision.key);
+      setCommitTask(task.task_id);
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -120,7 +181,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
 
   async function cancel() {
     const review = editor?.review ?? annotation.active_review;
-    if (!review || busy) return;
+    if (!review || editingLocked) return;
     setBusy(true);
     setError(null);
     try {
@@ -149,10 +210,10 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
           <div className="review-layout">
             {media && matchingImage
               ? <ReviewCanvas image={editor.image} locator={media.locator} boxes={editor.boxes} selected={selected}
-                  disabled={busy} onSelect={setSelected} onDraw={draw} onImageError={onImageError} />
+                  disabled={editingLocked} onSelect={setSelected} onDraw={draw} onImageError={onImageError} />
               : <p>当前图像无法显示，请刷新样本。</p>}
             <div className="review-inspector">
-              <label>标注框 <select value={selected ?? ""} disabled={busy} onChange={(event) => {
+              <label>标注框 <select value={selected ?? ""} onChange={(event) => {
                 setSelected(event.target.value === "" ? null : Number(event.target.value));
               }}>
                 <option value="">选择框</option>
@@ -161,7 +222,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
                 </option>)}
               </select></label>
               {box && selected !== null && (
-                <fieldset disabled={busy}>
+                <fieldset disabled={editingLocked}>
                   <legend>第 {selected + 1} 个框 · 原图像素</legend>
                   <label>类别 <select value={box.category_id ?? ""} onChange={(event) => {
                     update(selected, { ...box, category_id: event.target.value === "" ? null : Number(event.target.value) });
@@ -190,23 +251,32 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
             </div>
           </div>
           <div className="review-actions">
-            <button type="button" disabled={busy || (!dirty && editor.receipt !== null)} onClick={() => void save()}>保存草稿</button>
-            {dirty && <button type="button" disabled={busy} onClick={() => {
+            <button type="button" disabled={editingLocked || (!dirty && editor.receipt !== null)} onClick={() => void save()}>保存草稿</button>
+            {dirty && <button type="button" disabled={editingLocked} onClick={() => {
               setEditor({ ...editor, boxes: editor.savedBoxes });
               setSelected(null);
               setError(null);
             }}>放弃本次修改</button>}
+            {editor.receipt && !dirty && editor.boxes.length === 0 && (
+              <label><input type="checkbox" checked={negative} disabled={editingLocked}
+                onChange={(event) => setNegative(event.target.checked)} /> 确认这张图是负样本</label>
+            )}
+            {editor.receipt && !dirty && <button type="button"
+              disabled={busy || commitTask !== null || (!approval && editor.boxes.length === 0 && !negative)}
+              onClick={() => void commit()}>{approval && !commitTask ? "重试提交" : "确认并写入 Final"}</button>}
           </div>
           {dirty && <p role="status">有未保存的修改。请保存草稿或放弃修改后切换样本或关闭工作区。</p>}
         </>
       )}
-      {canCancel && !confirmCancel && <button type="button" disabled={busy} onClick={() => setConfirmCancel(true)}>取消审核</button>}
+      {canCancel && !confirmCancel && <button type="button" disabled={editingLocked} onClick={() => setConfirmCancel(true)}>取消审核</button>}
       {confirmCancel && <div className="review-actions">
         <p>取消审核会丢弃当前草稿，保留正式标注。</p>
         <button type="button" disabled={busy} onClick={() => void cancel()}>丢弃审核草稿</button>
         <button type="button" disabled={busy} onClick={() => setConfirmCancel(false)}>继续审核</button>
       </div>}
       {error && <p role="alert">{error}</p>}
+      {commitTask && !error && <p role="status">正在发布 Final…</p>}
+      {commitTask && error && <button type="button" onClick={() => { setError(null); setQueryRetry((value) => value + 1); }}>重试查询</button>}
       {notice && <p role="status">{notice}</p>}
     </section>
   );

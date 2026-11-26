@@ -60,7 +60,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "REVIEW_COMMIT";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -97,6 +97,8 @@ export type ReviewOpenRequest = { context: CommandContext, dataset_id: UuidText,
 export type ReviewSaveDraftRequest = { context: CommandContext, review_id: UuidText, source_task_id: UuidText, expected_review_revision: DecimalU64, expected_draft_revision: DecimalU64 | null, coco_document: CocoDocument, };
 
 export type ReviewCancelRequest = { context: CommandContext, review_id: UuidText, expected_revision: DecimalU64, };
+
+export type ReviewCommitRequest = { context: CommandContext, review_id: UuidText, expected_review_revision: DecimalU64, base_image_digest: string, base_annotation_digest: string | null, draft_digest: string, confirmed_negative: boolean, };
 
 export type DraftReceipt = { review_id: UuidText, draft_revision: DecimalU64, draft_digest: string, review_revision: DecimalU64, };
 

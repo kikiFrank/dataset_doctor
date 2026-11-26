@@ -1,6 +1,8 @@
 //! Explicit approval and durable intent for publishing a reviewed COCO file.
 
 mod apply;
+mod tasks;
+pub use tasks::FinalTaskSnapshot;
 
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -15,13 +17,16 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::dataset_query::RegisteredImage;
+use crate::input_fingerprint::{InputFingerprintError, freeze_input_manifest};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::review_draft::{ReviewDraftError, ReviewDraftService, draft_path};
 use crate::review_store::{ReviewSession, ReviewStatus, ReviewStoreError};
 use crate::review_validation::{ReviewValidationError, confirm_negative};
+use crate::task_store::{TaskSubmission, enqueue_task_in, format_digest};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const KIND: &str = "REVIEW_COMMIT";
+const CAPABILITY: &str = "review_commit.v1";
 const MAX_ANNOTATION: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE: u64 = 256 * 1024 * 1024;
 
@@ -55,6 +60,7 @@ pub enum ReviewFinalError {
     Storage(WorkspaceThreadError),
     Draft(ReviewDraftError),
     Approval(ReviewValidationError),
+    Input(InputFingerprintError),
     Json(serde_json::Error),
     Io(io::Error),
     Conflict,
@@ -67,6 +73,7 @@ impl Display for ReviewFinalError {
             Self::Storage(error) => Display::fmt(error, formatter),
             Self::Draft(error) => Display::fmt(error, formatter),
             Self::Approval(error) => Display::fmt(error, formatter),
+            Self::Input(error) => Display::fmt(error, formatter),
             Self::Json(error) => write!(formatter, "Encode Final operation: {error}"),
             Self::Io(error) => write!(formatter, "Prepare Final files: {error}"),
             Self::Conflict => formatter.write_str(
@@ -139,7 +146,8 @@ impl ReviewFinalService {
             .lock_final_operations()
             .map_err(ReviewFinalError::Storage)?;
         let key = request.idempotency_key.to_string();
-        let fingerprint = request_fingerprint(&request)?;
+        let request_digest = request_fingerprint(&request)?;
+        let fingerprint = format_digest(&request_digest);
         let old_key = key.clone();
         let previous = self
             .owner
@@ -260,6 +268,32 @@ impl ReviewFinalService {
         publish_immutable(&target.root, Path::new(&manifest.payload_path), &payload)?;
         publish_immutable(&target.root, Path::new(&manifest_path), &manifest_bytes)?;
 
+        let input = freeze_input_manifest(&self.drafts.contracts, serde_json::json!({
+            "capability_id": CAPABILITY, "implementation_version": "1",
+            "dataset_id": manifest.dataset_id, "label_schema_digest": manifest.label_schema_digest,
+            "assets": [{"asset_id": manifest.asset_id, "media_digest": manifest.old_image_digest,
+                "annotation_digest": manifest.old_annotation_digest, "source_metadata_digest": null}],
+            "model_identity": null, "resolved_config": {
+                "review_id": manifest.review_id, "draft_digest": request.draft_digest,
+                "expected_review_revision": request.expected_review_revision.to_string(),
+                "operation_manifest_digest": manifest_digest,
+                "confirmed_negative": request.confirmed_negative,
+            },
+        })).map_err(ReviewFinalError::Input)?;
+        let input_path = PathBuf::from(format!("{prefix}/input.json"));
+        publish_immutable(&target.root, &input_path, &input.bytes)?;
+        let submission = TaskSubmission {
+            workspace_session: session,
+            dataset_id: Some(review.dataset_id),
+            request_id: request.request_id,
+            idempotency_key: request.idempotency_key,
+            operation_kind: KIND.into(),
+            capability_id: CAPABILITY.into(),
+            input_manifest_path: input_path,
+            request_fingerprint: request_digest,
+            input_fingerprint: input.input_fingerprint,
+        };
+
         let draft_path = draft_path(review_id, &request.draft_digest);
         let dataset_id = review.dataset_id;
         let asset_id = review.asset_id;
@@ -285,13 +319,14 @@ impl ReviewFinalService {
             if changed != 1 {
                 return Ok(Err(ReviewFinalError::Conflict));
             }
+            let task = enqueue_task_in(&transaction, &submission, now_ms).map_err(WorkspaceThreadError::Task)?;
             transaction.execute(
                 "INSERT INTO file_operations (operation_id, idempotency_key, request_id, request_fingerprint,
-                    workspace_session_id, operation_kind, dataset_id, asset_id, review_id, status,
+                    workspace_session_id, operation_kind, dataset_id, asset_id, review_id, task_id, status,
                     manifest_path, manifest_digest, created_at_ms, updated_at_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'PREPARED', ?10, ?11, ?12, ?12)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'PREPARED', ?11, ?12, ?13, ?13)",
                 params![manifest.operation_id, key, request.request_id.to_string(), fingerprint, session.to_string(), KIND,
-                    manifest.dataset_id, manifest.asset_id, manifest.review_id, manifest_path, manifest_digest, now_ms],
+                    manifest.dataset_id, manifest.asset_id, manifest.review_id, task.task_id.to_string(), manifest_path, manifest_digest, now_ms],
             ).map_err(database)?;
             transaction.commit().map_err(database)?;
             Ok(Ok(FinalOperation { operation_id, state: FinalOperationState::Prepared }))
@@ -334,7 +369,7 @@ fn operation_state(operation_id: &str, status: &str) -> Result<FinalOperation, R
     })
 }
 
-fn request_fingerprint(request: &ReviewFinalRequest) -> Result<String, ReviewFinalError> {
+fn request_fingerprint(request: &ReviewFinalRequest) -> Result<[u8; 32], ReviewFinalError> {
     let fields = (
         "datasetdoctor.review-commit.v1",
         request.review_id.to_string(),
@@ -344,9 +379,8 @@ fn request_fingerprint(request: &ReviewFinalRequest) -> Result<String, ReviewFin
         &request.draft_digest,
         request.confirmed_negative,
     );
-    Ok(digest(
-        &serde_json::to_vec(&fields).map_err(ReviewFinalError::Json)?,
-    ))
+    let bytes = serde_json::to_vec(&fields).map_err(ReviewFinalError::Json)?;
+    Ok(Sha256::digest(bytes).into())
 }
 
 fn database(error: rusqlite::Error) -> WorkspaceThreadError {

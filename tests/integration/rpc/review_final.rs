@@ -205,6 +205,11 @@ async fn resumes_a_published_file_after_sqlite_failed_and_the_owner_was_killed()
     }
     let fixture = ReviewFixture::open().await;
     let (coordinator, operation) = prepare_negative(&fixture);
+    let queued = coordinator
+        .task_for_operation(fixture.session, operation.operation_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(queued.status, "QUEUED");
     fixture.owner.close(fixture.session).unwrap();
     let db_path = fixture.root.join("workspace.db");
     let db = Connection::open(&db_path).unwrap();
@@ -253,6 +258,15 @@ async fn resumes_a_published_file_after_sqlite_failed_and_the_owner_was_killed()
     assert_eq!(status, "COMMITTING");
     assert!(final_id.is_none());
     assert_eq!(annotation_digest, format!("{:x}", Sha256::digest(ORIGINAL)));
+    assert_eq!(
+        db.query_row(
+            "SELECT status FROM tasks WHERE task_id=?1",
+            [queued.task_id.to_string()],
+            |row| row.get::<_, String>(0)
+        )
+        .unwrap(),
+        "RUNNING"
+    );
     db.execute_batch("DROP TRIGGER fail_final;").unwrap();
     drop(db);
 
@@ -269,6 +283,12 @@ async fn resumes_a_published_file_after_sqlite_failed_and_the_owner_was_killed()
         .resume(session, operation.operation_id, 22)
         .unwrap();
     assert_eq!(recovered.state, FinalOperationState::Committed);
+    let outcome = coordinator
+        .task_snapshot(session, queued.task_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(outcome.status, "SUCCEEDED");
+    assert!(outcome.error_code.is_none());
     assert_eq!(fs::read(&fixture.formal).unwrap(), published);
     fixture.owner.close(session).unwrap();
     assert_committed(&fixture.root, &fixture.formal, fixture.opened.review_id);

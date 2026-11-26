@@ -12,7 +12,7 @@ use std::fmt::{self, Display, Write};
 use std::path::PathBuf;
 
 use dd_core::execution_grant::{ClaimReceipt, GrantScope};
-use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, Row, Transaction, TransactionBehavior, params};
 use uuid::Uuid;
 
 use crate::paths::is_portable_relative_file;
@@ -102,21 +102,32 @@ impl OpenedWorkspace {
         request: &TaskSubmission,
         now_ms: i64,
     ) -> Result<StoredTask, TaskStoreError> {
-        if !is_portable_relative_file(&request.input_manifest_path) {
-            return Err(TaskStoreError::InvalidManifestPath);
-        }
-        let manifest = request
-            .input_manifest_path
-            .iter()
-            .map(|part| part.to_str().expect("validated UTF-8 component"))
-            .collect::<Vec<_>>()
-            .join("/");
-        let fingerprint = format_digest(&request.request_fingerprint);
-        let idempotency_key = request.idempotency_key.to_string();
-        let tx = self
+        let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        if let Some((task, original)) = tx.query_row(
+        let task = enqueue_task_in(&transaction, request, now_ms)?;
+        transaction.commit()?;
+        Ok(task)
+    }
+}
+
+pub(crate) fn enqueue_task_in(
+    tx: &Transaction<'_>,
+    request: &TaskSubmission,
+    now_ms: i64,
+) -> Result<StoredTask, TaskStoreError> {
+    if !is_portable_relative_file(&request.input_manifest_path) {
+        return Err(TaskStoreError::InvalidManifestPath);
+    }
+    let manifest = request
+        .input_manifest_path
+        .iter()
+        .map(|part| part.to_str().expect("validated UTF-8 component"))
+        .collect::<Vec<_>>()
+        .join("/");
+    let fingerprint = format_digest(&request.request_fingerprint);
+    let idempotency_key = request.idempotency_key.to_string();
+    if let Some((task, original)) = tx.query_row(
             "SELECT task_id, request_id, workspace_session_id, status, created_at_ms, request_fingerprint
              FROM tasks WHERE operation_kind=?1 AND idempotency_key=?2",
             params![request.operation_kind, idempotency_key],
@@ -125,42 +136,41 @@ impl OpenedWorkspace {
             if original != fingerprint {
                 return Err(TaskStoreError::IdempotencyConflict);
             }
-            tx.commit()?;
             return Ok(task);
         }
 
-        let task = StoredTask {
-            task_id: Uuid::new_v4(),
-            request_id: request.request_id,
-            workspace_session: request.workspace_session,
-            status: "QUEUED".into(),
-            created_at_ms: now_ms,
-        };
-        tx.execute(
-            "INSERT INTO tasks
+    let task = StoredTask {
+        task_id: Uuid::new_v4(),
+        request_id: request.request_id,
+        workspace_session: request.workspace_session,
+        status: "QUEUED".into(),
+        created_at_ms: now_ms,
+    };
+    tx.execute(
+        "INSERT INTO tasks
                 (task_id, workspace_session_id, capability_id, status, request_id, operation_kind,
                  idempotency_key, request_fingerprint, input_manifest_path, input_fingerprint,
                  created_at_ms, updated_at_ms, dataset_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12)",
-            params![
-                task.task_id.to_string(),
-                task.workspace_session.to_string(),
-                request.capability_id,
-                task.status,
-                task.request_id.to_string(),
-                request.operation_kind,
-                idempotency_key,
-                fingerprint,
-                manifest,
-                format_digest(&request.input_fingerprint),
-                now_ms,
-                request.dataset_id.map(|id| id.to_string())
-            ],
-        )?;
-        tx.commit()?;
-        Ok(task)
-    }
+        params![
+            task.task_id.to_string(),
+            task.workspace_session.to_string(),
+            request.capability_id,
+            task.status,
+            task.request_id.to_string(),
+            request.operation_kind,
+            idempotency_key,
+            fingerprint,
+            manifest,
+            format_digest(&request.input_fingerprint),
+            now_ms,
+            request.dataset_id.map(|id| id.to_string())
+        ],
+    )?;
+    Ok(task)
+}
 
+impl OpenedWorkspace {
     pub(crate) fn task_outcome(&self, task_id: Uuid) -> Result<TaskOutcome, TaskStoreError> {
         self.connection
             .query_row(

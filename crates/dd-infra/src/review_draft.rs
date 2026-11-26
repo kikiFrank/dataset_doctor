@@ -95,7 +95,7 @@ impl From<io::Error> for ReviewDraftError {
 
 pub struct ReviewDraftService {
     owner: Arc<WorkspaceThread>,
-    contracts: JsonContracts,
+    pub(crate) contracts: JsonContracts,
 }
 
 struct DraftSnapshot {

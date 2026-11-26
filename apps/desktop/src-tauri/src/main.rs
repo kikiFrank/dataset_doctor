@@ -163,6 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::review::review_open,
             workspace_commands::review::review_save_draft,
             workspace_commands::review::review_cancel,
+            workspace_commands::review_commit::review_commit,
         ])
         .run(tauri::generate_context!())?;
     Ok(())

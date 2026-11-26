@@ -4,8 +4,10 @@ use std::time::Instant;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_ui_contracts::annotation::{
-    AnnotationGetRequest, ReviewCancelRequest, ReviewOpenRequest, ReviewSaveDraftRequest,
+    AnnotationGetRequest, CocoDocument, ReviewCancelRequest, ReviewCommitRequest,
+    ReviewOpenRequest, ReviewSaveDraftRequest,
 };
+use dd_ui_contracts::dataset::AnnotationState;
 use dd_ui_contracts::dataset_import::{GeometrySubmitRequest, TaskGetRequest};
 
 use super::{geometry::GeometryRunner, *};
@@ -202,5 +204,80 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
     let cancelled = commands.cancel_review(cancel(current_session)).unwrap();
     assert_eq!(cancelled.status, "CANCELLED");
     assert_eq!(fs::read(&formal_path).unwrap(), formal);
+
+    let editor = commands
+        .open_review(open(current_session, formal_view.image_digest.clone()))
+        .unwrap();
+    let mut empty: CocoDocument = document(2, registered_category);
+    empty.annotations.clear();
+    let draft = commands
+        .save_review_draft(ReviewSaveDraftRequest {
+            context: context(current_session),
+            review_id: editor.review.review_id.clone(),
+            source_task_id: operation.task_id,
+            expected_review_revision: editor.review.row_revision,
+            expected_draft_revision: None,
+            coco_document: empty,
+        })
+        .unwrap();
+    let key = id(Uuid::new_v4());
+    let commit = |confirmed_negative| {
+        let mut context = context(current_session);
+        context.idempotency_key = Some(key.clone());
+        ReviewCommitRequest {
+            context,
+            review_id: editor.review.review_id.clone(),
+            expected_review_revision: draft.review_revision,
+            base_image_digest: editor.review.base_image_digest.clone(),
+            base_annotation_digest: editor.review.base_annotation_digest.clone(),
+            draft_digest: draft.draft_digest.clone(),
+            confirmed_negative,
+        }
+    };
+    assert_eq!(
+        commands.commit_review(commit(false)).unwrap_err().code,
+        "FAILED_PRECONDITION"
+    );
+    assert_eq!(fs::read(&formal_path).unwrap(), formal);
+    let accepted = commands.commit_review(commit(true)).unwrap();
+    assert_eq!(accepted.status, "QUEUED");
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let outcome = commands
+            .import_task(
+                &imports,
+                TaskGetRequest {
+                    context: context(current_session),
+                    task_id: accepted.task_id.clone(),
+                },
+            )
+            .unwrap();
+        if !matches!(outcome.status.as_str(), "QUEUED" | "RUNNING") {
+            assert_eq!(outcome.status, "SUCCEEDED");
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let confirmed = commands
+        .annotation(AnnotationGetRequest {
+            context: context(current_session),
+            asset_id: id(asset_id),
+        })
+        .unwrap();
+    assert_eq!(
+        confirmed.annotation_state,
+        AnnotationState::ConfirmedNegative
+    );
+    assert!(confirmed.active_review.is_none());
+    assert!(confirmed.formal_coco.unwrap().annotations.is_empty());
+    assert_ne!(fs::read(&formal_path).unwrap(), formal);
+    let replay = commands.commit_review(commit(true)).unwrap();
+    assert_eq!(replay.task_id, accepted.task_id);
+    assert_eq!(replay.status, "SUCCEEDED");
+    assert_eq!(
+        commands.commit_review(commit(false)).unwrap_err().code,
+        "CONFLICT"
+    );
     thread.close(current_session).unwrap();
 }

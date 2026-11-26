@@ -54,6 +54,15 @@ impl ReviewFinalService {
         if receipt.state != FinalOperationState::Prepared {
             return Ok(receipt);
         }
+        self.owner.workspace_action(session, move |owner| {
+            owner.connection.execute(
+                "UPDATE tasks SET status='RUNNING', error_code=NULL, finished_at_ms=NULL,
+                     started_at_ms=?3, updated_at_ms=?3, row_revision=row_revision+1
+                 WHERE task_id=(SELECT task_id FROM file_operations WHERE operation_id=?1 AND operation_kind=?2)
+                 AND status IN ('QUEUED','INTERRUPTED')",
+                params![operation.to_string(), KIND, now_ms],
+            ).map(|_| ()).map_err(database)
+        }).map_err(ReviewFinalError::Storage)?;
         let prefix = format!("artifacts/file-operations/{operation}");
         if pending.path != format!("{prefix}/operation.json") {
             return Err(ReviewFinalError::InvalidOperation);
@@ -170,7 +179,7 @@ impl ReviewFinalService {
         let annotation_path = path_string(&manifest.registry_path)?.to_owned();
         self.owner.workspace_action(session, move |owner| {
             let transaction = owner.connection.transaction().map_err(database)?;
-            if state == FinalOperationState::Committed {
+            let (task_status, error_code) = if state == FinalOperationState::Committed {
                 commit_rows(&transaction, &manifest, &annotation_path, now_ms)?;
                 let result = json!({
                     "operation_id": operation.to_string(),
@@ -183,6 +192,7 @@ impl ReviewFinalService {
                      WHERE operation_id=?3 AND status='PREPARED'",
                     params![result.to_string(), now_ms, operation.to_string()],
                 ).map_err(database)?)?;
+                ("SUCCEEDED", None)
             } else {
                 expect_one(transaction.execute(
                     "UPDATE review_sessions SET status='CONFLICT', row_revision=row_revision+1, updated_at_ms=?1
@@ -194,7 +204,14 @@ impl ReviewFinalService {
                      WHERE operation_id=?2 AND status='PREPARED'",
                     params![now_ms, operation.to_string()],
                 ).map_err(database)?)?;
-            }
+                ("FAILED", Some("INPUT_CHANGED"))
+            };
+            transaction.execute(
+                "UPDATE tasks SET status=?2, error_code=?3, finished_at_ms=?4, updated_at_ms=?4,
+                     row_revision=row_revision+1
+                 WHERE task_id=(SELECT task_id FROM file_operations WHERE operation_id=?1)",
+                params![operation.to_string(), task_status, error_code, now_ms],
+            ).map_err(database)?;
             transaction.commit().map_err(database)
         }).map_err(ReviewFinalError::Storage)
     }

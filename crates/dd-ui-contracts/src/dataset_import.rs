@@ -36,6 +36,7 @@ pub enum ImportOperationKind {
     DatasetImportInspect,
     DatasetImportExternal,
     AnnotationGeometry,
+    ReviewCommit,
 }
 
 #[derive(Debug, Serialize, TS)]

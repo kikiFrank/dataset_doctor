@@ -22,6 +22,7 @@ pub(crate) mod dataset;
 pub(crate) mod dataset_import;
 pub(crate) mod geometry;
 pub(crate) mod review;
+pub(crate) mod review_commit;
 
 pub const GRANT_LIFETIME: Duration = Duration::from_secs(120);
 
@@ -118,6 +119,7 @@ pub async fn workspace_open(
             .thread
             .open(grant)
             .map_err(|failure| commands.map_error(failure))?;
+        commands.resume_pending_finals(opened.workspace_session_id);
         commands.snapshot(opened)
     })
     .await

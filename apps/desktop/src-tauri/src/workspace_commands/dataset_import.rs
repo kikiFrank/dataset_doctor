@@ -206,7 +206,14 @@ impl Commands {
                     Ok(task) => task,
                     Err(DatasetImportError::Workspace(WorkspaceThreadError::Task(
                         TaskStoreError::UnknownTask,
-                    ))) => return self.geometry_task(session, id),
+                    ))) => {
+                        return match self.geometry_task(session, id) {
+                            Err(error) if error.code == "NOT_FOUND" => {
+                                self.review_commit_task(session, id)
+                            }
+                            result => result,
+                        };
+                    }
                     Err(error) => return Err(self.import_error(error)),
                 };
                 let registration = task
@@ -242,7 +249,7 @@ impl Commands {
         let key = context
             .idempotency_key
             .clone()
-            .ok_or_else(|| self.error("INVALID_ARGUMENT", "导入请求缺少幂等键。"))?;
+            .ok_or_else(|| self.error("INVALID_ARGUMENT", "请求缺少幂等键。"))?;
         Ok((self.session(context)?, request_id, self.parse_uuid(key)?))
     }
 
@@ -257,7 +264,7 @@ impl Commands {
             OffsetDateTime::from_unix_timestamp_nanos(i128::from(accepted_at_ms) * 1_000_000)
                 .ok()
                 .and_then(|time| time.format(&Rfc3339).ok())
-                .ok_or_else(|| self.error("INTERNAL", "无法读取导入受理时间。"))?;
+                .ok_or_else(|| self.error("INTERNAL", "无法读取任务受理时间。"))?;
         Ok(ImportOperationRef {
             operation_kind,
             task_id: self.uuid_text(id.to_string())?,
