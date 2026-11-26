@@ -3,6 +3,7 @@
 import grpc
 import warnings
 
+from datasetdoctor.v1 import core_execution_pb2 as datasetdoctor_dot_v1_dot_core__execution__pb2
 from datasetdoctor.v1 import worker_service_pb2 as datasetdoctor_dot_v1_dot_worker__service__pb2
 
 GRPC_GENERATED_VERSION = '1.85.4'
@@ -34,6 +35,16 @@ class PythonWorkerStub:
         Args:
             channel: A grpc.Channel.
         """
+        self.StartAnnotationGeometryAudit = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/StartAnnotationGeometryAudit',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+                _registered_method=True)
+        self.GetExecution = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/GetExecution',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.FromString,
+                _registered_method=True)
         self.Health = channel.unary_unary(
                 '/datasetdoctor.v1.PythonWorker/Health',
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.HealthRequest.SerializeToString,
@@ -48,6 +59,18 @@ class PythonWorkerStub:
 
 class PythonWorkerServicer:
     """Missing associated documentation comment in .proto file."""
+
+    def StartAnnotationGeometryAudit(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetExecution(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def Health(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -64,6 +87,16 @@ class PythonWorkerServicer:
 
 def add_PythonWorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'StartAnnotationGeometryAudit': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartAnnotationGeometryAudit,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
+            ),
+            'GetExecution': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetExecution,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.SerializeToString,
+            ),
             'Health': grpc.unary_unary_rpc_method_handler(
                     servicer.Health,
                     request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.HealthRequest.FromString,
@@ -84,6 +117,60 @@ def add_PythonWorkerServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class PythonWorker:
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def StartAnnotationGeometryAudit(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/StartAnnotationGeometryAudit',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.GeometryAuditRequest.SerializeToString,
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetExecution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/GetExecution',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
+            datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def Health(request,

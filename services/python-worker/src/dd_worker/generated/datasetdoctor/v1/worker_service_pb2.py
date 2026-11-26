@@ -22,23 +22,35 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from datasetdoctor.v1 import common_pb2 as datasetdoctor_dot_v1_dot_common__pb2
+from datasetdoctor.v1 import core_execution_pb2 as datasetdoctor_dot_v1_dot_core__execution__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/worker_service.proto\x12\x10\x64\x61tasetdoctor.v1\"\x0f\n\rHealthRequest\"\xa4\x01\n\x0eHealthSnapshot\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x02 \x01(\t\x12\x16\n\x0eprotocol_major\x18\x03 \x01(\r\x12\x15\n\rbuild_version\x18\x04 \x01(\t\x12\x1d\n\x15loaded_capability_ids\x18\x05 \x03(\t\x12\x19\n\x11\x61\x63tive_executions\x18\x06 \x01(\r\"\x11\n\x0fShutdownRequest\"#\n\x0fShutdownReceipt\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x32\xad\x01\n\x0cPythonWorker\x12K\n\x06Health\x12\x1f.datasetdoctor.v1.HealthRequest\x1a .datasetdoctor.v1.HealthSnapshot\x12P\n\x08Shutdown\x12!.datasetdoctor.v1.ShutdownRequest\x1a!.datasetdoctor.v1.ShutdownReceiptb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/worker_service.proto\x12\x10\x64\x61tasetdoctor.v1\x1a\x1d\x64\x61tasetdoctor/v1/common.proto\x1a%datasetdoctor/v1/core_execution.proto\"\x0f\n\rHealthRequest\"\xa4\x01\n\x0eHealthSnapshot\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x02 \x01(\t\x12\x16\n\x0eprotocol_major\x18\x03 \x01(\r\x12\x15\n\rbuild_version\x18\x04 \x01(\t\x12\x1d\n\x15loaded_capability_ids\x18\x05 \x03(\t\x12\x19\n\x11\x61\x63tive_executions\x18\x06 \x01(\r\"\x11\n\x0fShutdownRequest\"#\n\x0fShutdownReceipt\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\"/\n\x0fWorkerInputFile\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x0e\n\x06sha256\x18\x02 \x01(\t\"\xe6\x01\n\x12GeometryAuditInput\x12\x30\n\x05image\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x35\n\nannotation\x18\x02 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x39\n\x0einput_manifest\x18\x03 \x01(\x0b\x32!.datasetdoctor.v1.WorkerInputFile\x12\x18\n\x10output_directory\x18\x04 \x01(\t\x12\x12\n\nmax_pixels\x18\x05 \x01(\x04\"\xbb\x01\n\x14GeometryAuditRequest\x12.\n\x07\x63ontext\x18\x01 \x01(\x0b\x32\x1d.datasetdoctor.v1.TaskContext\x12\x39\n\x12input_manifest_ref\x18\x02 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x38\n\nparameters\x18\x03 \x01(\x0b\x32$.datasetdoctor.v1.GeometryAuditInput\"6\n\x0f\x45xecutionLookup\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x12\n\nattempt_id\x18\x02 \x01(\t\"\xa6\x01\n\x11\x45xecutionSnapshot\x12\x31\n\x06handle\x18\x01 \x01(\x0b\x32!.datasetdoctor.v1.ExecutionHandle\x12\x0e\n\x06status\x18\x02 \x01(\t\x12:\n\x13result_manifest_ref\x18\x03 \x01(\x0b\x32\x1d.datasetdoctor.v1.ArtifactRef\x12\x12\n\nerror_code\x18\x04 \x01(\t2\xf0\x02\n\x0cPythonWorker\x12i\n\x1cStartAnnotationGeometryAudit\x12&.datasetdoctor.v1.GeometryAuditRequest\x1a!.datasetdoctor.v1.ExecutionHandle\x12V\n\x0cGetExecution\x12!.datasetdoctor.v1.ExecutionLookup\x1a#.datasetdoctor.v1.ExecutionSnapshot\x12K\n\x06Health\x12\x1f.datasetdoctor.v1.HealthRequest\x1a .datasetdoctor.v1.HealthSnapshot\x12P\n\x08Shutdown\x12!.datasetdoctor.v1.ShutdownRequest\x1a!.datasetdoctor.v1.ShutdownReceiptb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'datasetdoctor.v1.worker_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_HEALTHREQUEST']._serialized_start=59
-  _globals['_HEALTHREQUEST']._serialized_end=74
-  _globals['_HEALTHSNAPSHOT']._serialized_start=77
-  _globals['_HEALTHSNAPSHOT']._serialized_end=241
-  _globals['_SHUTDOWNREQUEST']._serialized_start=243
-  _globals['_SHUTDOWNREQUEST']._serialized_end=260
-  _globals['_SHUTDOWNRECEIPT']._serialized_start=262
-  _globals['_SHUTDOWNRECEIPT']._serialized_end=297
-  _globals['_PYTHONWORKER']._serialized_start=300
-  _globals['_PYTHONWORKER']._serialized_end=473
+  _globals['_HEALTHREQUEST']._serialized_start=129
+  _globals['_HEALTHREQUEST']._serialized_end=144
+  _globals['_HEALTHSNAPSHOT']._serialized_start=147
+  _globals['_HEALTHSNAPSHOT']._serialized_end=311
+  _globals['_SHUTDOWNREQUEST']._serialized_start=313
+  _globals['_SHUTDOWNREQUEST']._serialized_end=330
+  _globals['_SHUTDOWNRECEIPT']._serialized_start=332
+  _globals['_SHUTDOWNRECEIPT']._serialized_end=367
+  _globals['_WORKERINPUTFILE']._serialized_start=369
+  _globals['_WORKERINPUTFILE']._serialized_end=416
+  _globals['_GEOMETRYAUDITINPUT']._serialized_start=419
+  _globals['_GEOMETRYAUDITINPUT']._serialized_end=649
+  _globals['_GEOMETRYAUDITREQUEST']._serialized_start=652
+  _globals['_GEOMETRYAUDITREQUEST']._serialized_end=839
+  _globals['_EXECUTIONLOOKUP']._serialized_start=841
+  _globals['_EXECUTIONLOOKUP']._serialized_end=895
+  _globals['_EXECUTIONSNAPSHOT']._serialized_start=898
+  _globals['_EXECUTIONSNAPSHOT']._serialized_end=1064
+  _globals['_PYTHONWORKER']._serialized_start=1067
+  _globals['_PYTHONWORKER']._serialized_end=1435
 # @@protoc_insertion_point(module_scope)

@@ -2,6 +2,19 @@ syntax = "proto3";
 
 package datasetdoctor.v1;
 
+message TaskContext {
+  string workspace_id = 1;
+  string workspace_session_id = 2;
+  string workflow_run_id = 3;
+  string node_id = 4;
+  string task_id = 5;
+  string attempt_id = 6;
+  string executor_session_id = 7;
+  string input_fingerprint = 8;
+  string node_spec_fingerprint = 9;
+  string grant_id = 10;
+}
+
 message ClaimGrantRequest {
   string grant_id = 1;
   string workspace_session_id = 2;

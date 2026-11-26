@@ -1,6 +1,7 @@
 """Local Worker process entry point. Bootstrap credentials come from stdin."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import hmac
 import json
 from pathlib import Path
@@ -12,9 +13,11 @@ from uuid import UUID
 import grpc
 
 # Generated imports use the canonical Protobuf path datasetdoctor/v1.
-sys.path.insert(0, str(Path(__file__).resolve().with_name("generated")))
+worker_root = Path(__file__).resolve().parent
+sys.path[:0] = [str(worker_root), str(worker_root / "generated")]
 from datasetdoctor.v1 import worker_service_pb2 as protocol
 from datasetdoctor.v1 import worker_service_pb2_grpc as service
+from geometry_execution import CAPABILITY, GeometryExecutions
 
 PROTOCOL_MAJOR = 1
 BUILD_VERSION = "0.1.0"
@@ -27,9 +30,8 @@ def read_bootstrap(source):
     if len(raw) > BOOTSTRAP_LIMIT or not raw.endswith(b"\n"):
         raise ValueError("invalid bootstrap framing")
     config = json.loads(raw.decode("utf-8"))
-    if not isinstance(config, dict) or config.keys() != {
-        "token", "executor_session_id", "protocol_major"
-    }:
+    required = {"token", "executor_session_id", "protocol_major"}
+    if not isinstance(config, dict) or not required <= config.keys() <= required | {"core"}:
         raise ValueError("invalid bootstrap fields")
     if type(config["protocol_major"]) is not int or config["protocol_major"] != PROTOCOL_MAJOR:
         raise ValueError("unsupported protocol major")
@@ -39,14 +41,27 @@ def read_bootstrap(source):
         raise ValueError("invalid bootstrap token")
     if not isinstance(session, str) or str(UUID(session)) != session:
         raise ValueError("invalid executor session")
-    return token, session
+    core = config.get("core")
+    if "core" in config:
+        if not isinstance(core, dict) or core.keys() != {"address", "claim_token"}:
+            raise ValueError("invalid Core bootstrap fields")
+        address = core["address"]
+        claim_token = core["claim_token"]
+        if (
+            not isinstance(address, str) or re.fullmatch(r"127\.0\.0\.1:[1-9][0-9]{0,4}", address) is None
+            or int(address.partition(":")[2]) > 65535
+            or not isinstance(claim_token, str) or re.fullmatch(r"[0-9a-f]{32}", claim_token) is None
+        ):
+            raise ValueError("invalid Core bootstrap channel")
+    return token, session, core
 
 
 class Worker(service.PythonWorkerServicer):
-    def __init__(self, token, session_id, stop):
+    def __init__(self, token, session_id, stop, geometry):
         self._authorization = f"Bearer {token}"
         self._session_id = session_id
         self._stop = stop
+        self._geometry = geometry
 
     def _authorize(self, context):
         values = [
@@ -68,8 +83,21 @@ class Worker(service.PythonWorkerServicer):
             executor_session_id=self._session_id,
             protocol_major=PROTOCOL_MAJOR,
             build_version=BUILD_VERSION,
-            active_executions=0,
+            loaded_capability_ids=[CAPABILITY] if self._geometry is not None else [],
+            active_executions=self._geometry.active_count() if self._geometry is not None else 0,
         )
+
+    def StartAnnotationGeometryAudit(self, request, context):
+        self._authorize(context)
+        if self._geometry is None or self._stop.is_set():
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Worker cannot admit geometry executions")
+        return self._geometry.start(request, context)
+
+    def GetExecution(self, request, context):
+        self._authorize(context)
+        if self._geometry is None:
+            context.abort(grpc.StatusCode.NOT_FOUND, "execution not found")
+        return self._geometry.snapshot(request, context)
 
     def Shutdown(self, request, context):
         self._authorize(context)
@@ -79,7 +107,7 @@ class Worker(service.PythonWorkerServicer):
 
 def main():
     try:
-        token, session = read_bootstrap(sys.stdin.buffer)
+        token, session, core = read_bootstrap(sys.stdin.buffer)
     except ValueError:
         print("Worker rejected bootstrap", file=sys.stderr)
         return 2
@@ -88,9 +116,11 @@ def main():
         ("grpc.max_receive_message_length", CONTROL_LIMIT),
         ("grpc.max_send_message_length", CONTROL_LIMIT),
     ]
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    channel = grpc.insecure_channel(core["address"], options=options) if core else nullcontext()
+    with ThreadPoolExecutor(max_workers=2) as pool, ThreadPoolExecutor(max_workers=1) as compute, channel as connection:
         server = grpc.server(pool, options=options)
-        service.add_PythonWorkerServicer_to_server(Worker(token, session, stop), server)
+        geometry = GeometryExecutions(connection, core["claim_token"], session, compute) if core else None
+        service.add_PythonWorkerServicer_to_server(Worker(token, session, stop, geometry), server)
         port = server.add_insecure_port("127.0.0.1:0")
         server.start()
         try:

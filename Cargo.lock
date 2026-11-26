@@ -690,6 +690,7 @@ dependencies = [
  "dd-core",
  "dd-protocol",
  "jsonschema",
+ "prost",
  "rusqlite",
  "serde",
  "serde_json",

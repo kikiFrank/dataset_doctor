@@ -23,6 +23,7 @@ tonic = { version = "=0.14.9", optional = true }
 uuid = "=1.29.3"
 
 [dev-dependencies]
+prost = "=0.14.6"
 tokio = { version = "=1.54.1", features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
 tokio-stream = { version = "=0.1.19", features = ["net"] }
 
@@ -72,6 +73,11 @@ path = "../../tests/storage/import/registration.rs"
 [[test]]
 name = "core_claim_loopback"
 path = "../../tests/integration/rpc/core_claim_loopback.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
+name = "worker_geometry"
+path = "../../tests/integration/rpc/worker_geometry.rs"
 required-features = ["execution-rpc"]
 
 [[test]]

@@ -24,17 +24,19 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/core_execution.proto\x12\x10\x64\x61tasetdoctor.v1\"\xd7\x01\n\x11\x43laimGrantRequest\x12\x10\n\x08grant_id\x18\x01 \x01(\t\x12\x1c\n\x14workspace_session_id\x18\x02 \x01(\t\x12\x0f\n\x07task_id\x18\x03 \x01(\t\x12\x12\n\nattempt_id\x18\x04 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x05 \x01(\t\x12\x1b\n\x13worker_execution_id\x18\x06 \x01(\t\x12\x19\n\x11input_fingerprint\x18\x07 \x01(\t\x12\x18\n\x10operation_digest\x18\x08 \x01(\t\"S\n\x0f\x45xecutionHandle\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x12\n\nattempt_id\x18\x02 \x01(\t\x12\x1b\n\x13worker_execution_id\x18\x03 \x01(\t2l\n\x14\x43oreExecutionControl\x12T\n\nClaimGrant\x12#.datasetdoctor.v1.ClaimGrantRequest\x1a!.datasetdoctor.v1.ExecutionHandleb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%datasetdoctor/v1/core_execution.proto\x12\x10\x64\x61tasetdoctor.v1\"\xf9\x01\n\x0bTaskContext\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x1c\n\x14workspace_session_id\x18\x02 \x01(\t\x12\x17\n\x0fworkflow_run_id\x18\x03 \x01(\t\x12\x0f\n\x07node_id\x18\x04 \x01(\t\x12\x0f\n\x07task_id\x18\x05 \x01(\t\x12\x12\n\nattempt_id\x18\x06 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x07 \x01(\t\x12\x19\n\x11input_fingerprint\x18\x08 \x01(\t\x12\x1d\n\x15node_spec_fingerprint\x18\t \x01(\t\x12\x10\n\x08grant_id\x18\n \x01(\t\"\xd7\x01\n\x11\x43laimGrantRequest\x12\x10\n\x08grant_id\x18\x01 \x01(\t\x12\x1c\n\x14workspace_session_id\x18\x02 \x01(\t\x12\x0f\n\x07task_id\x18\x03 \x01(\t\x12\x12\n\nattempt_id\x18\x04 \x01(\t\x12\x1b\n\x13\x65xecutor_session_id\x18\x05 \x01(\t\x12\x1b\n\x13worker_execution_id\x18\x06 \x01(\t\x12\x19\n\x11input_fingerprint\x18\x07 \x01(\t\x12\x18\n\x10operation_digest\x18\x08 \x01(\t\"S\n\x0f\x45xecutionHandle\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x12\n\nattempt_id\x18\x02 \x01(\t\x12\x1b\n\x13worker_execution_id\x18\x03 \x01(\t2l\n\x14\x43oreExecutionControl\x12T\n\nClaimGrant\x12#.datasetdoctor.v1.ClaimGrantRequest\x1a!.datasetdoctor.v1.ExecutionHandleb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'datasetdoctor.v1.core_execution_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_CLAIMGRANTREQUEST']._serialized_start=60
-  _globals['_CLAIMGRANTREQUEST']._serialized_end=275
-  _globals['_EXECUTIONHANDLE']._serialized_start=277
-  _globals['_EXECUTIONHANDLE']._serialized_end=360
-  _globals['_COREEXECUTIONCONTROL']._serialized_start=362
-  _globals['_COREEXECUTIONCONTROL']._serialized_end=470
+  _globals['_TASKCONTEXT']._serialized_start=60
+  _globals['_TASKCONTEXT']._serialized_end=309
+  _globals['_CLAIMGRANTREQUEST']._serialized_start=312
+  _globals['_CLAIMGRANTREQUEST']._serialized_end=527
+  _globals['_EXECUTIONHANDLE']._serialized_start=529
+  _globals['_EXECUTIONHANDLE']._serialized_end=612
+  _globals['_COREEXECUTIONCONTROL']._serialized_start=614
+  _globals['_COREEXECUTIONCONTROL']._serialized_end=722
 # @@protoc_insertion_point(module_scope)

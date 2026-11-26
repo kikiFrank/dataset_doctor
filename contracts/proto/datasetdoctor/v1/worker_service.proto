@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package datasetdoctor.v1;
 
+import "datasetdoctor/v1/common.proto";
+import "datasetdoctor/v1/core_execution.proto";
+
 message HealthRequest {}
 
 message HealthSnapshot {
@@ -19,7 +22,40 @@ message ShutdownReceipt {
   bool accepted = 1;
 }
 
+message WorkerInputFile {
+  string path = 1;
+  string sha256 = 2;
+}
+
+message GeometryAuditInput {
+  WorkerInputFile image = 1;
+  WorkerInputFile annotation = 2;
+  WorkerInputFile input_manifest = 3;
+  string output_directory = 4;
+  uint64 max_pixels = 5;
+}
+
+message GeometryAuditRequest {
+  TaskContext context = 1;
+  ArtifactRef input_manifest_ref = 2;
+  GeometryAuditInput parameters = 3;
+}
+
+message ExecutionLookup {
+  string task_id = 1;
+  string attempt_id = 2;
+}
+
+message ExecutionSnapshot {
+  ExecutionHandle handle = 1;
+  string status = 2;
+  ArtifactRef result_manifest_ref = 3;
+  string error_code = 4;
+}
+
 service PythonWorker {
+  rpc StartAnnotationGeometryAudit(GeometryAuditRequest) returns (ExecutionHandle);
+  rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);
 }
