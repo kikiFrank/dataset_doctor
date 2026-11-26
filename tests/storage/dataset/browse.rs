@@ -9,6 +9,7 @@ use dd_core::workspace::WorkspaceAccessError;
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::dataset_query::DatasetQueryError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 const IMAGE: &[u8] = include_bytes!("../../../testdata/image_io/p00-worker-rgb.png");
@@ -92,6 +93,38 @@ fn browse_pages_are_session_scoped_and_separate_dataset_members() {
         (b.filename.as_str(), b.has_annotation, b.final_review_id),
         ("b.png", false, None)
     );
+    let registered = thread
+        .registered_image(session, first_dataset, a.asset_id)
+        .unwrap();
+    assert_eq!(registered.asset_id, a.asset_id);
+    assert_eq!(registered.image.path, source.join("a.png"));
+    assert_eq!(
+        registered.image.sha256,
+        format!("{:x}", Sha256::digest(IMAGE))
+    );
+    let annotation = registered.annotation.unwrap();
+    assert_eq!(annotation.path, source.join("a.json"));
+    assert_eq!(
+        annotation.sha256,
+        format!("{:x}", Sha256::digest(fs::read(&annotation.path).unwrap()))
+    );
+    assert_eq!(
+        registered.label_schema_fingerprint,
+        first.schema_fingerprint
+    );
+    assert!(
+        thread
+            .registered_image(session, first_dataset, b.asset_id)
+            .unwrap()
+            .annotation
+            .is_none()
+    );
+    assert!(matches!(
+        thread.registered_image(session, second_dataset, a.asset_id),
+        Err(WorkspaceThreadError::Dataset(
+            DatasetQueryError::UnknownAsset
+        ))
+    ));
     assert!(matches!(
         thread.list_assets(session, Uuid::new_v4(), None, 1),
         Err(WorkspaceThreadError::Dataset(

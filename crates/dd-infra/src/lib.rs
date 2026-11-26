@@ -9,6 +9,7 @@ pub mod artifact_manifest;
 pub mod execution_rpc;
 pub mod import_preflight;
 pub mod import_registration;
+pub mod input_fingerprint;
 pub mod json;
 mod paths;
 pub mod sqlite;

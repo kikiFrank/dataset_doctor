@@ -2,11 +2,13 @@
 
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::path::PathBuf;
 
-use rusqlite::{Row, params};
+use rusqlite::{OptionalExtension, Row, params};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::paths::is_portable_relative_file;
 use crate::sqlite::{decode_uuid, row_uuid};
 use crate::workspace::OpenedWorkspace;
 
@@ -16,6 +18,9 @@ const MAX_PAGE: u16 = 200;
 pub enum DatasetQueryError {
     InvalidPageSize,
     UnknownDataset,
+    UnknownAsset,
+    UnavailableImage,
+    InvalidImageBinding,
     Database(rusqlite::Error),
 }
 
@@ -26,6 +31,11 @@ impl Display for DatasetQueryError {
                 write!(formatter, "Page size must be between 1 and {MAX_PAGE}")
             }
             Self::UnknownDataset => formatter.write_str("Dataset is not in the current Workspace"),
+            Self::UnknownAsset => formatter.write_str("Asset is not a member of this Dataset"),
+            Self::UnavailableImage => formatter.write_str("Asset is not an available image"),
+            Self::InvalidImageBinding => {
+                formatter.write_str("Registered image or annotation binding is incomplete")
+            }
             Self::Database(error) => write!(formatter, "Read Workspace Dataset entries: {error}"),
         }
     }
@@ -73,7 +83,110 @@ pub struct AssetSummary {
     pub final_review_id: Option<Uuid>,
 }
 
+#[derive(Debug)]
+pub struct RegisteredInputFile {
+    pub path: PathBuf,
+    pub sha256: String,
+}
+
+#[derive(Debug)]
+pub struct RegisteredImage {
+    pub asset_id: Uuid,
+    pub dataset_id: Uuid,
+    pub image: RegisteredInputFile,
+    pub annotation: Option<RegisteredInputFile>,
+    pub label_schema_fingerprint: String,
+}
+
+struct ImageRow {
+    kind: String,
+    availability: String,
+    location: String,
+    path: String,
+    media_digest: Option<String>,
+    annotation_path: Option<String>,
+    annotation_format: Option<String>,
+    annotation_digest: Option<String>,
+    categories: String,
+}
+
 impl OpenedWorkspace {
+    pub(crate) fn registered_image(
+        &self,
+        dataset_id: Uuid,
+        asset_id: Uuid,
+    ) -> Result<RegisteredImage, DatasetQueryError> {
+        let row = self
+            .connection
+            .query_row(
+                "SELECT a.kind, a.availability, a.location_kind, a.path, a.media_digest,
+                    a.annotation_path, a.annotation_format, a.annotation_digest, d.categories_json
+             FROM dataset_assets m JOIN assets a USING (asset_id) JOIN datasets d USING (dataset_id)
+             WHERE m.dataset_id=?1 AND m.asset_id=?2",
+                params![dataset_id.to_string(), asset_id.to_string()],
+                |row| {
+                    Ok(ImageRow {
+                        kind: row.get(0)?,
+                        availability: row.get(1)?,
+                        location: row.get(2)?,
+                        path: row.get(3)?,
+                        media_digest: row.get(4)?,
+                        annotation_path: row.get(5)?,
+                        annotation_format: row.get(6)?,
+                        annotation_digest: row.get(7)?,
+                        categories: row.get(8)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or(DatasetQueryError::UnknownAsset)?;
+        if row.kind != "IMAGE" || row.availability != "ONLINE" {
+            return Err(DatasetQueryError::UnavailableImage);
+        }
+        let image = self.registered_file(&row.location, row.path, row.media_digest)?;
+        let annotation = match (
+            row.annotation_path,
+            row.annotation_format.as_deref(),
+            row.annotation_digest,
+        ) {
+            (None, None, None) => None,
+            (Some(path), Some("COCO_IMAGE_BBOX"), digest) => {
+                Some(self.registered_file(&row.location, path, digest)?)
+            }
+            _ => return Err(DatasetQueryError::InvalidImageBinding),
+        };
+        Ok(RegisteredImage {
+            asset_id,
+            dataset_id,
+            image,
+            annotation,
+            label_schema_fingerprint: format!("{:x}", Sha256::digest(row.categories.as_bytes())),
+        })
+    }
+
+    fn registered_file(
+        &self,
+        location: &str,
+        path: String,
+        digest: Option<String>,
+    ) -> Result<RegisteredInputFile, DatasetQueryError> {
+        let path = PathBuf::from(path);
+        let path = match location {
+            "EXTERNAL" if path.is_absolute() => path,
+            "WORKSPACE" if is_portable_relative_file(&path) => self.root().join(path),
+            _ => return Err(DatasetQueryError::InvalidImageBinding),
+        };
+        let sha256 = digest
+            .filter(|encoded| {
+                encoded.len() == 64
+                    && encoded
+                        .bytes()
+                        .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+            })
+            .ok_or(DatasetQueryError::InvalidImageBinding)?;
+        Ok(RegisteredInputFile { path, sha256 })
+    }
+
     pub(crate) fn list_datasets(
         &self,
         after: Option<Uuid>,

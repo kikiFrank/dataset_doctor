@@ -13,7 +13,9 @@ use dd_core::workspace::{
 };
 use uuid::Uuid;
 
-use crate::dataset_query::{AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary};
+use crate::dataset_query::{
+    AssetSummary, DatasetPage, DatasetQueryError, DatasetSummary, RegisteredImage,
+};
 use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
@@ -202,6 +204,19 @@ impl WorkspaceThread {
         self.workspace_action(session, move |workspace| {
             workspace
                 .list_assets(dataset, after, size)
+                .map_err(WorkspaceThreadError::Dataset)
+        })
+    }
+
+    pub fn registered_image(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        asset: Uuid,
+    ) -> Result<RegisteredImage, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .registered_image(dataset, asset)
                 .map_err(WorkspaceThreadError::Dataset)
         })
     }

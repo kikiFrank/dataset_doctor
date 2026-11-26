@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'TaskStore')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess', 'WorkspaceThread', 'WorkspaceCreate', 'ImportPreflight', 'ImportRegistration', 'ImportAuthorization', 'ImportPlan', 'DatasetBrowse', 'InputFingerprint', 'TaskStore')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,6 +79,7 @@ switch ($Suite) {
     'ImportAuthorization' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_authorization') }
     'ImportPlan' { $cargoArgs += @('-p', 'dd-infra', '--test', 'import_plan') }
     'DatasetBrowse' { $cargoArgs += @('-p', 'dd-infra', '--test', 'dataset_browse') }
+    'InputFingerprint' { $cargoArgs += @('-p', 'dd-infra', '--test', 'input_fingerprint') }
     'TaskStore' { $cargoArgs += @('-p', 'dd-infra', '--test', 'task_store') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }

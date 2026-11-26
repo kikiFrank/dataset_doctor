@@ -44,6 +44,10 @@ name = "json_contracts"
 path = "../../tests/contracts/rust/json_contracts.rs"
 
 [[test]]
+name = "input_fingerprint"
+path = "../../tests/contracts/rust/input_fingerprint.rs"
+
+[[test]]
 name = "workspace_ownership"
 path = "../../tests/storage/workspace/ownership.rs"
 
