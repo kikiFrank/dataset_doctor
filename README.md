@@ -5,6 +5,7 @@ Local-first desktop application for computer-vision dataset quality governance. 
 当前处于工程设计与技术验证阶段，L1/L2 已形成方案Ⅰ基线，L3 实施任务与页面原型可供开发。生产应用尚未实现；Rig SDK 独立 PoC 已通过三平台测试。
 
 - [项目文档入口](docs/README.md)
+- [开发工作守则](docs/development/coding_guidelines.md)（AI Coding 自动阅读入口：[AGENTS.md](AGENTS.md)）
 - [前端 HTML 原型](docs/modules/frontend/prototype/index.html)
 - [实施任务与验收](docs/development/implementation_spec_and_tasks.md)
 - [Rig SDK 测试报告](docs/testing/rig_sdk_validation.md)
