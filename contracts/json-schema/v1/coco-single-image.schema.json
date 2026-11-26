@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/coco-single-image.schema.json",
+  "title": "Dataset Doctor single-image COCO bbox profile v1",
+  "type": "object",
+  "required": ["images", "annotations", "categories"],
+  "additionalProperties": false,
+  "properties": {
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": { "$ref": "#/$defs/image" }
+    },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/annotation" }
+    },
+    "categories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/category" }
+    }
+  },
+  "$defs": {
+    "local_id": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "image": {
+      "type": "object",
+      "required": ["id", "file_name", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/local_id" },
+        "file_name": { "type": "string", "minLength": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["id", "image_id", "category_id", "bbox", "area", "iscrowd"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/local_id" },
+        "image_id": { "$ref": "#/$defs/local_id" },
+        "category_id": { "$ref": "#/$defs/local_id" },
+        "bbox": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "number" }
+        },
+        "area": { "type": "number", "minimum": 0 },
+        "iscrowd": { "type": "integer", "enum": [0, 1] }
+      }
+    },
+    "category": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/local_id" },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

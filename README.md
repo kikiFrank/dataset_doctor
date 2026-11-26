@@ -86,7 +86,9 @@ $LASTEXITCODE
 
 查看 [InputManifest v1 Schema](contracts/json-schema/v1/input-manifest.schema.json)、[共享向量](testdata/contracts/json-schema/v1/input-manifest/cases.json) 和 [验收依赖及许可](docs/deployment/platform_delivery.md#p01-01-inputmanifest)。
 
-默认同时验证 InputManifest 和 Workspace 配置。可在命令末尾加 `-Suite InputManifest` 或 `-Suite WorkspaceConfig` 单独运行。Workspace 配置覆盖必填身份和版本、部分默认设置、未知字段、采样与工作流参数边界、重复键及 Unicode 名称长度。[Workspace 配置 v1 Schema](contracts/json-schema/v1/workspace-config.schema.json) · [共享向量](testdata/contracts/json-schema/v1/workspace-config/cases.json)
+默认验证 InputManifest、Workspace 配置和单图 COCO bbox。可用 `-Suite InputManifest`、`-Suite WorkspaceConfig` 或 `-Suite CocoSingleImage` 单独运行。Workspace 配置覆盖必填身份和版本、部分默认设置、未知字段、参数边界、重复键和 Unicode 名称长度。[Workspace 配置 v1 Schema](contracts/json-schema/v1/workspace-config.schema.json) · [共享向量](testdata/contracts/json-schema/v1/workspace-config/cases.json)
+
+单图 COCO 验证单条图片、局部安全整数、空标注、四元组 bbox 及不支持字段的拒绝。几何与图像、类别引用需要另行检查。[单图 COCO v1 Schema](contracts/json-schema/v1/coco-single-image.schema.json) · [共享向量](testdata/contracts/json-schema/v1/coco-single-image/cases.json)
 
 ## Windows ArtifactRef 线格式检查（P01-02）
 

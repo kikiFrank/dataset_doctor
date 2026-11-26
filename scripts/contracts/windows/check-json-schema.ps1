@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [Parameter(Mandatory = $true)][string]$UvCacheDir,
-    [ValidateSet('All', 'InputManifest', 'WorkspaceConfig')][string]$Suite = 'All'
+    [ValidateSet('All', 'InputManifest', 'WorkspaceConfig', 'CocoSingleImage')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,6 +17,7 @@ $utf8 = [Text.UTF8Encoding]::new($false)
 $testPattern = switch ($Suite) {
     'InputManifest' { 'test_input_manifest.py' }
     'WorkspaceConfig' { 'test_workspace_config.py' }
+    'CocoSingleImage' { 'test_coco_single_image.py' }
     'All' { 'test_*.py' }
 }
 

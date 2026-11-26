@@ -1,0 +1,162 @@
+[
+  {
+    "id": "documented_profile",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "no_annotations",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "positive_non_default_local_id",
+    "raw": "{\"images\":[{\"id\":9007199254740991,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":9007199254740991,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "negative_bbox_width_is_available_for_diagnosis",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[-10,40,-3,5],\"area\":0,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "references_are_checked_by_core",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":8,\"category_id\":9,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "empty_images",
+    "raw": "{\"images\":[],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "minItems"
+    }
+  },
+  {
+    "id": "second_image",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080},{\"id\":2,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "maxItems"
+    }
+  },
+  {
+    "id": "unsafe_image_id",
+    "raw": "{\"images\":[{\"id\":9007199254740992,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "maximum"
+    }
+  },
+  {
+    "id": "negative_annotation_id",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":-1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "minimum"
+    }
+  },
+  {
+    "id": "fractional_category_id",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":1.5,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "zero_width",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":0,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "minimum"
+    }
+  },
+  {
+    "id": "bad_bbox_length",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[1,2,3],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "minItems"
+    }
+  },
+  {
+    "id": "bbox_has_string",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[1,2,3,\"4\"],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "unsupported_segmentation",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0,\"segmentation\":[[1,2,3,4,5,6]]}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "unsupported_track_id",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0,\"track_id\":1}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "bad_iscrowd",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":2}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "enum"
+    }
+  },
+  {
+    "id": "unexpected_final",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}],\"Final\":[]}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "missing_categories",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}]}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "non_finite_json_number",
+    "raw": "{\"images\":[{\"id\":1,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,1e9999,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "parse",
+      "category": "non_finite_number"
+    }
+  },
+  {
+    "id": "duplicate_local_image_key",
+    "raw": "{\"images\":[{\"id\":1,\"id\":2,\"file_name\":\"frame_000012.jpg\",\"width\":1920,\"height\":1080}],\"annotations\":[{\"id\":1,\"image_id\":1,\"category_id\":3,\"bbox\":[120,80,40,60],\"area\":2400,\"iscrowd\":0}],\"categories\":[{\"id\":3,\"name\":\"red_light\"}]}",
+    "expected": {
+      "stage": "parse",
+      "category": "duplicate_key"
+    }
+  }
+]

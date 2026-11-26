@@ -38,6 +38,8 @@ row_revision 只是乐观并发控制序号，变更时递增。它不提供历�
 
 ### 2. 单图工作 JSON：COCO bbox profile
 
+结构以 [单图 COCO v1 Schema](../../contracts/json-schema/v1/coco-single-image.schema.json) 为准。它保留结构正确的几何异常供检查。Core 在读写边界校验图片和类别引用、局部 ID 唯一性、文件授权及正式 bbox 条件。
+
 本章建议使用一张图片的 COCO 结构，而非 AnyLabeling 原生 JSON：
 
 ```json
