@@ -15,3 +15,7 @@ path = "../../tests/scheduler/grant_claim.rs"
 [[test]]
 name = "template_plan"
 path = "../../tests/workflow/template_plan.rs"
+
+[[test]]
+name = "plan_adjustment"
+path = "../../tests/workflow/plan_adjustment.rs"
