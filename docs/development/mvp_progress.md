@@ -26,7 +26,8 @@
 | P04 Worker 图像读取适配器 | `d24505b`。Windows 锁定的 Worker Python 执行 `python -I -B -m unittest discover -s tests/worker/image -v`，4 项通过。真实解码合成 PNG/JPEG，校验方向、源摘要、坏图、格式和像素预算。红绿日志 `target/dev/logs/image-adapter-{red,green}.log`。Worker RPC 回归 2 项通过。 |
 | P02 Workspace 文件锁 | `881e39c`。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceLock` 在本机 NTFS 中文、空格路径中用真实子进程确认排他写锁、拒绝删除正在使用的锁文件、关闭句柄后可重获。红测 `target/dev/logs/workspace-ownership-red.log`，绿测和累计回归在 `target/p01-04/logs/61f05bc86ca149d3b469f45f35d5e1ef.log`、`target/p01-04/logs/054eb3ff516b4b9fa78aebeca3004518.log`。 |
 | P02 打开已有 Workspace 的基础设施 | `2b4df12`。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceOpen`，3 项通过。打开标志及库身份一致的合成工作区，在连接生命周期持有所有权，拒绝坏标志、错身份、未来版本、缺库和空库。空库仍为空，缺库时不创建库。累计回归 `target/p01-04/logs/c0c2e521a08a4319b6bddd352efa0ea5.log`，红测 `target/dev/logs/workspace-open-red.log`。 |
-| P04 Worker 标注几何适配器 | 本页所在提交。Windows 锁定的 Worker Python 执行 `python -I -B -m unittest discover -s tests/worker/annotation -v`，4 项通过。对照解码尺寸验证 bbox 和局部引用，区分缺标注和空标注，保留原数据。红绿日志 `target/dev/logs/geometry-{red,green}.log`。图像适配器 4 项复跑通过。 |
+| P04 Worker 标注几何适配器 | `0ab351a`。Windows 锁定的 Worker Python 执行 `python -I -B -m unittest discover -s tests/worker/annotation -v`，4 项通过。对照解码尺寸验证 bbox 和局部引用，区分缺标注和空标注，保留原数据。红绿日志 `target/dev/logs/geometry-{red,green}.log`。图像适配器 4 项复跑通过。 |
+| P02 Core Workspace 授权与会话 | 本页所在提交。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceAccess`，2 项通过。通过 Core 的真实存储端口打开合成库，验证授权失效无文件操作、同一时刻只打开一个工作区、旧授权不可复用、重开更换会话且旧会话不能关闭新连接。红测 `target/dev/logs/workspace-access-red.log`，累计回归 `target/p01-04/logs/78b339f0b97d48b19c33b8bbaa7bb611.log`。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -35,4 +36,4 @@
 
 - Windows 桌面壳已本机启动。最终生产依赖、随包 Worker 和干净系统安装验收仍待 P04/P10。Windows 以外的产品还没有本轮实测。
 - P01 还需首切片命令 DTO、专用 StartX 和 Core 执行契约、三语言完整 G-CONTRACT 及统一开发入口。旧发布库升级验收等待实际发布基线。
-- 后续用 Core 的 PathGrant 实现受授权的 Workspace 打开和关闭，禁止未经目录选择的路径写入，并拒绝过期授权和旧会话。随后由 Tauri 调命令并补桌面业务验收。Core 任务准入与 Worker 专用 StartX 还未串联。
+- 下一步把已有 Workspace Core 会话接到单写线程。以两个并发请求复用同一目录授权为红测，通过后由 Tauri 命令和原生目录选择器调用。Core 任务准入与 Worker 专用 StartX 还未串联。

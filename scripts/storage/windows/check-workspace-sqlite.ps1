@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RustBin,
     [string]$OfflineCargoHome,
-    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen')][string]$Suite = 'All'
+    [ValidateSet('All', 'Connection', 'Migration', 'AppMigration', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,7 +46,7 @@ if ($Suite -in @('All', 'Migration', 'AppMigration')) {
     $env:DD_SQLITE_MIGRATION_RUN_DIR = Join-Path $out "runs\$run"
     $directories += $env:DD_SQLITE_MIGRATION_RUN_DIR
 }
-if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen')) {
+if ($Suite -in @('All', 'WorkspaceLock', 'WorkspaceOpen', 'WorkspaceAccess')) {
     $env:DD_WORKSPACE_LOCK_RUN_DIR = Join-Path $repo "target\p02-workspace\runs\$run"
     $directories += $env:DD_WORKSPACE_LOCK_RUN_DIR
 }
@@ -60,6 +60,7 @@ switch ($Suite) {
     'AppMigration' { $cargoArgs += @('-p', 'dd-infra', '--test', 'app_migration') }
     'WorkspaceLock' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_ownership') }
     'WorkspaceOpen' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_open') }
+    'WorkspaceAccess' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workspace_access') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
 $cargoArgs += @('--', '--nocapture')

@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+dd-core = { path = "../dd-core" }
 rusqlite.workspace = true
 jsonschema = { version = "=0.63.1", default-features = false, features = ["arbitrary-precision"] }
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -33,3 +34,7 @@ path = "../../tests/storage/workspace/ownership.rs"
 [[test]]
 name = "workspace_open"
 path = "../../tests/storage/workspace/open.rs"
+
+[[test]]
+name = "workspace_access"
+path = "../../tests/storage/workspace/access.rs"

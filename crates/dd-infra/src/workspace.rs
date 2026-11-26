@@ -6,6 +6,7 @@ use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use dd_core::workspace::{WorkspaceIdentity, WorkspaceStore};
 use rusqlite::{Connection, OpenFlags};
 use serde::Deserialize;
 
@@ -110,11 +111,38 @@ impl Error for WorkspaceOpenError {
     }
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-pub struct WorkspaceIdentity {
-    pub workspace_id: String,
-    #[serde(rename = "name")]
-    pub display_name: String,
+#[derive(Deserialize)]
+struct MarkerIdentity {
+    workspace_id: String,
+    name: String,
+}
+
+pub struct ExistingWorkspaceStore {
+    contracts: JsonContracts,
+    busy_timeout_ms: u32,
+}
+
+impl ExistingWorkspaceStore {
+    pub fn new(busy_timeout_ms: u32) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        Ok(Self {
+            contracts: JsonContracts::new()?,
+            busy_timeout_ms,
+        })
+    }
+}
+
+impl WorkspaceStore for ExistingWorkspaceStore {
+    type Handle = OpenedWorkspace;
+    type Error = WorkspaceOpenError;
+
+    fn open(
+        &self,
+        authorized_root: &Path,
+    ) -> Result<(WorkspaceIdentity, Self::Handle), Self::Error> {
+        let workspace = open_workspace(authorized_root, &self.contracts, self.busy_timeout_ms)?;
+        let identity = workspace.identity().clone();
+        Ok((identity, workspace))
+    }
 }
 
 #[derive(Debug)]
@@ -166,8 +194,12 @@ pub fn open_workspace(
     let document = contracts
         .validate(JsonProfile::WorkspaceConfig, &bytes)
         .map_err(WorkspaceOpenError::Marker)?;
-    let identity: WorkspaceIdentity =
+    let marker: MarkerIdentity =
         serde_json::from_value(document).map_err(WorkspaceOpenError::MarkerMapping)?;
+    let identity = WorkspaceIdentity {
+        workspace_id: marker.workspace_id,
+        display_name: marker.name,
+    };
 
     let database = root.join("workspace.db");
     if !ordinary_file(&std::fs::symlink_metadata(&database).map_err(WorkspaceOpenError::Io)?) {

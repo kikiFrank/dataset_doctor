@@ -662,6 +662,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dd-core"
+version = "0.1.0"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
 name = "dd-desktop"
 version = "0.1.0"
 dependencies = [
@@ -674,6 +681,7 @@ dependencies = [
 name = "dd-infra"
 version = "0.1.0"
 dependencies = [
+ "dd-core",
  "jsonschema",
  "rusqlite",
  "serde",
