@@ -1,0 +1,9 @@
+[package]
+name = "dd-sqlite-file-lock-smoke"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[dependencies]
+rusqlite = { version = "=0.42.0", default-features = false, features = ["bundled", "backup"] }

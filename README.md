@@ -42,6 +42,32 @@ $LASTEXITCODE
 
 依赖许可见 [Windows Worker PoC 依赖许可记录](docs/deployment/platform_delivery.md#p00-02-windows-worker-poc)。
 
+## Windows bundled SQLite 文件锁验证（P00-03）
+
+在已初始化 x64 VS Developer PowerShell 的仓库根目录运行。使用 Rust/Cargo 1.97.1 的 MSVC 工具链和预填到 `target/p00-03/cargo-home/` 的批准离线缓存。
+
+```powershell
+$rustBin = '<Rust 1.97.1 x86_64-pc-windows-msvc 工具链的 bin 绝对路径>'
+$cache = (Resolve-Path -LiteralPath '.\target\p00-03\cargo-home').Path
+powershell.exe -NoProfile -NonInteractive -File .\scripts\storage\windows\check-sqlite-file-lock.ps1 -CargoExe (Join-Path $rustBin 'cargo.exe') -RustcExe (Join-Path $rustBin 'rustc.exe') -OfflineCargoHome $cache
+$LASTEXITCODE
+```
+
+入口以 `--locked --offline` 执行 `cargo fetch`、`cargo tree -e features` 和 `cargo test -vv -- --nocapture`。运行日志位于 `target/p00-03/logs/check.log`，每次合成数据库保留在 `target/p00-03/runs/` 下的新目录。退出码 `0` 为通过，`1` 为构建、来源核对或运行验收失败，`2` 为工具或离线输入不足。
+
+Windows x64 固定 NTFS 实测确认逐连接启用外键、WAL、FULL 同步和 250 ms busy timeout。两个独立子进程以管道协调。持锁期间另一进程看不到未提交数据，写入返回有界的 `SQLITE_BUSY`。持锁进程提交并退出后，另一进程写入成功，重开数据库后核对三条数据。Cargo 构建输出记录静态 `sqlite3` 链接，MSVC 导入表检查排除了 SQLite DLL。
+
+[专用 Cargo.lock](tests/storage/sqlite/file-lock/Cargo.lock) 固定 `rusqlite 0.42.0` 的 `bundled`、`backup` 和 `libsqlite3-sys 0.40.0`。包内 amalgamation 和实际运行值均为 [SQLite 3.54.1](https://sqlite.org/releaselog/3_54_1.html)，Source ID 为 `2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76`。交接核对的 WAL 补丁依据见 [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459.html)。11 个本地 crate 归档的校验和与锁文件一致，许可按归档的 manifest 和许可证文件记录。
+
+| 锁定依赖 | 测试用途 | 归档许可 |
+| --- | --- | --- |
+| `rusqlite 0.42.0` | SQLite Rust 连接与错误接口 | MIT |
+| `libsqlite3-sys 0.40.0` | SQLite 绑定、bundled 源与本地编译 | MIT，SQLite amalgamation 为[公共领域](https://sqlite.org/copyright.html) |
+| `bitflags 2.13.2`、`fallible-iterator 0.3.0`、`fallible-streaming-iterator 0.1.9`、`smallvec 1.16.6` | Rust 运行依赖 | MIT 或 Apache-2.0 |
+| `cc 1.11.3`、`find-msvc-tools 0.1.15`、`pkg-config 0.3.34`、`shlex 2.0.1`、`vcpkg 0.2.15` | 构建依赖 | MIT 或 Apache-2.0 |
+
+本切片的通过范围为 Windows x64 上的静态 SQLite 来源、连接设置和 NTFS 文件锁。SQL 迁移、备份行为、应用层 Workspace 所有权锁、崩溃恢复及跨平台发行留待后续验收。
+
 ## Windows InputManifest 结构检查（P01-01）
 
 在仓库根目录运行。使用 Windows x64 上实际安装的 CPython 3.12.12、仓库里的验证依赖锁和已预填的 P01-01 专用 uv 缓存。
