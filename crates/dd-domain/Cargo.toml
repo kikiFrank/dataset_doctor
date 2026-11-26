@@ -4,3 +4,13 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish = false
+
+[dependencies]
+uuid = "=1.29.3"
+
+[dev-dependencies]
+uuid = { version = "=1.29.3", features = ["v4"] }
+
+[[test]]
+name = "video_frame_index"
+path = "../../tests/video/frame_index.rs"

@@ -797,6 +797,9 @@ dependencies = [
 [[package]]
 name = "dd-domain"
 version = "0.1.0"
+dependencies = [
+ "uuid",
+]
 
 [[package]]
 name = "dd-infra"
