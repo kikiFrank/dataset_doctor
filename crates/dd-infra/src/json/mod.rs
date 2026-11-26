@@ -20,6 +20,8 @@ const COCO: &str =
     include_str!("../../../../contracts/json-schema/v1/coco-single-image.schema.json");
 const TASK_RESULT: &str =
     include_str!("../../../../contracts/json-schema/v1/task-result-manifest.schema.json");
+const REVIEW_DRAFT: &str =
+    include_str!("../../../../contracts/json-schema/v1/review-draft.schema.json");
 
 #[derive(Clone, Copy, Debug)]
 pub enum JsonProfile {
@@ -27,6 +29,7 @@ pub enum JsonProfile {
     WorkspaceConfig,
     CocoSingleImage,
     TaskResultManifest,
+    ReviewDraft,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -60,6 +63,7 @@ pub struct JsonContracts {
     workspace_config: Validator,
     coco_single_image: Validator,
     task_result_manifest: Validator,
+    review_draft: Validator,
 }
 
 impl JsonContracts {
@@ -68,6 +72,10 @@ impl JsonContracts {
             .add(
                 format!("{BASE}common.schema.json"),
                 parse::strict_json(COMMON.as_bytes())?,
+            )?
+            .add(
+                format!("{BASE}coco-single-image.schema.json"),
+                parse::strict_json(COCO.as_bytes())?,
             )?
             .prepare()?;
         let build = |source: &str| {
@@ -84,6 +92,7 @@ impl JsonContracts {
             workspace_config: build(WORKSPACE)?,
             coco_single_image: build(COCO)?,
             task_result_manifest: build(TASK_RESULT)?,
+            review_draft: build(REVIEW_DRAFT)?,
         })
     }
 
@@ -95,6 +104,7 @@ impl JsonContracts {
             JsonProfile::WorkspaceConfig => &self.workspace_config,
             JsonProfile::CocoSingleImage => &self.coco_single_image,
             JsonProfile::TaskResultManifest => &self.task_result_manifest,
+            JsonProfile::ReviewDraft => &self.review_draft,
         };
         let issues: Vec<_> = validator
             .iter_errors(&document)

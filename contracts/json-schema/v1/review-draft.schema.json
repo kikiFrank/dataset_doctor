@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/review-draft.schema.json",
+  "title": "Dataset Doctor current review draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "review_id", "asset_id", "source_task_id", "draft_revision",
+    "image_digest", "base_annotation_digest", "base_label_schema_digest", "coco_document"],
+  "properties": {
+    "contract_version": { "const": 1 },
+    "review_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "asset_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source_task_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "draft_revision": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "image_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "base_annotation_digest": {
+      "anyOf": [{ "$ref": "common.schema.json#/$defs/sha256" }, { "type": "null" }]
+    },
+    "base_label_schema_digest": { "$ref": "common.schema.json#/$defs/sha256" },
+    "coco_document": { "$ref": "coco-single-image.schema.json" }
+  }
+}

@@ -118,5 +118,10 @@ path = "../../tests/integration/rpc/workspace_geometry.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "review_draft"
+path = "../../tests/integration/rpc/review_draft.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "task_store"
 path = "../../tests/storage/tasks/task_store.rs"

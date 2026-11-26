@@ -78,6 +78,11 @@ pub struct ReviewDocument {
 }
 
 impl ReviewDocument {
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn into_coco(self) -> Value {
+        self.coco
+    }
+
     pub fn confirm(self, confirmed_negative: bool) -> Result<Value, ReviewValidationError> {
         match (self.has_boxes, confirmed_negative) {
             (false, false) => Err(ReviewValidationError::NegativeConfirmationRequired),

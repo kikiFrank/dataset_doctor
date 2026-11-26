@@ -1,5 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind};
+#[cfg(feature = "execution-rpc")]
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 use crate::workspace::{ordinary_file, prevent_replacement};
@@ -40,6 +42,66 @@ pub(crate) fn open_scoped_file(root: &Path, relative: &Path) -> io::Result<File>
         ));
     }
     Ok(file)
+}
+
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn scoped_directory(root: &Path, relative: &Path) -> io::Result<PathBuf> {
+    if !is_portable_relative_file(relative) {
+        return Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            "Expected a relative directory",
+        ));
+    }
+    let mut directory = root.to_owned();
+    for component in relative.components() {
+        directory.push(component);
+        match fs::create_dir(&directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+        if !directory.is_dir() || directory.canonicalize()? != directory {
+            return Err(io::Error::new(
+                ErrorKind::PermissionDenied,
+                "Directory is outside its scope",
+            ));
+        }
+    }
+    Ok(directory)
+}
+
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn publish_immutable(root: &Path, relative: &Path, bytes: &[u8]) -> io::Result<()> {
+    if !is_portable_relative_file(relative) {
+        return Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            "Expected a relative artifact path",
+        ));
+    }
+    let parent = relative
+        .parent()
+        .ok_or_else(|| io::Error::new(ErrorKind::InvalidInput, "Missing artifact directory"))?;
+    let directory = scoped_directory(root, parent)?;
+    let mut staging = tempfile::NamedTempFile::new_in(&directory)?;
+    staging.write_all(bytes)?;
+    staging.as_file().sync_all()?;
+    match staging.persist_noclobber(root.join(relative)) {
+        Ok(_) => Ok(()),
+        Err(error) if error.error.kind() == ErrorKind::AlreadyExists => {
+            let mut existing = Vec::new();
+            open_scoped_file(root, relative)?
+                .take(bytes.len() as u64 + 1)
+                .read_to_end(&mut existing)?;
+            if existing != bytes {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    "Existing immutable artifact differs",
+                ));
+            }
+            Ok(())
+        }
+        Err(error) => Err(error.error),
+    }
 }
 
 #[cfg(windows)]

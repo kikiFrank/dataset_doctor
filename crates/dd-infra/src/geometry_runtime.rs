@@ -6,8 +6,7 @@ pub use review_image::{ReviewImageEvidenceError, VerifiedReviewImage, read_revie
 
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::fs;
-use std::io::{self, ErrorKind, Read, Write};
+use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -23,7 +22,6 @@ use dd_protocol::v1::{
 use prost::Message;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tempfile::NamedTempFile;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -35,7 +33,7 @@ use crate::dataset_query::{RegisteredImage, RegisteredInputFile};
 use crate::execution_rpc::CoreClaimService;
 use crate::input_fingerprint::{InputFingerprintError, freeze_input_manifest};
 use crate::json::JsonContracts;
-use crate::paths::open_scoped_file;
+use crate::paths::{publish_immutable, scoped_directory};
 use crate::task_store::{StoredTask, TaskOutcome, TaskSubmission, format_digest};
 use crate::worker_process::{CoreClaimEndpoint, WorkerLaunch, WorkerProcess, WorkerProcessError};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
@@ -355,7 +353,7 @@ fn prepare(
     let directory = Path::new("artifacts/task-inputs");
     let name = format!("{}.json", format_digest(&frozen.sha256));
     let relative = directory.join(&name);
-    publish_input(root, &relative, &frozen.bytes)?;
+    publish_immutable(root, &relative, &frozen.bytes)?;
     let parameters = GeometryAuditInput {
         image: Some(locator(image)?),
         annotation: annotation.map(locator).transpose()?,
@@ -390,51 +388,6 @@ fn prepare(
         manifest_size: frozen.bytes.len() as u64,
         parameters,
     })
-}
-
-fn scoped_directory(root: &Path, relative: &Path) -> Result<PathBuf, GeometryRuntimeError> {
-    let mut directory = root.to_owned();
-    for component in relative.components() {
-        let std::path::Component::Normal(name) = component else {
-            return Err(GeometryRuntimeError::InvalidBinding);
-        };
-        directory.push(name);
-        match fs::create_dir(&directory) {
-            Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error.into()),
-        }
-        if !directory.is_dir() || directory.canonicalize()? != directory {
-            return Err(GeometryRuntimeError::InvalidBinding);
-        }
-    }
-    Ok(directory)
-}
-
-fn publish_input(root: &Path, relative: &Path, bytes: &[u8]) -> Result<(), GeometryRuntimeError> {
-    let directory = scoped_directory(
-        root,
-        relative
-            .parent()
-            .ok_or(GeometryRuntimeError::InvalidBinding)?,
-    )?;
-    let mut staging = NamedTempFile::new_in(&directory)?;
-    staging.write_all(bytes)?;
-    staging.as_file().sync_all()?;
-    match staging.persist_noclobber(root.join(relative)) {
-        Ok(_) => Ok(()),
-        Err(error) if error.error.kind() == ErrorKind::AlreadyExists => {
-            let mut existing = Vec::new();
-            open_scoped_file(root, relative)?
-                .take(bytes.len() as u64 + 1)
-                .read_to_end(&mut existing)?;
-            if existing != bytes {
-                return Err(GeometryRuntimeError::InvalidBinding);
-            }
-            Ok(())
-        }
-        Err(error) => Err(error.error.into()),
-    }
 }
 
 fn locator(file: RegisteredInputFile) -> Result<WorkerInputFile, GeometryRuntimeError> {
