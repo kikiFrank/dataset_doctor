@@ -7,3 +7,31 @@ export type DecimalI64 = string;
 export type UuidText = string;
 
 export type ArtifactOwner = { "kind": "TASK", "id": UuidText } | { "kind": "ASSET", "id": UuidText } | { "kind": "REVIEW", "id": UuidText };
+
+export type PathPurpose = "WORKSPACE";
+
+export type PathKind = "DIRECTORY";
+
+export type PathAccess = "READ_WRITE";
+
+export type PathSelectRequest = { request_id: UuidText, purpose: PathPurpose, kind: PathKind, access: PathAccess, };
+
+export type PathGrant = { grant_id: UuidText, display_path: string, allowed_operations: Array<string>, expires_at: string, };
+
+export type WorkspaceOpenRequest = { request_id: UuidText, directory_grant_id: UuidText, };
+
+export type CommandContext = { request_id: UuidText, workspace_id: UuidText, workspace_session_id: UuidText, idempotency_key?: UuidText, };
+
+export type WorkspaceGetRequest = { request_id: UuidText, context?: CommandContext, };
+
+export type WorkspaceSnapshot = { "status": "CLOSED" } | { "status": "OPEN", workspace_id: UuidText, workspace_session_id: UuidText, display_name: string, config_revision: DecimalU64, active_task_count: DecimalU64, offline_asset_count: DecimalU64, capabilities: Array<string>, };
+
+export type CloseMode = "WAIT" | "CANCEL";
+
+export type CloseState = "CLOSED";
+
+export type WorkspaceCloseRequest = { context: CommandContext, mode: CloseMode, expected_session_id: UuidText, };
+
+export type CloseReceipt = { workspace_id: UuidText, workspace_session_id: UuidText, close_state: CloseState, blocking_task_ids: Array<UuidText>, };
+
+export type AppError = { code: string, message: string, request_id: UuidText, retryable: boolean, };

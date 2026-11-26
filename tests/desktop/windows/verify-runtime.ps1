@@ -1,5 +1,9 @@
 [CmdletBinding()]
-param([Parameter(Mandatory = $true)][string]$DesktopExe)
+param(
+    [Parameter(Mandatory = $true)][string]$DesktopExe,
+    [ValidateSet('Runtime', 'Workspace')][string]$Suite = 'Runtime',
+    [string]$PythonExe
+)
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -17,6 +21,16 @@ try {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     $start.EnvironmentVariables['DD_DESKTOP_SMOKE_ROOT'] = $run
+    $expected = 'DESKTOP_WEBVIEW2_READY'
+    if ($Suite -eq 'Workspace') {
+        $python = (Resolve-Path -LiteralPath $PythonExe).Path
+        $workspace = Join-Path $run "$([char]0x9a8c)$([char]0x6536) Workspace"
+        & $python -I -S -B (Join-Path $PSScriptRoot 'seed_workspace.py') $workspace
+        if ($LASTEXITCODE -ne 0) { throw 'Synthetic Workspace initialization failed.' }
+        $start.Arguments += ' --workspace-smoke'
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
+        $expected = 'DESKTOP_WORKSPACE_VERIFIED'
+    }
     $process = [Diagnostics.Process]::Start($start)
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -29,10 +43,10 @@ try {
             throw 'The desktop process did not close its output streams.'
         }
         $stdout.Result, $stderr.Result | Set-Content -LiteralPath $log -Encoding UTF8
-        if ($process.ExitCode -ne 0 -or $stdout.Result -notmatch '(?m)^DESKTOP_WEBVIEW2_READY version=0\.1\.0\s*$') {
-            throw "Desktop exit=$($process.ExitCode). No matching WebView2 verification. See $log."
+        if ($process.ExitCode -ne 0 -or $stdout.Result -notmatch "(?m)^$expected version=0\.1\.0\s*$") {
+            throw "Desktop exit=$($process.ExitCode). Missing $expected. See $log."
         }
-        "Native desktop WebView2 loaded the built React UI, completed Tauri IPC and exited: $log"
+        "Native desktop $Suite completed Tauri IPC and exited: $log"
     } finally {
         $process.Dispose()
     }

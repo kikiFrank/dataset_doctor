@@ -28,7 +28,8 @@
 | P02 打开已有 Workspace 的基础设施 | `2b4df12`。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceOpen`，3 项通过。打开标志及库身份一致的合成工作区，在连接生命周期持有所有权，拒绝坏标志、错身份、未来版本、缺库和空库。空库仍为空，缺库时不创建库。累计回归 `target/p01-04/logs/c0c2e521a08a4319b6bddd352efa0ea5.log`，红测 `target/dev/logs/workspace-open-red.log`。 |
 | P04 Worker 标注几何适配器 | `0ab351a`。Windows 锁定的 Worker Python 执行 `python -I -B -m unittest discover -s tests/worker/annotation -v`，4 项通过。对照解码尺寸验证 bbox 和局部引用，区分缺标注和空标注，保留原数据。红绿日志 `target/dev/logs/geometry-{red,green}.log`。图像适配器 4 项复跑通过。 |
 | P02 Core Workspace 授权与会话 | `f35192c`。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceAccess`，2 项通过。通过 Core 的真实存储端口打开合成库，验证授权失效无文件操作、同一时刻只打开一个工作区、旧授权不可复用、重开更换会话且旧会话不能关闭新连接。红测 `target/dev/logs/workspace-access-red.log`，累计回归 `target/p01-04/logs/78b339f0b97d48b19c33b8bbaa7bb611.log`。 |
-| P02 Workspace 数据线程 | 本页所在提交。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceThread`，真实并发的两个打开请求仅一个获得连接。线程退出会关闭 SQLite 并释放锁。累计回归 `target/p01-04/logs/3f2d31da65554c3aa279aeee99a5e2fe.log`。 |
+| P02 Workspace 数据线程 | `3ee1ea8`。`scripts/storage/windows/check-workspace-sqlite.ps1 -Suite WorkspaceThread`，真实并发的两个打开请求仅一个获得连接。线程退出会关闭 SQLite 并释放锁。累计回归 `target/p01-04/logs/3f2d31da65554c3aa279aeee99a5e2fe.log`。 |
+| P02/P05 Windows 桌面打开已有 Workspace | 本页所在提交。`tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite Workspace -PythonExe $py312` 从 WebView2 经 Tauri、Core 和真实 SQLite 验证打开、查询、关闭、重开和拒绝旧会话。红测 `target/desktop-smoke/runs/85c2573a33a84c868fbfbc6faa98098a/verify.log`，绿测 `target/desktop-smoke/runs/91f29d9c19fb4c22a9bd377b1e02f102/verify.log`。也在普通应用窗口用原生文件夹选择器打开合成库，确认界面显示名称和 1 个离线资源，关闭后回到工作区入口。进程返回 0，WebView2 退出时记录 `Chrome_WidgetWin_0` 类注销警告。存储累计回归 `target/p01-04/logs/f31dd1378e3c4e98b8c09b122ce5bddb.log`，TypeScript 与 Worker RPC 回归日志见 `target/contract-check/ui-wire/9faca2bafe884cb0b40c4d127102184b/check.log`、`target/contract-check/worker-rpc/6cb85db260814cc9a3414ac5e383c0be/check.log`。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -37,4 +38,5 @@
 
 - Windows 桌面壳已本机启动。最终生产依赖、随包 Worker 和干净系统安装验收仍待 P04/P10。Windows 以外的产品还没有本轮实测。
 - P01 还需首切片命令 DTO、专用 StartX 和 Core 执行契约、三语言完整 G-CONTRACT 及统一开发入口。旧发布库升级验收等待实际发布基线。
-- 下一步将已验证的 Workspace 数据线程接到 Tauri 的 `path_select`、`workspace_open`、`workspace_get` 和 `workspace_close`。用原生桌面进程验证合成库打开、查询、关闭，之后实现创建和导入。Core 任务准入与 Worker 专用 StartX 还未串联。
+- 下一步增加 Workspace 创建的存储红测，覆盖重新打开、拒绝覆盖已有数据、初始化中断后重试；再接入 Core 和 `workspace_create`。Core 任务准入与 Worker 专用 StartX 还未串联。
+- 桌面操作已结束。暂用命令行继续开发，新增 GUI 实测等用户释放桌面后补做。

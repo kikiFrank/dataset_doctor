@@ -115,6 +115,7 @@ impl Error for WorkspaceOpenError {
 struct MarkerIdentity {
     workspace_id: String,
     name: String,
+    config_revision: u64,
 }
 
 pub struct ExistingWorkspaceStore {
@@ -196,10 +197,6 @@ pub fn open_workspace(
         .map_err(WorkspaceOpenError::Marker)?;
     let marker: MarkerIdentity =
         serde_json::from_value(document).map_err(WorkspaceOpenError::MarkerMapping)?;
-    let identity = WorkspaceIdentity {
-        workspace_id: marker.workspace_id,
-        display_name: marker.name,
-    };
 
     let database = root.join("workspace.db");
     if !ordinary_file(&std::fs::symlink_metadata(&database).map_err(WorkspaceOpenError::Io)?) {
@@ -211,8 +208,24 @@ pub fn open_workspace(
     let connection =
         Connection::open_with_flags(database, flags).map_err(WorkspaceOpenError::Database)?;
     let connection =
-        open_existing_workspace_database(connection, busy_timeout_ms, &identity.workspace_id)
+        open_existing_workspace_database(connection, busy_timeout_ms, &marker.workspace_id)
             .map_err(WorkspaceOpenError::Migration)?;
+    let offline_asset_count = connection
+        .query_row(
+            "SELECT count(*) FROM main.assets WHERE availability = 'OFFLINE'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                u64::try_from(count).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, count))
+            },
+        )
+        .map_err(WorkspaceOpenError::Database)?;
+    let identity = WorkspaceIdentity {
+        workspace_id: marker.workspace_id,
+        display_name: marker.name,
+        config_revision: marker.config_revision,
+        offline_asset_count,
+    };
     Ok(OpenedWorkspace {
         root,
         identity,

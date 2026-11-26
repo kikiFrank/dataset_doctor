@@ -38,3 +38,16 @@ header {
 main { padding: 32px; }
 h1 { margin: 0 0 12px; font-size: 26px; }
 [role="status"] { color: #50647c; }
+
+button {
+  background: #187e73;
+  color: #fff;
+  border: 1px solid #187e73;
+  border-radius: 7px;
+  padding: 9px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.58; cursor: wait; }
+[role="alert"] { color: #9a343e; }

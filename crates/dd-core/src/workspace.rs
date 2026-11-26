@@ -10,12 +10,16 @@ pub struct WorkspaceSession {
     pub workspace_id: String,
     pub display_name: String,
     pub workspace_session_id: Uuid,
+    pub config_revision: u64,
+    pub offline_asset_count: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkspaceIdentity {
     pub workspace_id: String,
     pub display_name: String,
+    pub config_revision: u64,
+    pub offline_asset_count: u64,
 }
 
 pub trait WorkspaceStore {
@@ -150,6 +154,8 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
             workspace_id: identity.workspace_id,
             display_name: identity.display_name,
             workspace_session_id: Uuid::new_v4(),
+            config_revision: identity.config_revision,
+            offline_asset_count: identity.offline_asset_count,
         };
         self.active = Some(ActiveWorkspace {
             session: session.clone(),

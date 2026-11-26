@@ -1,5 +1,7 @@
 //! Tauri message contracts shared with the desktop frontend.
 
+pub mod workspace;
+
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -22,6 +24,12 @@ impl TryFrom<String> for DecimalU64 {
 impl From<DecimalU64> for String {
     fn from(value: DecimalU64) -> Self {
         value.0.to_string()
+    }
+}
+
+impl From<u64> for DecimalU64 {
+    fn from(value: u64) -> Self {
+        Self(value)
     }
 }
 
@@ -102,6 +110,20 @@ pub fn wire_primitives_typescript() -> String {
         DecimalI64::decl(&config),
         UuidText::decl(&config),
         ArtifactOwner::decl(&config),
+        workspace::PathPurpose::decl(&config),
+        workspace::PathKind::decl(&config),
+        workspace::PathAccess::decl(&config),
+        workspace::PathSelectRequest::decl(&config),
+        workspace::PathGrant::decl(&config),
+        workspace::WorkspaceOpenRequest::decl(&config),
+        workspace::CommandContext::decl(&config),
+        workspace::WorkspaceGetRequest::decl(&config),
+        workspace::WorkspaceSnapshot::decl(&config),
+        workspace::CloseMode::decl(&config),
+        workspace::CloseState::decl(&config),
+        workspace::WorkspaceCloseRequest::decl(&config),
+        workspace::CloseReceipt::decl(&config),
+        workspace::AppError::decl(&config),
     ] {
         output.push_str("\nexport ");
         output.push_str(&declaration);
