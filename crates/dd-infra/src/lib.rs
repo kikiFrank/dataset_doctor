@@ -6,6 +6,8 @@ pub mod dataset_query;
 #[cfg(feature = "execution-rpc")]
 pub mod artifact_manifest;
 #[cfg(feature = "execution-rpc")]
+pub mod coco_export;
+#[cfg(feature = "execution-rpc")]
 pub mod execution_rpc;
 #[cfg(feature = "execution-rpc")]
 pub mod geometry_runtime;

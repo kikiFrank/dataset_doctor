@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ProtocExe,
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [Parameter(Mandatory = $true)][string]$UvExe,
-    [switch]$Generate
+    [switch]$Generate,
+    [string]$CocoReaderPythonExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +64,12 @@ $PSNativeCommandUseErrorActionPreference = $false
 & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test core_claim_loopback --test worker_geometry --test worker_process --test workspace_geometry --test review_draft --test review_final -- --nocapture 2>&1 |
+$tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_process',
+    '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final')
+if ($CocoReaderPythonExe) {
+    $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path
+    $tests += @('--test', 'coco_export')
+}
+& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc @tests -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log') -Append
 exit $LASTEXITCODE

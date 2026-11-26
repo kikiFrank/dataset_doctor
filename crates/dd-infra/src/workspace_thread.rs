@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 
 use dd_core::execution_grant::{ClaimReceipt, GrantScope};
 use dd_core::workspace::{
-    WorkspaceAccess, WorkspaceAccessError, WorkspaceDirectoryGrant, WorkspaceSession,
+    WorkspaceAccess, WorkspaceAccessError, WorkspaceDirectoryGrant, WorkspaceDirectoryPurpose,
+    WorkspaceSession,
 };
 use uuid::Uuid;
 
@@ -73,8 +74,13 @@ impl Error for WorkspaceThreadError {
 
 enum Request {
     Grant(PathBuf, AccessReply<WorkspaceDirectoryGrant>),
-    GrantImport(Uuid, PathBuf, AccessReply<WorkspaceDirectoryGrant>),
-    ConsumeImport(Uuid, Uuid, AccessReply<PathBuf>),
+    GrantDirectory(
+        Uuid,
+        WorkspaceDirectoryPurpose,
+        PathBuf,
+        AccessReply<WorkspaceDirectoryGrant>,
+    ),
+    ConsumeDirectory(Uuid, WorkspaceDirectoryPurpose, Uuid, AccessReply<PathBuf>),
     Open(Uuid, AccessReply<WorkspaceSession>),
     Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
@@ -107,16 +113,18 @@ impl WorkspaceThread {
                             let _ =
                                 reply.send(access.grant_selected_directory(path, Instant::now()));
                         }
-                        Request::GrantImport(session, path, reply) => {
-                            let _ = reply.send(access.grant_import_directory(
+                        Request::GrantDirectory(session, purpose, path, reply) => {
+                            let _ = reply.send(access.grant_for(
                                 session,
+                                purpose,
                                 path,
                                 Instant::now(),
                             ));
                         }
-                        Request::ConsumeImport(session, grant, reply) => {
-                            let _ = reply.send(access.consume_import_directory(
+                        Request::ConsumeDirectory(session, purpose, grant, reply) => {
+                            let _ = reply.send(access.consume_for(
                                 session,
+                                purpose,
                                 grant,
                                 Instant::now(),
                             ));
@@ -164,7 +172,32 @@ impl WorkspaceThread {
         session: Uuid,
         selected: PathBuf,
     ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
-        self.request(|reply| Request::GrantImport(session, selected, reply))?
+        self.grant_directory(session, WorkspaceDirectoryPurpose::Import, selected)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub fn grant_export_directory(
+        &self,
+        session: Uuid,
+        selected: PathBuf,
+    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
+        let selected = selected
+            .canonicalize()
+            .ok()
+            .filter(|path| path.is_dir())
+            .ok_or(WorkspaceThreadError::Access(
+                WorkspaceAccessError::InvalidSelection,
+            ))?;
+        self.grant_directory(session, WorkspaceDirectoryPurpose::Export, selected)
+    }
+
+    fn grant_directory(
+        &self,
+        session: Uuid,
+        purpose: WorkspaceDirectoryPurpose,
+        selected: PathBuf,
+    ) -> Result<WorkspaceDirectoryGrant, WorkspaceThreadError> {
+        self.request(|reply| Request::GrantDirectory(session, purpose, selected, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 
@@ -173,7 +206,25 @@ impl WorkspaceThread {
         session: Uuid,
         grant: Uuid,
     ) -> Result<PathBuf, WorkspaceThreadError> {
-        self.request(|reply| Request::ConsumeImport(session, grant, reply))?
+        self.consume_directory(session, WorkspaceDirectoryPurpose::Import, grant)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn consume_export_directory(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.consume_directory(session, WorkspaceDirectoryPurpose::Export, grant)
+    }
+
+    fn consume_directory(
+        &self,
+        session: Uuid,
+        purpose: WorkspaceDirectoryPurpose,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.request(|reply| Request::ConsumeDirectory(session, purpose, grant, reply))?
             .map_err(WorkspaceThreadError::Access)
     }
 
@@ -252,6 +303,8 @@ impl WorkspaceThread {
         asset: Uuid,
         now_ms: i64,
     ) -> Result<ReviewSession, WorkspaceThreadError> {
+        #[cfg(feature = "execution-rpc")]
+        let _guard = self.lock_final_operations()?;
         self.workspace_action(session, move |workspace| {
             workspace
                 .open_review(dataset, asset, now_ms)

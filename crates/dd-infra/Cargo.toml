@@ -128,5 +128,10 @@ path = "../../tests/integration/rpc/review_final.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "coco_export"
+path = "../../tests/integration/rpc/coco_export.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "task_store"
 path = "../../tests/storage/tasks/task_store.rs"

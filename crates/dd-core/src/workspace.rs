@@ -101,7 +101,13 @@ impl DirectorySelection {
 struct ActiveWorkspace<H> {
     session: WorkspaceSession,
     handle: H,
-    import_directories: HashMap<Uuid, DirectorySelection>,
+    directory_grants: HashMap<(WorkspaceDirectoryPurpose, Uuid), DirectorySelection>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum WorkspaceDirectoryPurpose {
+    Import,
+    Export,
 }
 
 pub struct WorkspaceAccess<S: WorkspaceStore> {
@@ -152,17 +158,27 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         selected: PathBuf,
         now: Instant,
     ) -> Result<WorkspaceDirectoryGrant, WorkspaceAccessError<S::Error>> {
+        self.grant_for(session, WorkspaceDirectoryPurpose::Import, selected, now)
+    }
+
+    pub fn grant_for(
+        &mut self,
+        session: Uuid,
+        purpose: WorkspaceDirectoryPurpose,
+        selected: PathBuf,
+        now: Instant,
+    ) -> Result<WorkspaceDirectoryGrant, WorkspaceAccessError<S::Error>> {
         if !selected.is_absolute() {
             return Err(WorkspaceAccessError::InvalidSelection);
         }
         let lifetime = self.grant_lifetime;
         let active = self.active_for_session(session)?;
         active
-            .import_directories
+            .directory_grants
             .retain(|_, grant| !grant.expired(now, lifetime));
         let grant_id = Uuid::new_v4();
-        active.import_directories.insert(
-            grant_id,
+        active.directory_grants.insert(
+            (purpose, grant_id),
             DirectorySelection {
                 root: selected.clone(),
                 issued_at: now,
@@ -180,11 +196,21 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         grant_id: Uuid,
         now: Instant,
     ) -> Result<PathBuf, WorkspaceAccessError<S::Error>> {
+        self.consume_for(session, WorkspaceDirectoryPurpose::Import, grant_id, now)
+    }
+
+    pub fn consume_for(
+        &mut self,
+        session: Uuid,
+        purpose: WorkspaceDirectoryPurpose,
+        grant_id: Uuid,
+        now: Instant,
+    ) -> Result<PathBuf, WorkspaceAccessError<S::Error>> {
         let lifetime = self.grant_lifetime;
         let active = self.active_for_session(session)?;
         let selection = active
-            .import_directories
-            .remove(&grant_id)
+            .directory_grants
+            .remove(&(purpose, grant_id))
             .ok_or(WorkspaceAccessError::NotAuthorized)?;
         if selection.expired(now, lifetime) {
             return Err(WorkspaceAccessError::ExpiredGrant);
@@ -252,7 +278,7 @@ impl<S: WorkspaceStore> WorkspaceAccess<S> {
         self.active = Some(ActiveWorkspace {
             session: session.clone(),
             handle,
-            import_directories: HashMap::new(),
+            directory_grants: HashMap::new(),
         });
         session
     }
