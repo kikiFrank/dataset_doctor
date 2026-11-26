@@ -282,6 +282,11 @@ path = "../../tests/integration/rpc/workspace_dataset_profile.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workflow_profile"
+path = "../../tests/integration/rpc/workflow_profile.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "workspace_video_tracking"
 path = "../../tests/integration/rpc/workspace_video_tracking.rs"
 required-features = ["execution-rpc"]

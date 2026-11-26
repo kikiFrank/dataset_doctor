@@ -80,7 +80,7 @@ $PSNativeCommandUseErrorActionPreference = $false
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_process',
-    '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile',
+    '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile', '--test', 'workflow_profile',
     '--test', 'worker_color_preview', '--test', 'workspace_color_preview', '--test', 'workspace_color_apply',
     '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final',
     '--test', 'workspace_backup_task')

@@ -1,6 +1,10 @@
 //! Persist the Core's planning run and bind accepted plans to frozen input.
 
 mod adjustment;
+#[cfg(feature = "execution-rpc")]
+mod profile;
+#[cfg(feature = "execution-rpc")]
+pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -22,13 +26,14 @@ use uuid::Uuid;
 use crate::input_fingerprint::freeze_input_manifest;
 use crate::json::{JsonContracts, JsonProfile};
 use crate::paths::{is_portable_relative_file, open_scoped_file};
-use crate::sqlite::row_uuid;
+use crate::sqlite::{decode_uuid, row_uuid};
 use crate::task_store::{TaskSubmission, enqueue_task_in, format_digest};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 const OPERATION: &str = "WORKFLOW_PLAN_PREVIEW";
 const CAPABILITY: &str = "workflow_plan_preview.v1";
 const PLANNING_NODE: &str = "plan";
+const PROFILE_NODE: &str = "dataset_profile";
 const MANIFEST_LIMIT: u64 = 64 * 1024 * 1024;
 
 pub struct WorkflowDraftRequest {
@@ -52,6 +57,8 @@ pub struct PlanRef {
 pub enum WorkflowStatus {
     Draft,
     Ready,
+    Running,
+    Interrupted,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -71,6 +78,13 @@ pub struct WorkflowSnapshot {
     pub plan_source: Option<PlanSource>,
     pub not_executed: BTreeMap<Step, DefaultSkipReason>,
     pub adjustments: Vec<AdjustmentRecord>,
+    pub profile_task: Option<WorkflowTaskSnapshot>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct WorkflowTaskSnapshot {
+    pub task_id: Uuid,
+    pub status: String,
 }
 
 #[derive(Debug)]
@@ -80,6 +94,7 @@ pub enum WorkflowError {
     Json(serde_json::Error),
     Plan(PlanError),
     Adjustment(AdjustmentError),
+    Execution(Box<dyn Error + Send + Sync>),
     ExecutionControlRequired,
     InputChanged,
     InvalidInputScope,
@@ -97,6 +112,7 @@ impl fmt::Display for WorkflowError {
             Self::Json(error) => write!(formatter, "Encode or read a workflow plan: {error}"),
             Self::Plan(error) => error.fmt(formatter),
             Self::Adjustment(error) => error.fmt(formatter),
+            Self::Execution(error) => write!(formatter, "Prepare workflow execution: {error}"),
             Self::ExecutionControlRequired => {
                 formatter.write_str("The adjustment requires an executing workflow node")
             }
@@ -189,6 +205,7 @@ struct RowData {
     row_revision: i64,
     input_path: String,
     plan_json: String,
+    profile_task: Option<WorkflowTaskSnapshot>,
 }
 
 impl WorkflowStore {
@@ -403,14 +420,25 @@ impl WorkflowStore {
     }
 
     pub fn get(&self, session: Uuid, run: Uuid) -> Result<WorkflowSnapshot, WorkflowError> {
-        let row = self.read_row(session, run)?;
+        let mut row = self.read_row(session, run)?;
+        if row.status == "RUNNING" && row.session != session {
+            self.interrupt_ended_session(session, run)?;
+            row = self.read_row(session, run)?;
+        }
         let plan = row.plan()?;
-        let status = match (row.status.as_str(), plan.plan_revision, plan.plan.is_some()) {
-            ("DRAFT", 0, false) => WorkflowStatus::Draft,
-            ("READY", revision, true) if revision > 0 => WorkflowStatus::Ready,
+        let status = match (
+            row.status.as_str(),
+            plan.plan_revision,
+            plan.plan.is_some(),
+            row.profile_task.is_some(),
+        ) {
+            ("DRAFT", 0, false, false) => WorkflowStatus::Draft,
+            ("READY", revision, true, false) if revision > 0 => WorkflowStatus::Ready,
+            ("RUNNING", revision, true, true) if revision > 0 => WorkflowStatus::Running,
+            ("INTERRUPTED", revision, true, true) if revision > 0 => WorkflowStatus::Interrupted,
             _ => return Err(WorkflowError::InvalidRecord),
         };
-        let plan_ref = if status == WorkflowStatus::Ready {
+        let plan_ref = if status != WorkflowStatus::Draft {
             Some(plan.reference(row.run_id)?)
         } else {
             None
@@ -421,11 +449,49 @@ impl WorkflowStore {
             status,
             row_revision: row.revision()?,
             plan_ref,
-            plan_source: (status == WorkflowStatus::Ready)
+            plan_source: (status != WorkflowStatus::Draft)
                 .then(|| plan.plan_source.unwrap_or(PlanSource::Proposed)),
             not_executed: plan.not_executed,
             adjustments: plan.adjustments,
+            profile_task: row.profile_task,
         })
+    }
+
+    fn interrupt_ended_session(&self, session: Uuid, run: Uuid) -> Result<(), WorkflowError> {
+        self.owner
+            .workspace_action(session, move |owner| {
+                let transaction = owner.connection.transaction().map_err(database)?;
+                let workflow = run.to_string();
+                let session = session.to_string();
+                let now: i64 = transaction
+                    .query_row(
+                        "SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER)",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .map_err(database)?;
+                let interrupted = transaction
+                    .execute(
+                        "UPDATE workflow_runs SET status='INTERRUPTED',error_code='SESSION_ENDED',
+                    updated_at_ms=?3,row_revision=row_revision+1
+                 WHERE workflow_run_id=?1 AND workspace_session_id<>?2 AND status='RUNNING'",
+                        params![&workflow, &session, now],
+                    )
+                    .map_err(database)?;
+                if interrupted == 1 {
+                    transaction
+                        .execute(
+                            "UPDATE tasks SET status='INTERRUPTED',error_code='SESSION_ENDED',
+                        finished_at_ms=?4,updated_at_ms=?4,row_revision=row_revision+1
+                     WHERE workflow_run_id=?1 AND workspace_session_id<>?2 AND node_id=?3
+                       AND status IN ('QUEUED','DISPATCHING','RUNNING','CANCELLING')",
+                            params![&workflow, &session, PROFILE_NODE, now],
+                        )
+                        .map_err(database)?;
+                }
+                transaction.commit().map_err(database)
+            })
+            .map_err(WorkflowError::Storage)
     }
 
     pub fn validate_ready(
@@ -455,11 +521,12 @@ impl WorkflowStore {
         self.owner.workspace_action(session, move |owner| {
             owner.connection.query_row(
                 "SELECT w.workflow_run_id,w.dataset_id,w.workspace_session_id,w.template_key,w.status,w.row_revision,
-                        w.input_manifest_path,w.plan_json,t.task_id
+                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status
                  FROM workflow_runs w JOIN tasks t ON t.workflow_run_id=w.workflow_run_id AND t.node_id=?3
                     AND t.operation_kind=w.operation_kind
+                 LEFT JOIN tasks p ON p.workflow_run_id=w.workflow_run_id AND p.node_id=?4
                  WHERE w.workflow_run_id=?1 AND w.operation_kind=?2 AND w.plan_kind='template_instance'",
-                params![run.to_string(),OPERATION,PLANNING_NODE], decode_row,
+                params![run.to_string(),OPERATION,PLANNING_NODE,PROFILE_NODE], decode_row,
             ).optional().map_err(database)
         }).map_err(WorkflowError::Storage)?.ok_or(WorkflowError::UnknownRun)
     }
@@ -484,6 +551,17 @@ impl WorkflowStore {
         path: &str,
         proof: &InputProof,
     ) -> Result<WorkflowInput, WorkflowError> {
+        self.verify_input_manifest(session, dataset, path, proof)
+            .map(|(input, _)| input)
+    }
+
+    fn verify_input_manifest(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        path: &str,
+        proof: &InputProof,
+    ) -> Result<(WorkflowInput, serde_json::Value), WorkflowError> {
         let path = Path::new(path);
         path_text(path)?;
         let root = self
@@ -567,11 +645,14 @@ impl WorkflowStore {
                 return Err(WorkflowError::InputChanged);
             }
         }
-        Ok(WorkflowInput {
-            kind: proof.scope,
-            manifest_id: proof.manifest_id,
-            fingerprint: canonical.input_fingerprint,
-        })
+        Ok((
+            WorkflowInput {
+                kind: proof.scope,
+                manifest_id: proof.manifest_id,
+                fingerprint: canonical.input_fingerprint,
+            },
+            parsed,
+        ))
     }
 }
 
@@ -650,6 +731,13 @@ impl PlanBody {
 }
 
 fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
+    let profile_task = match row.get::<_, Option<String>>(9)? {
+        Some(id) => Some(WorkflowTaskSnapshot {
+            task_id: decode_uuid(&id, 9)?,
+            status: row.get(10)?,
+        }),
+        None => None,
+    };
     Ok(RowData {
         run_id: row_uuid(row, 0)?,
         planning_task_id: row_uuid(row, 8)?,
@@ -660,6 +748,7 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
         row_revision: row.get(5)?,
         input_path: row.get(6)?,
         plan_json: row.get(7)?,
+        profile_task,
     })
 }
 

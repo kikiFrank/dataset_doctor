@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::dataset_query::{DatasetQueryError, RegisteredInputFile};
-use crate::input_fingerprint::freeze_input_manifest;
+use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
 use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
 use crate::task_store::{StoredTask, TaskOutcome, TaskStoreError, TaskSubmission, format_digest};
@@ -50,6 +50,32 @@ impl DatasetProfileJob {
 
 pub struct DatasetProfileRuntime {
     runtime: WorkerRuntime,
+}
+
+pub(crate) struct PreparedDatasetProfile {
+    pub(crate) submission: TaskSubmission,
+    frozen: FrozenInputManifest,
+    parameters: DatasetProfileInput,
+}
+
+impl PreparedDatasetProfile {
+    pub(crate) fn manifest_bytes(&self) -> &[u8] {
+        &self.frozen.bytes
+    }
+
+    pub(crate) fn into_job(self, task: StoredTask) -> DatasetProfileJob {
+        DatasetProfileJob {
+            session: self.submission.workspace_session,
+            worker_job: WorkerJob {
+                task: task.task_id,
+                input_fingerprint: self.frozen.input_fingerprint,
+                manifest_sha: self.frozen.sha256,
+                manifest_size: self.frozen.bytes.len() as u64,
+                operation: WorkerOperation::DatasetProfile(self.parameters),
+            },
+            task,
+        }
+    }
 }
 
 impl DatasetProfileRuntime {
@@ -87,8 +113,18 @@ impl DatasetProfileRuntime {
     pub fn admit(
         workspace: &WorkspaceThread,
         session: Uuid,
-        mut request: DatasetProfileRequest,
+        request: DatasetProfileRequest,
     ) -> Result<DatasetProfileJob, DatasetProfileError> {
+        let prepared = Self::prepare(workspace, session, request)?;
+        let task = workspace.enqueue_task(prepared.submission.clone(), now_ms()?)?;
+        Ok(prepared.into_job(task))
+    }
+
+    pub(crate) fn prepare(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        mut request: DatasetProfileRequest,
+    ) -> Result<PreparedDatasetProfile, DatasetProfileError> {
         request.asset_ids.sort_unstable();
         if request.max_pixels == 0 || request.asset_ids.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(DatasetProfileError::InvalidBinding);
@@ -166,36 +202,26 @@ impl DatasetProfileRuntime {
         let mut request_fingerprint = Sha256::new();
         request_fingerprint.update(b"datasetdoctor.task.dataset-profile.v1\0");
         request_fingerprint.update(frozen.input_fingerprint);
-        let task = workspace.enqueue_task(
-            TaskSubmission {
-                workspace_session: session,
-                dataset_id: Some(dataset_id),
-                request_id: request.request_id,
-                idempotency_key: request.idempotency_key,
-                operation_kind: OPERATION.into(),
-                capability_id: CAPABILITY.into(),
-                input_manifest_path: manifest_path,
-                request_fingerprint: request_fingerprint.finalize().into(),
-                input_fingerprint: frozen.input_fingerprint,
-            },
-            now_ms()?,
-        )?;
-        let worker_job = WorkerJob {
-            task: task.task_id,
+        let submission = TaskSubmission {
+            workspace_session: session,
+            dataset_id: Some(dataset_id),
+            request_id: request.request_id,
+            idempotency_key: request.idempotency_key,
+            operation_kind: OPERATION.into(),
+            capability_id: CAPABILITY.into(),
+            input_manifest_path: manifest_path,
+            request_fingerprint: request_fingerprint.finalize().into(),
             input_fingerprint: frozen.input_fingerprint,
-            manifest_sha: frozen.sha256,
-            manifest_size: frozen.bytes.len() as u64,
-            operation: WorkerOperation::DatasetProfile(DatasetProfileInput {
+        };
+        Ok(PreparedDatasetProfile {
+            submission,
+            frozen,
+            parameters: DatasetProfileInput {
                 assets,
                 input_manifest: Some(input_manifest),
                 max_pixels: u64::from(request.max_pixels),
                 ..Default::default()
-            }),
-        };
-        Ok(DatasetProfileJob {
-            session,
-            task,
-            worker_job,
+            },
         })
     }
 
