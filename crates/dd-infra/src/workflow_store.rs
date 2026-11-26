@@ -4,11 +4,18 @@ mod adjustment;
 #[cfg(feature = "execution-rpc")]
 mod geometry;
 #[cfg(feature = "execution-rpc")]
+mod local_runner;
+#[cfg(feature = "execution-rpc")]
 mod profile;
 #[cfg(feature = "execution-rpc")]
 mod report;
 #[cfg(feature = "execution-rpc")]
 pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
+#[cfg(feature = "execution-rpc")]
+pub use local_runner::{
+    LocalHealthcheckAcceptance, LocalHealthcheckJob, LocalHealthcheckRequest,
+    LocalHealthcheckRuntime,
+};
 #[cfg(feature = "execution-rpc")]
 pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
 #[cfg(feature = "execution-rpc")]
@@ -70,6 +77,7 @@ pub enum WorkflowStatus {
     Running,
     Interrupted,
     WaitingReview,
+    Failed,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -92,6 +100,7 @@ pub struct WorkflowSnapshot {
     pub profile_task: Option<WorkflowTaskSnapshot>,
     pub geometry_tasks: Vec<WorkflowGeometryTask>,
     pub report_task_id: Option<Uuid>,
+    pub error_code: Option<String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -234,6 +243,7 @@ struct RowData {
     node_states_json: String,
     geometry_tasks: Vec<WorkflowGeometryTask>,
     report_task_id: Option<Uuid>,
+    error_code: Option<String>,
 }
 
 impl WorkflowStore {
@@ -470,6 +480,7 @@ impl WorkflowStore {
             ("WAITING_REVIEW", revision, true, true, true) if revision > 0 => {
                 WorkflowStatus::WaitingReview
             }
+            ("FAILED", revision, true, true, false) if revision > 0 => WorkflowStatus::Failed,
             _ => return Err(WorkflowError::InvalidRecord),
         };
         let plan_ref = if status != WorkflowStatus::Draft {
@@ -490,6 +501,7 @@ impl WorkflowStore {
             profile_task: row.profile_task,
             geometry_tasks: row.geometry_tasks,
             report_task_id: row.report_task_id,
+            error_code: row.error_code,
         })
     }
 
@@ -557,7 +569,7 @@ impl WorkflowStore {
         self.owner.workspace_action(session, move |owner| {
             let mut record = owner.connection.query_row(
                 "SELECT w.workflow_run_id,w.dataset_id,w.workspace_session_id,w.template_key,w.status,w.row_revision,
-                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status,w.node_states_json,r.task_id
+                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status,w.node_states_json,r.task_id,w.error_code
                  FROM workflow_runs w JOIN tasks t ON t.workflow_run_id=w.workflow_run_id AND t.node_id=?3
                     AND t.operation_kind=w.operation_kind
                  LEFT JOIN tasks p ON p.workflow_run_id=w.workflow_run_id AND p.node_id=?4
@@ -809,6 +821,7 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
             .as_deref()
             .map(|id| decode_uuid(id, 12))
             .transpose()?,
+        error_code: row.get(13)?,
     })
 }
 
