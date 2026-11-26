@@ -13,6 +13,7 @@ use dd_core::workspace::{
 };
 use uuid::Uuid;
 
+use crate::import_registration::{ImportRegistration, ImportRegistrationError, PreparedImport};
 #[cfg(feature = "execution-rpc")]
 use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskStoreError, TaskSubmission};
@@ -21,13 +22,14 @@ use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError
 const QUEUE_CAPACITY: usize = 8;
 type AccessError = WorkspaceAccessError<WorkspaceOpenError>;
 type AccessReply<T> = Sender<Result<T, AccessError>>;
-type TaskAction = Box<dyn FnOnce(&mut WorkspaceAccess<SqliteWorkspaceStore>) + Send>;
+type WorkspaceAction = Box<dyn FnOnce(&mut WorkspaceAccess<SqliteWorkspaceStore>) + Send>;
 
 #[derive(Debug)]
 pub enum WorkspaceThreadError {
     Startup(Box<dyn Error + Send + Sync>),
     Access(AccessError),
     Task(TaskStoreError),
+    Import(ImportRegistrationError),
     Busy,
     Stopped,
 }
@@ -38,6 +40,7 @@ impl Display for WorkspaceThreadError {
             Self::Startup(error) => write!(formatter, "Workspace thread startup: {error}"),
             Self::Access(error) => Display::fmt(error, formatter),
             Self::Task(error) => Display::fmt(error, formatter),
+            Self::Import(error) => Display::fmt(error, formatter),
             Self::Busy => write!(formatter, "Workspace request queue is full"),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
@@ -50,6 +53,7 @@ impl Error for WorkspaceThreadError {
             Self::Startup(error) => Some(error.as_ref()),
             Self::Access(error) => Some(error),
             Self::Task(error) => Some(error),
+            Self::Import(error) => Some(error),
             _ => None,
         }
     }
@@ -63,7 +67,7 @@ enum Request {
     Create(Uuid, String, i64, AccessReply<WorkspaceSession>),
     Current(Sender<Option<WorkspaceSession>>),
     Close(Uuid, AccessReply<()>),
-    Task(TaskAction),
+    Action(WorkspaceAction),
 }
 
 pub struct WorkspaceThread {
@@ -115,7 +119,7 @@ impl WorkspaceThread {
                         Request::Close(id, reply) => {
                             let _ = reply.send(access.close(id));
                         }
-                        Request::Task(action) => action(&mut access),
+                        Request::Action(action) => action(&mut access),
                     }
                 }
             })
@@ -275,12 +279,35 @@ impl WorkspaceThread {
         session: Uuid,
         execute: impl FnOnce(&mut OpenedWorkspace) -> Result<T, TaskStoreError> + Send + 'static,
     ) -> Result<T, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            execute(workspace).map_err(WorkspaceThreadError::Task)
+        })
+    }
+
+    pub(crate) fn commit_import(
+        &self,
+        session: Uuid,
+        prepared: PreparedImport,
+        now_ms: i64,
+    ) -> Result<ImportRegistration, WorkspaceThreadError> {
+        self.workspace_action(session, move |workspace| {
+            workspace
+                .commit_import(prepared, now_ms)
+                .map_err(WorkspaceThreadError::Import)
+        })
+    }
+
+    fn workspace_action<T: Send + 'static>(
+        &self,
+        session: Uuid,
+        execute: impl FnOnce(&mut OpenedWorkspace) -> Result<T, WorkspaceThreadError> + Send + 'static,
+    ) -> Result<T, WorkspaceThreadError> {
         self.request(|reply| {
-            Request::Task(Box::new(move |access| {
+            Request::Action(Box::new(move |access| {
                 let result = access
                     .active_handle(session)
                     .map_err(WorkspaceThreadError::Access)
-                    .and_then(|workspace| execute(workspace).map_err(WorkspaceThreadError::Task));
+                    .and_then(execute);
                 let _ = reply.send(result);
             }))
         })?

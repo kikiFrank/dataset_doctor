@@ -48,7 +48,7 @@ impl Error for ImportRegistrationError {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImportRegistration {
     pub dataset_id: String,
     pub asset_count: usize,
@@ -58,6 +58,76 @@ pub struct ImportRegistration {
 struct DatasetCategory<'a> {
     id: usize,
     name: &'a str,
+}
+
+pub(crate) struct PreparedImport {
+    name: String,
+    categories_json: String,
+    assets: Vec<PreparedAsset>,
+}
+
+struct PreparedAsset {
+    image_path: String,
+    name: String,
+    media_sha256: String,
+    annotation: Option<PreparedAnnotation>,
+}
+
+struct PreparedAnnotation {
+    path: String,
+    sha256: String,
+    local_image_id: i64,
+}
+
+pub(crate) fn prepare_registration(
+    contracts: &JsonContracts,
+    dataset_name: &str,
+    preview: &ImportPreview,
+) -> Result<PreparedImport, ImportRegistrationError> {
+    if dataset_name.trim().is_empty() {
+        return Err(ImportRegistrationError::InvalidDatasetName);
+    }
+    let selected: Vec<_> = preview
+        .inputs
+        .iter()
+        .map(|input| input.image.clone())
+        .collect();
+    let current = inspect_single_image_coco(&preview.root, contracts, &selected)
+        .map_err(ImportRegistrationError::Source)?;
+    if &current != preview {
+        return Err(ImportRegistrationError::InputChanged);
+    }
+
+    let mut names = BTreeSet::new();
+    for input in &current.inputs {
+        match &input.annotation {
+            Annotation::Missing => {}
+            Annotation::Reference { categories, .. } => {
+                names.extend(categories.iter().map(|category| category.name.as_str()));
+            }
+            Annotation::Blocked(_) => return Err(ImportRegistrationError::BlockedInput),
+        }
+    }
+    let categories: Vec<_> = names
+        .into_iter()
+        .enumerate()
+        .map(|(index, name)| DatasetCategory {
+            id: index + 1,
+            name,
+        })
+        .collect();
+    let categories_json =
+        serde_json::to_string(&categories).map_err(ImportRegistrationError::Categories)?;
+    let assets = current
+        .inputs
+        .into_iter()
+        .map(|input| prepare_asset(&current.root, input))
+        .collect::<Result<_, _>>()?;
+    Ok(PreparedImport {
+        name: dataset_name.trim().into(),
+        categories_json,
+        assets,
+    })
 }
 
 impl OpenedWorkspace {
@@ -70,40 +140,17 @@ impl OpenedWorkspace {
         preview: &ImportPreview,
         now_ms: i64,
     ) -> Result<ImportRegistration, ImportRegistrationError> {
-        if dataset_name.trim().is_empty() {
-            return Err(ImportRegistrationError::InvalidDatasetName);
-        }
-        let selected: Vec<_> = preview
-            .inputs
-            .iter()
-            .map(|input| input.image.clone())
-            .collect();
-        let current = inspect_single_image_coco(&preview.root, contracts, &selected)
-            .map_err(ImportRegistrationError::Source)?;
-        if &current != preview {
-            return Err(ImportRegistrationError::InputChanged);
-        }
+        self.commit_import(
+            prepare_registration(contracts, dataset_name, preview)?,
+            now_ms,
+        )
+    }
 
-        let mut names = BTreeSet::new();
-        for input in &current.inputs {
-            match &input.annotation {
-                Annotation::Missing => {}
-                Annotation::Reference { categories, .. } => {
-                    names.extend(categories.iter().map(|category| category.name.as_str()));
-                }
-                Annotation::Blocked(_) => return Err(ImportRegistrationError::BlockedInput),
-            }
-        }
-        let categories: Vec<_> = names
-            .into_iter()
-            .enumerate()
-            .map(|(index, name)| DatasetCategory {
-                id: index + 1,
-                name,
-            })
-            .collect();
-        let categories_json =
-            serde_json::to_string(&categories).map_err(ImportRegistrationError::Categories)?;
+    pub(crate) fn commit_import(
+        &mut self,
+        prepared: PreparedImport,
+        now_ms: i64,
+    ) -> Result<ImportRegistration, ImportRegistrationError> {
         let dataset_id = Uuid::new_v4().to_string();
         let transaction = self
             .connection
@@ -112,58 +159,76 @@ impl OpenedWorkspace {
         transaction.execute(
             "INSERT INTO datasets (dataset_id, name, categories_json, created_at_ms, updated_at_ms)
              VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![dataset_id, dataset_name.trim(), categories_json, now_ms],
+            params![dataset_id, prepared.name, prepared.categories_json, now_ms],
         ).map_err(ImportRegistrationError::Database)?;
-        for input in &current.inputs {
-            register_asset(&transaction, &current.root, &dataset_id, input, now_ms)?;
+        let asset_count = prepared.assets.len();
+        for asset in prepared.assets {
+            register_asset(&transaction, &dataset_id, asset, now_ms)?;
         }
         transaction
             .commit()
             .map_err(ImportRegistrationError::Database)?;
         Ok(ImportRegistration {
             dataset_id,
-            asset_count: current.inputs.len(),
+            asset_count,
         })
     }
 }
 
-fn register_asset(
-    transaction: &Transaction<'_>,
+fn prepare_asset(
     root: &Path,
-    dataset_id: &str,
-    input: &ImportInput,
-    now_ms: i64,
-) -> Result<(), ImportRegistrationError> {
-    let asset_id = Uuid::new_v4().to_string();
+    input: ImportInput,
+) -> Result<PreparedAsset, ImportRegistrationError> {
     let image_path = binding(root, &input.image)?;
     let name = input
         .image
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or(ImportRegistrationError::InputChanged)?;
-    let media = input
+        .ok_or(ImportRegistrationError::InputChanged)?
+        .to_owned();
+    let media_sha256 = input
         .media_sha256
-        .as_deref()
         .ok_or(ImportRegistrationError::BlockedInput)?;
+    let annotation = match input.annotation {
+        Annotation::Missing => None,
+        Annotation::Reference {
+            path,
+            sha256,
+            local_image_id,
+            ..
+        } => Some(PreparedAnnotation {
+            path: binding(root, &path)?,
+            sha256,
+            local_image_id: i64::try_from(local_image_id)
+                .map_err(|_| ImportRegistrationError::BlockedInput)?,
+        }),
+        Annotation::Blocked(_) => return Err(ImportRegistrationError::BlockedInput),
+    };
+    Ok(PreparedAsset {
+        image_path,
+        name,
+        media_sha256,
+        annotation,
+    })
+}
+
+fn register_asset(
+    transaction: &Transaction<'_>,
+    dataset_id: &str,
+    asset: PreparedAsset,
+    now_ms: i64,
+) -> Result<(), ImportRegistrationError> {
+    let asset_id = Uuid::new_v4().to_string();
     let (annotation_path, format, origin, local_image_id, annotation_digest) =
-        match &input.annotation {
-            Annotation::Missing => (None, None, "NONE", None, None),
-            Annotation::Reference {
-                path,
-                sha256,
-                local_image_id,
-                ..
-            } => (
-                Some(binding(root, path)?),
+        match asset.annotation {
+            Some(annotation) => (
+                Some(annotation.path),
                 Some("COCO_IMAGE_BBOX"),
                 "PREEXISTING",
-                Some(
-                    i64::try_from(*local_image_id)
-                        .map_err(|_| ImportRegistrationError::BlockedInput)?,
-                ),
-                Some(sha256.as_str()),
+                Some(annotation.local_image_id),
+                Some(annotation.sha256),
             ),
-            Annotation::Blocked(_) => return Err(ImportRegistrationError::BlockedInput),
+            None => (None, None, "NONE", None, None),
         };
     transaction
         .execute(
@@ -174,13 +239,13 @@ fn register_asset(
          VALUES (?1, 'IMAGE', 'EXTERNAL', ?2, ?3, 'IMPORTED', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
             params![
                 asset_id,
-                image_path,
-                name,
+                asset.image_path,
+                asset.name,
                 annotation_path,
                 format,
                 origin,
                 local_image_id,
-                media,
+                asset.media_sha256,
                 annotation_digest,
                 now_ms
             ],

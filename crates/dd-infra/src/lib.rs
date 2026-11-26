@@ -1,5 +1,7 @@
 //! Dataset Doctor infrastructure adapters.
 
+pub mod dataset_import;
+
 #[cfg(feature = "execution-rpc")]
 pub mod artifact_manifest;
 #[cfg(feature = "execution-rpc")]
