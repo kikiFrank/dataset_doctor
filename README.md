@@ -10,6 +10,17 @@ Local-first desktop application for computer-vision dataset quality governance. 
 - [实施任务与验收](docs/development/implementation_spec_and_tasks.md)
 - [Rig SDK 测试报告](docs/testing/rig_sdk_validation.md)
 
+## Windows 工具链预检（P00-01）
+
+在仓库根目录运行以下命令。从其他目录运行时，将脚本参数换成完整路径。
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -File .\scripts\check-toolchain.ps1
+$LASTEXITCODE
+```
+
+预检读取当前进程 PATH，只查询可直接运行的本地工具。退出码 `0` 表示清单已核实且满足 Node 24 和 CPython 3.12 系列目标，`1` 表示有缺失、版本偏离或未核实项。完整 P00 还需验证工具链锁定与 Worker 打包。
+
 ## 已有可执行验证
 
 ```sh
