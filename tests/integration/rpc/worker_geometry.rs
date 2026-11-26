@@ -97,17 +97,13 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         output_directory: output.to_str().unwrap().into(),
         max_pixels: 100,
     };
-    let mut operation = Sha256::new();
-    operation.update(b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0");
-    operation.update(input.encode_to_vec());
-    let operation_digest = operation.finalize();
     let scope = GrantScope {
         workspace_session: session,
         task: task.task_id,
         attempt,
         executor_session: executor,
         input_fingerprint,
-        operation_digest: operation_digest.into(),
+        operation_digest: geometry_digest(&input),
         reservation: Uuid::new_v4(),
     };
     let grant = grants
@@ -130,6 +126,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
                         core,
                         pending: AtomicBool::new(true),
                         pending_report: AtomicBool::new(true),
+                        pending_failure: AtomicBool::new(true),
                     },
                 ),
             )
@@ -199,7 +196,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         .into_inner();
     assert_eq!(
         client
-            .start_annotation_geometry_audit(authorized(request, worker_key))
+            .start_annotation_geometry_audit(authorized(request.clone(), worker_key))
             .await
             .unwrap()
             .into_inner(),
@@ -287,6 +284,69 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         verify_task_result_manifest(&output, &contracts, &stale, &manifest_ref),
         Err(ArtifactValidationError::ScopeMismatch)
     ));
+    let changed = prepare_changed_source(&thread, &grants, &root, request);
+    let changed_handle = client
+        .start_annotation_geometry_audit(authorized(changed, worker_key))
+        .await
+        .unwrap()
+        .into_inner();
+    let failure = timeout(TIMEOUT, async {
+        loop {
+            let observed = client
+                .get_execution(authorized(
+                    ExecutionLookup {
+                        task_id: changed_handle.task_id.clone(),
+                        attempt_id: changed_handle.attempt_id.clone(),
+                    },
+                    worker_key,
+                ))
+                .await
+                .unwrap()
+                .into_inner();
+            assert_ne!(
+                observed.status, "SUCCEEDED",
+                "modified source produced an accepted result"
+            );
+            if observed.status == "FAILED" {
+                break observed;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(failure.result_manifest_ref.is_none());
+    {
+        let db = Connection::open_with_flags(
+            root.join("workspace.db"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let (status, code, output, revision): (String, Option<String>, Option<String>, i64) = db
+            .query_row(
+                "SELECT status, error_code, output_manifest_path, row_revision FROM tasks WHERE task_id=?1",
+                [&changed_handle.task_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            status, "FAILED",
+            "Worker observed a failure but Core kept the task running"
+        );
+        assert_eq!(code.as_deref(), Some("INPUT_CHANGED"));
+        assert!(output.is_none());
+        assert_eq!(revision, 4);
+        assert_eq!(failure.error_code, "input_changed");
+        assert!(
+            fs::read_dir(root.join(format!(
+                "artifacts/tasks/{}/{}",
+                changed_handle.task_id, changed_handle.attempt_id
+            )))
+            .unwrap()
+            .next()
+            .is_none()
+        );
+    }
     let mut reporter = wire::core_execution_control_client::CoreExecutionControlClient::connect(
         format!("http://{core_address}"),
     )
@@ -527,12 +587,72 @@ struct DropFirstClaimAck {
     core: CoreClaimService,
     pending: AtomicBool,
     pending_report: AtomicBool,
+    pending_failure: AtomicBool,
 }
 
 struct ReportFixture {
     context: TaskContext,
     execution: ClaimReceipt,
     reference: ArtifactRef,
+}
+
+fn prepare_changed_source(
+    thread: &WorkspaceThread,
+    grants: &Mutex<GrantBook>,
+    root: &Path,
+    mut request: GeometryAuditRequest,
+) -> GeometryAuditRequest {
+    let context = request.context.as_mut().unwrap();
+    let session = Uuid::parse_str(&context.workspace_session_id).unwrap();
+    let executor = Uuid::parse_str(&context.executor_session_id).unwrap();
+    let task = thread
+        .enqueue_task(
+            TaskSubmission {
+                workspace_session: session,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                operation_kind: "ANNOTATION_AUDIT".into(),
+                capability_id: "annotation_geometry.v1".into(),
+                input_manifest_path: "input.json".into(),
+                request_fingerprint: [0x55; 32],
+                input_fingerprint: [0x12; 32],
+            },
+            280,
+        )
+        .unwrap();
+    let attempt = Uuid::new_v4();
+    let output = root.join(format!("artifacts/tasks/{}/{attempt}", task.task_id));
+    fs::create_dir_all(&output).unwrap();
+    let original = root.join("changed-source.png");
+    fs::write(&original, PNG).unwrap();
+    let inputs = request.parameters.as_mut().unwrap();
+    inputs.output_directory = output.to_str().unwrap().into();
+    inputs.image = Some(locator(&original, PNG));
+    let scope = GrantScope {
+        workspace_session: session,
+        task: task.task_id,
+        attempt,
+        executor_session: executor,
+        input_fingerprint: [0x12; 32],
+        operation_digest: geometry_digest(inputs),
+        reservation: Uuid::new_v4(),
+    };
+    let grant = grants
+        .lock()
+        .unwrap()
+        .install(scope.clone(), Instant::now() + TIMEOUT)
+        .unwrap();
+    thread
+        .record_dispatch(scope, grant, [0x34; 32], 290)
+        .unwrap();
+    fs::write(original, b"modified after Core granted the frozen input").unwrap();
+    context.task_id = task.task_id.to_string();
+    context.attempt_id = attempt.to_string();
+    context.grant_id = grant.to_string();
+    request.input_manifest_ref.as_mut().unwrap().owner = Some(
+        wire::artifact_ref::Owner::OwnerTaskId(context.task_id.clone()),
+    );
+    request
 }
 
 async fn prepare_report_fixture(
@@ -660,10 +780,13 @@ impl CoreExecutionControl for DropFirstClaimAck {
         &self,
         request: Request<wire::ReportExecutionRequest>,
     ) -> Result<Response<wire::ReportAck>, Status> {
+        let pending = match request.get_ref().event.as_ref() {
+            Some(ReportEvent::Succeeded(_)) => Some(&self.pending_report),
+            Some(ReportEvent::Failed(_)) => Some(&self.pending_failure),
+            _ => None,
+        };
         let accepted = self.core.report_execution(request).await?;
-        if accepted.get_ref().terminal_receipt.is_some()
-            && self.pending_report.swap(false, Ordering::Relaxed)
-        {
+        if pending.is_some_and(|pending| pending.swap(false, Ordering::Relaxed)) {
             return Err(Status::unavailable(
                 "injected response loss after durable completion",
             ));
@@ -720,6 +843,13 @@ async fn start_worker(
 
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn geometry_digest(input: &GeometryAuditInput) -> [u8; 32] {
+    let mut operation = Sha256::new();
+    operation.update(b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0");
+    operation.update(input.encode_to_vec());
+    operation.finalize().into()
 }
 
 fn locator(path: &Path, bytes: &[u8]) -> WorkerInputFile {

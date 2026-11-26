@@ -40,6 +40,20 @@ message ExecutionSucceeded {
   ArtifactRef result_manifest_ref = 1;
 }
 
+enum ExecutionFailureCode {
+  EXECUTION_FAILURE_CODE_UNSPECIFIED = 0;
+  EXECUTION_FAILURE_CODE_INPUT_CHANGED = 1;
+  EXECUTION_FAILURE_CODE_INVALID_INPUT = 2;
+  EXECUTION_FAILURE_CODE_FILE_IO_FAILED = 3;
+  EXECUTION_FAILURE_CODE_DECODE_FAILED = 4;
+  EXECUTION_FAILURE_CODE_PIXEL_LIMIT_EXCEEDED = 5;
+  EXECUTION_FAILURE_CODE_UNSUPPORTED_FORMAT = 6;
+}
+
+message ExecutionFailed {
+  ExecutionFailureCode code = 1;
+}
+
 message ReportExecutionRequest {
   TaskContext context = 1;
   string execution_event_id = 2;
@@ -49,6 +63,7 @@ message ReportExecutionRequest {
   oneof event {
     ExecutionStarted started = 6;
     ExecutionSucceeded succeeded = 7;
+    ExecutionFailed failed = 8;
   }
 }
 

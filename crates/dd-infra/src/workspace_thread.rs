@@ -223,6 +223,19 @@ impl WorkspaceThread {
         })
     }
 
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn record_failure(
+        &self,
+        scope: ReportScope,
+        event: (Uuid, u64),
+        code: &'static str,
+        now_ms: i64,
+    ) -> Result<TerminalReceipt, WorkspaceThreadError> {
+        self.task(scope.workspace_session, move |workspace| {
+            workspace.record_failure(scope, event, code, now_ms)
+        })
+    }
+
     fn task<T: Send + 'static>(
         &self,
         session: Uuid,

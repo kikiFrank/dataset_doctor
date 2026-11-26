@@ -6,8 +6,9 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use dd_core::execution_grant::{ClaimContext, GrantBook, GrantError};
 use dd_core::workspace::WorkspaceAccessError;
 use dd_protocol::v1::{
-    ClaimGrantRequest, ExecutionHandle, ReportAck, ReportExecutionRequest, TerminalResultReceipt,
-    core_execution_control_server::CoreExecutionControl, report_execution_request::Event,
+    ClaimGrantRequest, ExecutionFailureCode, ExecutionHandle, ReportAck, ReportExecutionRequest,
+    TerminalResultReceipt, core_execution_control_server::CoreExecutionControl,
+    report_execution_request::Event,
 };
 use subtle::ConstantTimeEq;
 use tonic::{Request, Response, Status};
@@ -152,16 +153,15 @@ impl CoreExecutionControl for CoreClaimService {
                     .map_err(|_| Status::internal("Core grant state unavailable"))?
                     .validate_claim(grant, executor, &claim, Instant::now())
                     .map_err(claim_status)?;
-                let directory = workspace
-                    .report_directory(ReportScope {
-                        workspace: workspace_id,
-                        workspace_session: claim.workspace_session,
-                        grant,
-                        execution,
-                        input_fingerprint: claim.input_fingerprint,
-                        node_spec_fingerprint,
-                    })
-                    .map_err(storage_status)?;
+                let scope = ReportScope {
+                    workspace: workspace_id,
+                    workspace_session: claim.workspace_session,
+                    grant,
+                    execution,
+                    input_fingerprint: claim.input_fingerprint,
+                    node_spec_fingerprint,
+                };
+                let directory = workspace.report_directory(scope).map_err(storage_status)?;
                 match event {
                     Event::Started(_) => {
                         workspace
@@ -214,6 +214,30 @@ impl CoreExecutionControl for CoreClaimService {
                             accepted_at: receipt.accepted_at,
                             completion_fingerprint: receipt.completion_fingerprint,
                             result_manifest_ref: Some(reference),
+                        }))
+                    }
+                    Event::Failed(failure) => {
+                        let code = ExecutionFailureCode::try_from(failure.code)
+                            .ok()
+                            .and_then(|code| {
+                                code.as_str_name().strip_prefix("EXECUTION_FAILURE_CODE_")
+                            })
+                            .filter(|code| *code != "UNSPECIFIED")
+                            .ok_or_else(|| {
+                                Status::invalid_argument("Unknown execution failure code")
+                            })?;
+                        let receipt = workspace
+                            .record_failure(
+                                scope,
+                                (event_id, source_event_seq),
+                                code,
+                                utc_now_ms()?,
+                            )
+                            .map_err(storage_status)?;
+                        Ok(Some(TerminalResultReceipt {
+                            accepted_at: receipt.accepted_at,
+                            completion_fingerprint: receipt.completion_fingerprint,
+                            result_manifest_ref: None,
                         }))
                     }
                 }

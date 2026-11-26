@@ -25,6 +25,18 @@ OPERATION_DOMAIN = b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\
 JSON_LIMIT = 16 * 1024 * 1024
 IMAGE_LIMIT = 256 * 1024 * 1024
 RETRYABLE_RPC_ERRORS = {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.RESOURCE_EXHAUSTED}
+FAILURE_CODES = {
+    "input_changed": core_execution_pb2.EXECUTION_FAILURE_CODE_INPUT_CHANGED,
+    "invalid_input": core_execution_pb2.EXECUTION_FAILURE_CODE_INVALID_INPUT,
+    "file_io_failed": core_execution_pb2.EXECUTION_FAILURE_CODE_FILE_IO_FAILED,
+    "decode_failed": core_execution_pb2.EXECUTION_FAILURE_CODE_DECODE_FAILED,
+    "pixel_limit_exceeded": core_execution_pb2.EXECUTION_FAILURE_CODE_PIXEL_LIMIT_EXCEEDED,
+    "unsupported_format": core_execution_pb2.EXECUTION_FAILURE_CODE_UNSUPPORTED_FORMAT,
+}
+
+
+class InputChanged(ValueError):
+    pass
 
 
 @dataclass(slots=True)
@@ -135,21 +147,26 @@ class GeometryExecutions:
             event.source_event_seq = 1
             event.started.SetInParent()
             self._report(event)
-            with self._lock:
-                item.status = "RUNNING"
-            manifest = run_geometry(request)
-            event.execution_event_id = str(uuid4())
-            event.source_event_seq = 2
-            event.succeeded.result_manifest_ref.CopyFrom(manifest)
-            self._report(event)
-        except grpc.RpcError:
+        except (grpc.RpcError, ValueError):
             self._failed(item, "core_report_failed")
-        except ImageInspectionError as error:
-            self._failed(item, error.code)
-        except (ValueError, TypeError, KeyError, IndexError, RecursionError):
-            self._failed(item, "invalid_input")
-        except OSError:
-            self._failed(item, "file_io_failed")
+            return
+        with self._lock:
+            item.status = "RUNNING"
+
+        manifest, failure = compute_result(request)
+        event.execution_event_id = str(uuid4())
+        event.source_event_seq = 2
+        if failure is None:
+            event.succeeded.result_manifest_ref.CopyFrom(manifest)
+        else:
+            event.failed.code = FAILURE_CODES[failure]
+        try:
+            self._report(event)
+        except (grpc.RpcError, ValueError):
+            self._failed(item, "core_report_failed")
+            return
+        if failure is not None:
+            self._failed(item, failure)
         else:
             with self._lock:
                 item.manifest = manifest
@@ -164,6 +181,19 @@ class GeometryExecutions:
         with self._lock:
             item.error_code = code
             item.status = "FAILED"
+
+
+def compute_result(request):
+    try:
+        return run_geometry(request), None
+    except InputChanged:
+        return None, "input_changed"
+    except ImageInspectionError as error:
+        return None, error.code
+    except (ValueError, TypeError, KeyError, IndexError, RecursionError):
+        return None, "invalid_input"
+    except OSError:
+        return None, "file_io_failed"
 
 
 def run_geometry(request):
@@ -233,8 +263,10 @@ def verified_bytes(locator, limit):
         raise ValueError("expected a regular source file")
     with path.open("rb") as source:
         contents = source.read(limit + 1)
-    if len(contents) > limit or sha256(contents).hexdigest() != locator.sha256:
-        raise ValueError("source length or digest does not match")
+    if len(contents) > limit:
+        raise ValueError("source exceeds its byte budget")
+    if sha256(contents).hexdigest() != locator.sha256:
+        raise InputChanged("source digest no longer matches the granted input")
     return contents
 
 
