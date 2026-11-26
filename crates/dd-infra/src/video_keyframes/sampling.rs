@@ -58,7 +58,7 @@ impl VideoAnnotationService {
         self.resolve_sampling_locked(session, request)
     }
 
-    pub(super) fn resolve_sampling_locked(
+    pub(crate) fn resolve_sampling_locked(
         &self,
         session: Uuid,
         request: VideoSamplingRequest,

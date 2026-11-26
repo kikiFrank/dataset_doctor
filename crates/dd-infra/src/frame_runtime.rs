@@ -571,7 +571,7 @@ fn load_task(
     })
 }
 
-fn registered_source(
+pub(crate) fn registered_source(
     owner: &WorkspaceThread,
     session: Uuid,
     video: Uuid,

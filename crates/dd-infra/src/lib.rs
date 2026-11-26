@@ -51,6 +51,8 @@ pub mod video_registration;
 #[cfg(feature = "execution-rpc")]
 pub mod video_runtime;
 #[cfg(feature = "execution-rpc")]
+pub mod video_tracking_runtime;
+#[cfg(feature = "execution-rpc")]
 pub mod worker_process;
 #[cfg(feature = "execution-rpc")]
 mod worker_runtime;

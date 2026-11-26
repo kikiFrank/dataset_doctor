@@ -13,7 +13,8 @@ use dd_core::workspace::WorkspaceSession;
 use dd_protocol::v1::{
     ArtifactRef, ExecutionHandle, ExecutionLookup, FrameResolveInput, FrameResolveRequest,
     GeometryAuditInput, GeometryAuditRequest, TaskContext, VideoProbeInput, VideoProbeRequest,
-    artifact_ref::Owner, core_execution_control_server::CoreExecutionControlServer,
+    VideoTrackingInput, VideoTrackingRequest, artifact_ref::Owner,
+    core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
 use rusqlite::params;
@@ -122,6 +123,7 @@ pub(crate) enum WorkerOperation {
     Geometry(GeometryAuditInput),
     VideoProbe(VideoProbeInput),
     FrameResolve(FrameResolveInput),
+    VideoTracking(VideoTrackingInput),
 }
 
 impl WorkerOperation {
@@ -130,6 +132,7 @@ impl WorkerOperation {
             Self::Geometry(_) => crate::geometry_runtime::CAPABILITY,
             Self::VideoProbe(_) => crate::video_registration::CAPABILITY,
             Self::FrameResolve(_) => crate::frame_runtime::CAPABILITY,
+            Self::VideoTracking(_) => crate::video_tracking_runtime::CAPABILITY,
         }
     }
 
@@ -149,6 +152,11 @@ impl WorkerOperation {
             Self::VideoProbe(input) => {
                 input.output_directory = output;
                 domain = b"datasetdoctor.v1.PythonWorker.StartVideoProbe\0";
+                input.encode_to_vec()
+            }
+            Self::VideoTracking(input) => {
+                input.output_directory = output;
+                domain = b"datasetdoctor.v1.PythonWorker.StartTracking\0";
                 input.encode_to_vec()
             }
         };
@@ -186,6 +194,15 @@ impl WorkerOperation {
             Self::VideoProbe(parameters) => {
                 worker
                     .start_video_probe(VideoProbeRequest {
+                        context: Some(context),
+                        input_manifest_ref: Some(manifest),
+                        parameters: Some(parameters),
+                    })
+                    .await
+            }
+            Self::VideoTracking(parameters) => {
+                worker
+                    .start_tracking(VideoTrackingRequest {
                         context: Some(context),
                         input_manifest_ref: Some(manifest),
                         parameters: Some(parameters),

@@ -22,6 +22,10 @@ pub struct Fixture {
 
 impl Fixture {
     pub async fn create() -> Self {
+        Self::create_with("Registered two color clip.mp4", video_fixture::make_clip).await
+    }
+
+    pub async fn create_with(file_name: &str, build: fn(&Path)) -> Self {
         let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
             .canonicalize()
             .unwrap();
@@ -29,8 +33,8 @@ impl Fixture {
         fs::create_dir(&run).unwrap();
         let root = run.join("Frame resolve Workspace");
         fs::create_dir(&root).unwrap();
-        let source = run.join("Registered two color clip.mp4");
-        video_fixture::make_clip(&source);
+        let source = run.join(file_name);
+        build(&source);
         let original = fs::read(&source).unwrap();
         let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
         let folder = owner.grant_selected_directory(root.clone()).unwrap();
