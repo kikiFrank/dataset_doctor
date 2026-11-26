@@ -691,8 +691,6 @@ Checkpoint 只适用于能力明确支持的粒度，例如一批图片中已完
 | DraftReceipt | review_id、draft_revision、draft_digest、review_revision、validation_warnings[] |
 | DisplayLocator | locator、media_type、expires_at、resource_digest；仅用于本地展示，范围由 Core 授权；UI 不拿它写文件 |
 | VideoDetail | source_video_id、source_digest、duration_ms、streams[]、rotation、variable_frame_rate、video_annotation_manifest_ref?、source_availability |
-
-VideoDetail 的 duration_ms 使用容器实际报告时长，streams 列出可选择的视频流及其实际 codec、尺寸和流时长。缺失时长保留空值。variable_frame_rate 描述所选流的实际帧时间戳节奏，并容许常帧率在粗时钟下产生的一 tick 舍入误差；样本不足或时间戳不可用时为空值。已有索引未保存这些元数据时仍保留逐帧定位能力。
 | FrameRef | source_video_id、source_digest、stream_index、frame_index、pts_us、timestamp_ms、width、height、image_ref；source_video_id 实际引用一个 VIDEO Asset |
 | VideoSegment | segment_id、source_video_id、source_digest、start_us、end_us、keyframes:[{frame_ref,annotation_ref}]、target_dataset_id、revision；端点为规范化时间轴微秒十进制字符串，半开区间 [start_us,end_us)，要求 start_us < end_us |
 | SegmentReceipt | segment_id、revision、video_annotation_manifest_ref、validation_warnings[]；manifest 为当前标注工作状态，保存在 assets.metadata_json，不随候选清理 |
@@ -709,6 +707,8 @@ VideoDetail 的 duration_ms 使用容器实际报告时长，streams 列出可�
 | PredictionBundle | input_fingerprint、model_profile_id、category_mapping_fingerprint、predictions_ref、evidence_refs[]、coverage |
 | EmbeddingAnalysisResult | input_fingerprint、encoder_profile_id、embedding_ref、similarity_findings_ref、scope_policy；scope_policy 必须排除跨视频比较 |
 | CheckResultSet | checks:CheckResult[]、report_artifact_ref、input_fingerprint；每项有独立执行/评估状态 |
+
+VideoDetail 的 duration_ms 使用容器实际报告时长，streams 列出可选择的视频流及其实际 codec、尺寸和流时长。缺失时长保留空值。variable_frame_rate 描述所选流的实际帧时间戳节奏，并容许常帧率在粗时钟下产生的一 tick 舍入误差；样本不足或时间戳不可用时为空值。已有索引未保存这些元数据时仍保留逐帧定位能力。
 
 标注状态至少区分 UNANNOTATED、UNREVIEWED、CONFIRMED_POSITIVE、CONFIRMED_NEGATIVE、STALE。活动审核作为独立 active_review 存在；不能用“JSON 存在”推断该枚举。图像/标签修改后根据摘要重新评估。
 
