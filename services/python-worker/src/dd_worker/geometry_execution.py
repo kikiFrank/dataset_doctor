@@ -111,7 +111,7 @@ class GeometryExecutions:
             self._pending_claims.pop(key)
             execution = Execution(request_digest, handle)
             self._executions[key] = execution
-            self._pool.submit(self._run, request, execution)
+            self._pool.submit(self._run, request, execution, operation_digest)
             return handle
 
     def snapshot(self, lookup, rpc):
@@ -124,11 +124,26 @@ class GeometryExecutions:
                 result_manifest_ref=item.manifest, error_code=item.error_code,
             )
 
-    def _run(self, request, item):
-        with self._lock:
-            item.status = "RUNNING"
+    def _run(self, request, item, operation_digest):
+        event = core_execution_pb2.ReportExecutionRequest(
+            context=request.context,
+            worker_execution_id=item.handle.worker_execution_id,
+            operation_digest=operation_digest,
+        )
         try:
+            event.execution_event_id = str(uuid4())
+            event.source_event_seq = 1
+            event.started.SetInParent()
+            self._report(event)
+            with self._lock:
+                item.status = "RUNNING"
             manifest = run_geometry(request)
+            event.execution_event_id = str(uuid4())
+            event.source_event_seq = 2
+            event.succeeded.result_manifest_ref.CopyFrom(manifest)
+            self._report(event)
+        except grpc.RpcError:
+            self._failed(item, "core_report_failed")
         except ImageInspectionError as error:
             self._failed(item, error.code)
         except (ValueError, TypeError, KeyError, IndexError, RecursionError):
@@ -139,6 +154,11 @@ class GeometryExecutions:
             with self._lock:
                 item.manifest = manifest
                 item.status = "SUCCEEDED"
+
+    def _report(self, event):
+        acknowledgment = call_core(self._core.ReportExecution, event, self._authorization, 10)
+        if not acknowledgment.accepted or acknowledgment.execution_event_id != event.execution_event_id:
+            raise ValueError("Core did not accept this execution event")
 
     def _failed(self, item, code):
         with self._lock:

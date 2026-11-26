@@ -117,12 +117,8 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         .record_dispatch(scope, grant, [0x34; 32], 250)
         .unwrap();
 
-    let core = CoreClaimService::new(
-        executor,
-        core_key,
-        Arc::new(Mutex::new(grants)),
-        Arc::clone(&thread),
-    );
+    let grants = Arc::new(Mutex::new(grants));
+    let core = CoreClaimService::new(executor, core_key, Arc::clone(&grants), Arc::clone(&thread));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let core_address = listener.local_addr().unwrap();
     let (stop, stopping) = oneshot::channel::<()>();
@@ -133,6 +129,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
                     DropFirstClaimAck {
                         core,
                         pending: AtomicBool::new(true),
+                        pending_report: AtomicBool::new(true),
                     },
                 ),
             )
@@ -249,6 +246,30 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     assert_eq!(fs::read(&image_path).unwrap(), PNG);
     assert_eq!(fs::read(&annotation_path).unwrap(), annotation);
 
+    {
+        let db = Connection::open_with_flags(
+            root.join("workspace.db"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let (status, path, revision): (String, Option<String>, i64) = db
+            .query_row(
+                "SELECT status, output_manifest_path, row_revision FROM tasks WHERE task_id=?1",
+                [task.task_id.to_string()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            status, "SUCCEEDED",
+            "Worker reported success before Core stored its result"
+        );
+        assert_eq!(
+            path,
+            Some(format!("{result_directory}/result-manifest.json"))
+        );
+        assert_eq!(revision, 4);
+    }
+
     let contracts = JsonContracts::new().unwrap();
     let scope = TaskManifestScope {
         task: task.task_id,
@@ -266,159 +287,185 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         verify_task_result_manifest(&output, &contracts, &stale, &manifest_ref),
         Err(ArtifactValidationError::ScopeMismatch)
     ));
-    let execution = ClaimReceipt {
-        task: task.task_id,
-        attempt,
-        execution: Uuid::parse_str(&first.worker_execution_id).unwrap(),
-    };
-    let done = ResultSubmission {
-        workspace_session: session,
-        grant,
-        execution,
-        node_spec_fingerprint: [0x34; 32],
-        execution_event_id: Uuid::new_v4(),
-        source_event_seq: 2,
-        verified,
-    };
-    assert!(matches!(
-        thread.record_success(done.clone(), 5000),
-        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
-    ));
     let mut reporter = wire::core_execution_control_client::CoreExecutionControlClient::connect(
         format!("http://{core_address}"),
     )
     .await
     .unwrap();
-    let completion = ReportExecutionRequest {
-        context: Some(context),
-        execution_event_id: done.execution_event_id.to_string(),
-        worker_execution_id: first.worker_execution_id.clone(),
-        operation_digest: format!("{operation_digest:x}"),
-        source_event_seq: 2,
-        event: Some(ReportEvent::Succeeded(ExecutionSucceeded {
-            result_manifest_ref: Some(manifest_ref.clone()),
-        })),
-    };
-    assert_eq!(
-        reporter
-            .report_execution(authorized(completion.clone(), Uuid::new_v4()))
+    let (reported_task, reported_directory, reported_event, accepted_at) = {
+        let manual = prepare_report_fixture(
+            &thread,
+            &grants,
+            &root,
+            context,
+            &published,
+            &mut reporter,
+            core_key,
+        )
+        .await;
+        let context = manual.context;
+        let execution = manual.execution;
+        let grant = Uuid::parse_str(&context.grant_id).unwrap();
+        let scope = TaskManifestScope {
+            task: execution.task,
+            attempt: execution.attempt,
+            input_fingerprint,
+        };
+        let report_directory = format!("artifacts/tasks/{}/{}", execution.task, execution.attempt);
+        let output = root.join(&report_directory);
+        let manifest_ref = manual.reference;
+        let verified =
+            verify_task_result_manifest(&output, &contracts, &scope, &manifest_ref).unwrap();
+        let done = ResultSubmission {
+            workspace_session: session,
+            grant,
+            execution,
+            node_spec_fingerprint: [0x34; 32],
+            execution_event_id: Uuid::new_v4(),
+            source_event_seq: 2,
+            verified,
+        };
+        assert!(matches!(
+            thread.record_success(done.clone(), 5000),
+            Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+        ));
+        let completion = ReportExecutionRequest {
+            context: Some(context),
+            execution_event_id: done.execution_event_id.to_string(),
+            worker_execution_id: execution.execution.to_string(),
+            operation_digest: "44".repeat(32),
+            source_event_seq: 2,
+            event: Some(ReportEvent::Succeeded(ExecutionSucceeded {
+                result_manifest_ref: Some(manifest_ref.clone()),
+            })),
+        };
+        assert_eq!(
+            reporter
+                .report_execution(authorized(completion.clone(), Uuid::new_v4()))
+                .await
+                .unwrap_err()
+                .code(),
+            Code::Unauthenticated
+        );
+        let early = reporter
+            .report_execution(authorized(completion.clone(), core_key))
             .await
-            .unwrap_err()
-            .code(),
-        Code::Unauthenticated
-    );
-    let early = reporter
-        .report_execution(authorized(completion.clone(), core_key))
-        .await
-        .unwrap_err();
-    assert_eq!(early.code(), Code::FailedPrecondition);
-    let started = ReportExecutionRequest {
-        execution_event_id: Uuid::new_v4().to_string(),
-        source_event_seq: 1,
-        event: Some(ReportEvent::Started(ExecutionStarted {})),
-        ..completion.clone()
-    };
-    let started = reporter
-        .report_execution(authorized(started, core_key))
-        .await
-        .unwrap()
-        .into_inner();
-    assert!(started.accepted);
-    assert!(started.terminal_receipt.is_none());
-    let out_of_order = ReportExecutionRequest {
-        source_event_seq: 1,
-        ..completion.clone()
-    };
-    assert_eq!(
-        reporter
-            .report_execution(authorized(out_of_order, core_key))
+            .unwrap_err();
+        assert_eq!(early.code(), Code::FailedPrecondition);
+        let started = ReportExecutionRequest {
+            execution_event_id: Uuid::new_v4().to_string(),
+            source_event_seq: 1,
+            event: Some(ReportEvent::Started(ExecutionStarted {})),
+            ..completion.clone()
+        };
+        let started = reporter
+            .report_execution(authorized(started, core_key))
             .await
-            .unwrap_err()
-            .code(),
-        Code::FailedPrecondition
-    );
-    thread
-        .record_running(session, grant, execution, 4000)
+            .unwrap()
+            .into_inner();
+        assert!(started.accepted);
+        assert!(started.terminal_receipt.is_none());
+        let out_of_order = ReportExecutionRequest {
+            source_event_seq: 1,
+            ..completion.clone()
+        };
+        assert_eq!(
+            reporter
+                .report_execution(authorized(out_of_order, core_key))
+                .await
+                .unwrap_err()
+                .code(),
+            Code::FailedPrecondition
+        );
+        thread
+            .record_running(session, grant, execution, 4000)
+            .unwrap();
+        let stale_session = ResultSubmission {
+            workspace_session: Uuid::new_v4(),
+            ..done.clone()
+        };
+        assert!(matches!(
+            thread.record_success(stale_session, 5000),
+            Err(WorkspaceThreadError::Access(_))
+        ));
+        let stale_node = ResultSubmission {
+            node_spec_fingerprint: [0xff; 32],
+            ..done.clone()
+        };
+        assert!(matches!(
+            thread.record_success(stale_node, 5000),
+            Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+        ));
+        let mut bad_node = completion.clone();
+        bad_node.context.as_mut().unwrap().node_spec_fingerprint = "ff".repeat(32);
+        assert_eq!(
+            reporter
+                .report_execution(authorized(bad_node, core_key))
+                .await
+                .unwrap_err()
+                .code(),
+            Code::FailedPrecondition
+        );
+        let ack = reporter
+            .report_execution(authorized(completion.clone(), core_key))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(ack.accepted);
+        assert_eq!(ack.execution_event_id, done.execution_event_id.to_string());
+        let saved = thread.record_success(done.clone(), 6000).unwrap();
+        assert_eq!(
+            ack.terminal_receipt.as_ref().unwrap().accepted_at,
+            saved.accepted_at
+        );
+        assert_eq!(
+            ack.terminal_receipt
+                .as_ref()
+                .unwrap()
+                .completion_fingerprint,
+            saved.completion_fingerprint
+        );
+        assert_eq!(
+            reporter
+                .report_execution(authorized(completion, core_key))
+                .await
+                .unwrap()
+                .into_inner(),
+            ack
+        );
+        let accepted_at = time::OffsetDateTime::parse(
+            &saved.accepted_at,
+            &time::format_description::well_known::Rfc3339,
+        )
         .unwrap();
-    let stale_session = ResultSubmission {
-        workspace_session: Uuid::new_v4(),
-        ..done.clone()
+        let conflicting = ResultSubmission {
+            execution_event_id: Uuid::new_v4(),
+            ..done.clone()
+        };
+        assert!(matches!(
+            thread.record_success(conflicting, 7000),
+            Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+        ));
+        let replaced_reference = ArtifactRef {
+            artifact_id: Uuid::new_v4().to_string(),
+            ..manifest_ref.clone()
+        };
+        let replaced = ResultSubmission {
+            verified: verify_task_result_manifest(&output, &contracts, &scope, &replaced_reference)
+                .unwrap(),
+            ..done.clone()
+        };
+        assert!(matches!(
+            thread.record_success(replaced, 7000),
+            Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
+        ));
+        (
+            execution.task,
+            report_directory,
+            done.execution_event_id,
+            accepted_at,
+        )
     };
-    assert!(matches!(
-        thread.record_success(stale_session, 5000),
-        Err(WorkspaceThreadError::Access(_))
-    ));
-    let stale_node = ResultSubmission {
-        node_spec_fingerprint: [0xff; 32],
-        ..done.clone()
-    };
-    assert!(matches!(
-        thread.record_success(stale_node, 5000),
-        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
-    ));
-    let mut bad_node = completion.clone();
-    bad_node.context.as_mut().unwrap().node_spec_fingerprint = "ff".repeat(32);
-    assert_eq!(
-        reporter
-            .report_execution(authorized(bad_node, core_key))
-            .await
-            .unwrap_err()
-            .code(),
-        Code::FailedPrecondition
-    );
-    let ack = reporter
-        .report_execution(authorized(completion.clone(), core_key))
-        .await
-        .unwrap()
-        .into_inner();
-    assert!(ack.accepted);
-    assert_eq!(ack.execution_event_id, done.execution_event_id.to_string());
-    let saved = thread.record_success(done.clone(), 6000).unwrap();
-    assert_eq!(
-        ack.terminal_receipt.as_ref().unwrap().accepted_at,
-        saved.accepted_at
-    );
-    assert_eq!(
-        ack.terminal_receipt
-            .as_ref()
-            .unwrap()
-            .completion_fingerprint,
-        saved.completion_fingerprint
-    );
-    assert_eq!(
-        reporter
-            .report_execution(authorized(completion, core_key))
-            .await
-            .unwrap()
-            .into_inner(),
-        ack
-    );
-    let accepted_at = time::OffsetDateTime::parse(
-        &saved.accepted_at,
-        &time::format_description::well_known::Rfc3339,
-    )
-    .unwrap();
-    let conflicting = ResultSubmission {
-        execution_event_id: Uuid::new_v4(),
-        ..done.clone()
-    };
-    assert!(matches!(
-        thread.record_success(conflicting, 7000),
-        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
-    ));
-    let replaced_reference = ArtifactRef {
-        artifact_id: Uuid::new_v4().to_string(),
-        ..manifest_ref.clone()
-    };
-    let replaced = ResultSubmission {
-        verified: verify_task_result_manifest(&output, &contracts, &scope, &replaced_reference)
-            .unwrap(),
-        ..done.clone()
-    };
-    assert!(matches!(
-        thread.record_success(replaced, 7000),
-        Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
-    ));
 
     let result_path = output.join("geometry-result.json");
     fs::write(&result_path, b"changed after publication").unwrap();
@@ -462,16 +509,16 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let db = Connection::open(root.join("workspace.db")).unwrap();
     let (status, path, finished, revision, event): (String, String, i64, i64, String) = db.query_row(
         "SELECT status, output_manifest_path, finished_at_ms, row_revision, json_extract(execution_metadata_json,'$.last_execution_event_id') FROM tasks WHERE task_id=?1",
-        [task.task_id.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        [reported_task.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
     ).unwrap();
     assert_eq!(status, "SUCCEEDED");
-    assert_eq!(path, format!("{result_directory}/result-manifest.json"));
+    assert_eq!(path, format!("{reported_directory}/result-manifest.json"));
     assert_eq!(
         (finished, revision, event),
         (
             i64::try_from(accepted_at.unix_timestamp_nanos() / 1_000_000).unwrap(),
             4,
-            done.execution_event_id.to_string()
+            reported_event.to_string()
         )
     );
 }
@@ -479,6 +526,119 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
 struct DropFirstClaimAck {
     core: CoreClaimService,
     pending: AtomicBool,
+    pending_report: AtomicBool,
+}
+
+struct ReportFixture {
+    context: TaskContext,
+    execution: ClaimReceipt,
+    reference: ArtifactRef,
+}
+
+async fn prepare_report_fixture(
+    thread: &WorkspaceThread,
+    grants: &Mutex<GrantBook>,
+    root: &Path,
+    mut context: TaskContext,
+    worker_manifest: &Value,
+    reporter: &mut wire::core_execution_control_client::CoreExecutionControlClient<
+        tonic::transport::Channel,
+    >,
+    credential: Uuid,
+) -> ReportFixture {
+    let previous_output = root.join(format!(
+        "artifacts/tasks/{}/{}",
+        context.task_id, context.attempt_id
+    ));
+    let session = Uuid::parse_str(&context.workspace_session_id).unwrap();
+    let executor = Uuid::parse_str(&context.executor_session_id).unwrap();
+    let queued = thread
+        .enqueue_task(
+            TaskSubmission {
+                workspace_session: session,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                operation_kind: "REPORT_FIXTURE".into(),
+                capability_id: "annotation_geometry.v1".into(),
+                input_manifest_path: "input.json".into(),
+                request_fingerprint: [0x22; 32],
+                input_fingerprint: [0x12; 32],
+            },
+            300,
+        )
+        .unwrap();
+    let attempt = Uuid::new_v4();
+    let scope = GrantScope {
+        workspace_session: session,
+        task: queued.task_id,
+        attempt,
+        executor_session: executor,
+        input_fingerprint: [0x12; 32],
+        operation_digest: [0x44; 32],
+        reservation: Uuid::new_v4(),
+    };
+    let grant = grants
+        .lock()
+        .unwrap()
+        .install(scope.clone(), Instant::now() + TIMEOUT)
+        .unwrap();
+    thread
+        .record_dispatch(scope, grant, [0x34; 32], 350)
+        .unwrap();
+    context.task_id = queued.task_id.to_string();
+    context.attempt_id = attempt.to_string();
+    context.grant_id = grant.to_string();
+    let directory = root.join(format!("artifacts/tasks/{}/{attempt}", queued.task_id));
+    fs::create_dir_all(&directory).unwrap();
+    fs::copy(
+        previous_output.join("geometry-result.json"),
+        directory.join("geometry-result.json"),
+    )
+    .unwrap();
+    let mut manifest = worker_manifest.clone();
+    manifest["task_id"] = json!(context.task_id);
+    manifest["attempt_id"] = json!(context.attempt_id);
+    let manifest = serde_json::to_vec(&manifest).unwrap();
+    fs::write(directory.join("result-manifest.json"), &manifest).unwrap();
+    let execution = Uuid::new_v4();
+    let claimed = reporter
+        .claim_grant(authorized(
+            wire::ClaimGrantRequest {
+                grant_id: context.grant_id.clone(),
+                workspace_session_id: context.workspace_session_id.clone(),
+                task_id: context.task_id.clone(),
+                attempt_id: context.attempt_id.clone(),
+                executor_session_id: context.executor_session_id.clone(),
+                worker_execution_id: execution.to_string(),
+                input_fingerprint: context.input_fingerprint.clone(),
+                operation_digest: "44".repeat(32),
+            },
+            credential,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(claimed.worker_execution_id, execution.to_string());
+    let reference = ArtifactRef {
+        artifact_id: Uuid::new_v4().to_string(),
+        owner: Some(wire::artifact_ref::Owner::OwnerTaskId(
+            context.task_id.clone(),
+        )),
+        kind: "TASK_RESULT_MANIFEST".into(),
+        media_type: "application/json".into(),
+        size_bytes: manifest.len().try_into().unwrap(),
+        sha256: digest(&manifest),
+        schema_id: None,
+    };
+    ReportFixture {
+        context,
+        execution: ClaimReceipt {
+            task: queued.task_id,
+            attempt,
+            execution,
+        },
+        reference,
+    }
 }
 
 #[tonic::async_trait]
@@ -500,7 +660,15 @@ impl CoreExecutionControl for DropFirstClaimAck {
         &self,
         request: Request<wire::ReportExecutionRequest>,
     ) -> Result<Response<wire::ReportAck>, Status> {
-        self.core.report_execution(request).await
+        let accepted = self.core.report_execution(request).await?;
+        if accepted.get_ref().terminal_receipt.is_some()
+            && self.pending_report.swap(false, Ordering::Relaxed)
+        {
+            return Err(Status::unavailable(
+                "injected response loss after durable completion",
+            ));
+        }
+        Ok(accepted)
     }
 }
 

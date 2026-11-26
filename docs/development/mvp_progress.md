@@ -45,7 +45,8 @@
 | P04 Core 核验 Worker 结果 | `728e231`。`scripts/contracts/windows/check-worker-rpc.ps1` 使用真实 Worker 写出的清单和结果，验证 Core 绑定 Task/attempt/输入摘要、核对每个产物的长度与摘要，并拒绝旧 attempt、篡改及越界相对路径。红测 `target/contract-check/worker-rpc/6d0778b1a6ff48fb9b6b4acd204d3fcc/check.log`、绿测 `target/contract-check/worker-rpc/3854cd48616c47fdadf5bd64cdad78e6/check.log`，路径读取共用后的累计存储回归 `target/p01-04/logs/d40c0e5aefe046c18e694154e597565b.log`。 |
 | P03/P04 成功终态与产物索引 | `5826482`。Windows Worker RPC 用真实 Worker 产物复验 Core 存储接口，提前宣告完成、错会话、错节点、重复事件 ID 更换产物及不同终态事件均被拒绝；同一终态重试返回已持久化回执。工作区关闭后核对 SQLite 的 `SUCCEEDED`、输出清单路径、时间和修订。红绿日志 `target/contract-check/worker-rpc/bd5beccbe61e423297b1ce0d477f6709/check.log`、`target/contract-check/worker-rpc/d20eb5535967436f93291dc46486b8bd/check.log`，累计存储回归 `target/p01-04/logs/42df786f16d448758b78f8e5818515f6.log`。 |
 | P03/P04 Core 执行回报 RPC | `c41bf7f`。Windows `check-worker-rpc.ps1` 经 Rust gRPC 回报真实 Worker 产物，确认未认证、开始前成功、错节点和乱序事件被拒绝；正常开始和终态分别落库，同一终态重试返回原回执。红测 `target/contract-check/worker-rpc/948d0297d7a94ab69d02dd152ad9087b/check.log`、`target/contract-check/worker-rpc/5d24983313c042d6b983e8a17a497180/check.log`，绿测 `target/contract-check/worker-rpc/6cb9934213bf489eb388b8179b7594cd/check.log`，存储累计 `target/p01-04/logs/4bf2121adfe347258bfcdfddd90f4e65.log`。当前回报由集成测试客户端发送，Worker 自动上报及失败/取消回报待实现。 |
-| P03/P04 Claim 回包丢失 | 本页所在提交。Windows 跨进程测试在真实 Core 持久化领取后注入一次 `UNAVAILABLE`。Worker 使用同一执行 ID 重试，保留原领取、执行和终态记录，修订号仍只按实际状态更新。红绿日志 `target/contract-check/worker-rpc/d2f682419faa4293b9ec5d867849c277/check.log`、`target/contract-check/worker-rpc/b284689000c14f56a4e580a676a0cc17/check.log`。图像和几何单测累计 8 项通过。 |
+| P03/P04 Claim 回包丢失 | `c9f46df`。Windows 跨进程测试在真实 Core 持久化领取后注入一次 `UNAVAILABLE`。Worker 使用同一执行 ID 重试，保留原领取、执行和终态记录，修订号仍只按实际状态更新。红绿日志 `target/contract-check/worker-rpc/d2f682419faa4293b9ec5d867849c277/check.log`、`target/contract-check/worker-rpc/b284689000c14f56a4e580a676a0cc17/check.log`。图像和几何单测累计 8 项通过。 |
+| P04 Worker 自动上报实际检查 | 本页所在提交。Windows `check-worker-rpc.ps1` 连通实际 Python Worker → Core `ReportExecution` → SQLite。只有 Core 接纳产物后 `GetExecution` 才显示成功。持久化成功回包丢失后复用同一执行事件，实际检查和库修订没有重复。独立测试 Task 保留回报过早、乱序和冲突的原断言。红测 `target/contract-check/worker-rpc/be1ccb4d5ec445088efa4d7fffe10ff5/check.log`、绿测 `target/contract-check/worker-rpc/ebb22e611ddb45a48f288fb75e3f8b20/check.log`。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -54,5 +55,5 @@
 
 - Windows 桌面壳已本机启动。最终生产依赖、随包 Worker 和干净系统安装验收仍待 P04/P10。Windows 以外的产品还没有本轮实测。
 - P01 还需首切片命令 DTO、专用 StartX 和 Core 执行契约、三语言完整 G-CONTRACT 及统一开发入口。旧发布库升级验收等待实际发布基线。
-- 下一步给实际 Python Worker 自动上报开始和成功写红测，确保 `GetExecution` 成功时 Core 已经持久化可验证结果，并保留 Core 回报前置条件和乱序的独立测试。之后接失败和生产调度。单图 COCO 已能在存储层登记，仍需绑定活动 Workspace 的目录授权、异步预检与确认、桌面预览。
+- 下一步覆盖 Worker 已获准后源内容变更的真实失败，确保 Core Task 落库 `FAILED` 且没有产物索引。之后连接真实 Workspace 样本、目录授权与生产调度。桌面导入预览、Final 和 COCO 目标读取器均未连通。
 - 用户正在使用桌面。已关闭验收窗口，暂不启动新的桌面窗口，继续命令行开发及验收。
