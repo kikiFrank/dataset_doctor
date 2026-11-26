@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/task-result-manifest.schema.json",
+  "title": "Dataset Doctor Task artifact manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_contract_version", "task_id", "attempt_id", "input_fingerprint", "entries", "sealed_at"],
+  "properties": {
+    "manifest_contract_version": {"type": "integer", "const": 1},
+    "task_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "attempt_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "input_fingerprint": {"$ref": "common.schema.json#/$defs/sha256"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "relative_path", "kind", "media_type", "size_bytes", "sha256"],
+        "properties": {
+          "artifact_id": {"$ref": "common.schema.json#/$defs/uuid"},
+          "relative_path": {"type": "string", "minLength": 1},
+          "kind": {"type": "string", "minLength": 1},
+          "media_type": {"type": "string", "minLength": 1},
+          "size_bytes": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+          "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+          "schema_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "sealed_at": {"type": "string", "format": "date-time"}
+  }
+}

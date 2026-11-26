@@ -1,7 +1,7 @@
 //! Read-only preflight for existing per-image COCO files.
 
 use std::collections::{BTreeSet, HashMap};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
@@ -9,8 +9,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use crate::json::{JsonContracts, JsonProfile};
-use crate::paths::is_portable_relative_file;
-use crate::workspace::{ordinary_file, prevent_replacement};
+use crate::paths::{is_portable_relative_file, open_scoped_file};
 
 const MAX_SELECTION: usize = 1000;
 const MAX_ANNOTATION_BYTES: u64 = 16 * 1024 * 1024;
@@ -109,7 +108,7 @@ pub fn inspect_single_image_coco(
     let mut sibling_counts = HashMap::new();
     let mut inputs = Vec::with_capacity(selected.len());
     for image in selected {
-        let media = match open_source(&root, image).and_then(media_digest) {
+        let media = match open_scoped_file(&root, image).and_then(media_digest) {
             Ok(digest) => digest,
             Err(error) => {
                 inputs.push(ImportInput {
@@ -169,7 +168,7 @@ fn inspect_annotation(
     };
 
     let mut bytes = Vec::new();
-    open_source(root, &path)
+    open_scoped_file(root, &path)
         .and_then(|file| file.take(MAX_ANNOTATION_BYTES + 1).read_to_end(&mut bytes))
         .map_err(|error| ImportProblem::AnnotationRead(error.kind()))?;
     if bytes.len() as u64 > MAX_ANNOTATION_BYTES {
@@ -231,62 +230,6 @@ fn source_exists(root: &Path, relative: &Path) -> Result<bool, ImportProblem> {
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
         Err(error) => Err(ImportProblem::AnnotationRead(error.kind())),
     }
-}
-
-fn open_source(root: &Path, relative: &Path) -> io::Result<File> {
-    let path = root.join(relative);
-    let metadata = fs::symlink_metadata(&path)?;
-    if !ordinary_file(&metadata) || !path.canonicalize()?.starts_with(root) {
-        return Err(io::Error::new(
-            ErrorKind::PermissionDenied,
-            "Source must be a file in the approved directory",
-        ));
-    }
-    let mut options = OpenOptions::new();
-    options.read(true);
-    prevent_replacement(&mut options);
-    let file = options.open(&path)?;
-    if !ordinary_file(&file.metadata()?) || !opened_source_path(&file, &path)?.starts_with(root) {
-        return Err(io::Error::new(
-            ErrorKind::PermissionDenied,
-            "Opened source file is outside the approved directory",
-        ));
-    }
-    Ok(file)
-}
-
-#[cfg(windows)]
-fn opened_source_path(file: &File, _: &Path) -> io::Result<PathBuf> {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
-
-    // The device-qualified DOS path uses the same spelling as canonicalize().
-    let handle = file.as_raw_handle();
-    let required = unsafe { GetFinalPathNameByHandleW(handle, std::ptr::null_mut(), 0, 0) };
-    if required == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let mut buffer = vec![0; required as usize];
-    let length = unsafe { GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), required, 0) };
-    if length == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    if length >= required {
-        return Err(io::Error::new(
-            ErrorKind::InvalidData,
-            "Source path changed during inspection",
-        ));
-    }
-    Ok(PathBuf::from(OsString::from_wide(
-        &buffer[..length as usize],
-    )))
-}
-
-#[cfg(not(windows))]
-fn opened_source_path(_: &File, path: &Path) -> io::Result<PathBuf> {
-    path.canonicalize()
 }
 
 fn media_digest(mut file: File) -> io::Result<String> {

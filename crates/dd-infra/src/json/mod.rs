@@ -15,12 +15,15 @@ const WORKSPACE: &str =
     include_str!("../../../../contracts/json-schema/v1/workspace-config.schema.json");
 const COCO: &str =
     include_str!("../../../../contracts/json-schema/v1/coco-single-image.schema.json");
+const TASK_RESULT: &str =
+    include_str!("../../../../contracts/json-schema/v1/task-result-manifest.schema.json");
 
 #[derive(Clone, Copy, Debug)]
 pub enum JsonProfile {
     InputManifest,
     WorkspaceConfig,
     CocoSingleImage,
+    TaskResultManifest,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,6 +56,7 @@ pub struct JsonContracts {
     input_manifest: Validator,
     workspace_config: Validator,
     coco_single_image: Validator,
+    task_result_manifest: Validator,
 }
 
 impl JsonContracts {
@@ -76,6 +80,7 @@ impl JsonContracts {
             input_manifest: build(INPUT)?,
             workspace_config: build(WORKSPACE)?,
             coco_single_image: build(COCO)?,
+            task_result_manifest: build(TASK_RESULT)?,
         })
     }
 
@@ -86,6 +91,7 @@ impl JsonContracts {
             JsonProfile::InputManifest => &self.input_manifest,
             JsonProfile::WorkspaceConfig => &self.workspace_config,
             JsonProfile::CocoSingleImage => &self.coco_single_image,
+            JsonProfile::TaskResultManifest => &self.task_result_manifest,
         };
         let issues: Vec<_> = validator
             .iter_errors(&document)

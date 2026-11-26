@@ -5,7 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dd_core::execution_grant::{GrantBook, GrantScope};
+use dd_infra::artifact_manifest::{
+    ArtifactValidationError, TaskManifestScope, verify_task_result_manifest,
+};
 use dd_infra::execution_rpc::CoreClaimService;
+use dd_infra::json::JsonContracts;
 use dd_infra::task_store::TaskSubmission;
 use dd_infra::workspace_thread::WorkspaceThread;
 use dd_protocol::v1::{
@@ -230,6 +234,44 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     );
     assert_eq!(fs::read(&image_path).unwrap(), PNG);
     assert_eq!(fs::read(&annotation_path).unwrap(), annotation);
+
+    let contracts = JsonContracts::new().unwrap();
+    let scope = TaskManifestScope {
+        task: task.task_id,
+        attempt,
+        input_fingerprint,
+    };
+    let verified = verify_task_result_manifest(&output, &contracts, &scope, &manifest_ref).unwrap();
+    assert_eq!(verified.entries().len(), 1);
+    assert_eq!(verified.entries()[0].relative_path, "geometry-result.json");
+    let stale = TaskManifestScope {
+        attempt: Uuid::new_v4(),
+        ..scope
+    };
+    assert!(matches!(
+        verify_task_result_manifest(&output, &contracts, &stale, &manifest_ref),
+        Err(ArtifactValidationError::ScopeMismatch)
+    ));
+
+    let result_path = output.join("geometry-result.json");
+    fs::write(&result_path, b"changed after publication").unwrap();
+    assert!(matches!(
+        verify_task_result_manifest(&output, &contracts, &scope, &manifest_ref),
+        Err(ArtifactValidationError::DigestMismatch)
+    ));
+    let mut escaped = published;
+    escaped["entries"][0]["relative_path"] = json!("../synthetic.json");
+    let escaped = serde_json::to_vec(&escaped).unwrap();
+    fs::write(output.join("result-manifest.json"), &escaped).unwrap();
+    let forged = ArtifactRef {
+        sha256: digest(&escaped),
+        size_bytes: escaped.len().try_into().unwrap(),
+        ..manifest_ref
+    };
+    assert!(matches!(
+        verify_task_result_manifest(&output, &contracts, &scope, &forged),
+        Err(ArtifactValidationError::InvalidEntryPath)
+    ));
 
     assert!(
         client

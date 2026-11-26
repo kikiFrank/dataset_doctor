@@ -297,7 +297,7 @@ fn row_uuid(row: &Row<'_>, index: usize) -> rusqlite::Result<Uuid> {
     })
 }
 
-fn format_digest(digest: &[u8; 32]) -> String {
+pub(crate) fn format_digest(digest: &[u8; 32]) -> String {
     let mut encoded = String::with_capacity(64);
     for byte in digest {
         write!(encoded, "{byte:02x}").expect("writing to a String does not fail");
