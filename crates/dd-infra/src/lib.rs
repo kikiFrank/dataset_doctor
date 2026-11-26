@@ -13,6 +13,7 @@ pub mod import_preflight;
 pub mod import_registration;
 pub mod input_fingerprint;
 pub mod json;
+pub mod review_validation;
 mod paths;
 pub mod sqlite;
 pub mod task_store;

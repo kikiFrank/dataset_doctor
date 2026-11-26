@@ -32,7 +32,7 @@ pub struct SchemaIssue {
     pub instance_path: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ContractError {
     Parse(&'static str),
     Schema(Vec<SchemaIssue>),
