@@ -6,6 +6,7 @@ interface RuntimeStatus {
   verify_workspace_create: boolean;
   verify_workspace_business: boolean;
   verify_workspace_color: boolean;
+  verify_workspace_workflow: boolean;
 }
 
 export function acknowledgeDesktopRuntime(): Promise<RuntimeStatus> {

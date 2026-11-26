@@ -6,6 +6,7 @@ import type { GeometryEvidence } from "./geometry-check-panel";
 import { ReviewPanel } from "./review-panel";
 import { ColorRepairPanel } from "./color-repair-panel";
 import { StagingPanel } from "./staging-panel";
+import { WorkflowPanel } from "./workflow-panel";
 import type { AnnotationState, AnnotationView, AssetPage, AssetSummary, DatasetPage, DatasetSummary, DisplayLocator } from "./api/generated/wire-primitives";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./api/dataset";
 import { workspaceCommandError } from "./api/workspace";
@@ -121,6 +122,7 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked, onMemb
     <div className="dataset-assets">
       <h3>{dataset.name}</h3>
       <DatasetExportPanel workspace={workspace} datasetId={dataset.dataset_id} />
+      <WorkflowPanel workspace={workspace} datasetId={dataset.dataset_id} />
       <StagingPanel workspace={workspace} datasetId={dataset.dataset_id} refreshKey={refresh} selectionBlocked={reviewBlocked}
         onAccepted={() => { refreshAssets(); onMembersChanged(); }}
         onSelect={item => setSelected({

@@ -118,6 +118,13 @@ button:disabled { opacity: 0.58; cursor: wait; }
 .dataset-export { margin: 12px 0; padding: 10px; border: 1px solid #d5dee9; border-radius: 8px; }
 .dataset-export summary { cursor: pointer; }
 
+.workflow-panel { margin: 12px 0; padding: 12px; border: 1px solid #d5dee9; border-radius: 8px; }
+.workflow-panel h4, .workflow-panel h5 { margin: 0 0 8px; }
+.workflow-panel form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.workflow-panel form input { width: 8em; padding: 6px; border: 1px solid #b6c4d2; border-radius: 6px; }
+.workflow-panel form button { margin-top: 0; }
+.workflow-panel [aria-label="质量报告"] { margin-top: 12px; padding-top: 12px; border-top: 1px solid #d5dee9; }
+
 .review-panel { margin: 18px 0; border-top: 1px solid #d5dee9; }
 .review-panel h5 { margin: 16px 0 8px; font-size: 1rem; }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px); gap: 12px; }

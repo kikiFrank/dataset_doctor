@@ -195,6 +195,8 @@ pub fn wire_primitives_typescript() -> String {
         workflow::WorkflowDatasetScope::decl(&config),
         workflow::WorkflowPolicyOverrides::decl(&config),
         workflow::WorkflowGetRequest::decl(&config),
+        workflow::WorkflowListRequest::decl(&config),
+        workflow::WorkflowPageView::decl(&config),
         workflow::WorkflowView::decl(&config),
         workflow::WorkflowStatusView::decl(&config),
         workflow::WorkflowPlanSourceView::decl(&config),

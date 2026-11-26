@@ -37,6 +37,22 @@ pub struct WorkflowGetRequest {
     pub workflow_run_id: UuidText,
 }
 
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowListRequest {
+    pub context: CommandContext,
+    pub dataset_id: UuidText,
+    #[ts(optional)]
+    pub cursor: Option<UuidText>,
+    pub page_size: u16,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct WorkflowPageView {
+    pub items: Vec<WorkflowView>,
+    pub next_cursor: Option<UuidText>,
+}
+
 #[derive(Debug, Serialize, TS)]
 pub struct WorkflowView {
     pub workflow_run_id: UuidText,

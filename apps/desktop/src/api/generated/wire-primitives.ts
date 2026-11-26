@@ -102,6 +102,10 @@ export type WorkflowPolicyOverrides = { sample_limit?: number, };
 
 export type WorkflowGetRequest = { context: CommandContext, workflow_run_id: UuidText, };
 
+export type WorkflowListRequest = { context: CommandContext, dataset_id: UuidText, cursor?: UuidText, page_size: number, };
+
+export type WorkflowPageView = { items: Array<WorkflowView>, next_cursor: UuidText | null, };
+
 export type WorkflowView = { workflow_run_id: UuidText, planning_task_id: UuidText, status: WorkflowStatusView, row_revision: DecimalU64, plan_revision: DecimalU64 | null, input_fingerprint: string | null, plan_source: WorkflowPlanSourceView | null, profile_task: WorkflowTaskView | null, geometry_tasks: Array<WorkflowGeometryTaskView>, report_task_id: UuidText | null, error_code: string | null, };
 
 export type WorkflowStatusView = "DRAFT" | "READY" | "RUNNING" | "INTERRUPTED" | "WAITING_REVIEW" | "FAILED";

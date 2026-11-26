@@ -18,6 +18,7 @@ struct RuntimeMode {
     smoke_workspace_create: bool,
     smoke_business_directories: Option<(PathBuf, PathBuf)>,
     smoke_color: bool,
+    smoke_workflow: bool,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +33,7 @@ struct DesktopReadyResponse {
     verify_workspace_create: bool,
     verify_workspace_business: bool,
     verify_workspace_color: bool,
+    verify_workspace_workflow: bool,
 }
 
 #[tauri::command]
@@ -59,6 +61,7 @@ fn desktop_ready(
         verify_workspace_create: runtime.smoke_workspace_create,
         verify_workspace_business: business,
         verify_workspace_color: runtime.smoke_color,
+        verify_workspace_workflow: runtime.smoke_workflow,
     })
 }
 
@@ -97,6 +100,8 @@ async fn desktop_workspace_verified(
     }
     let marker = if runtime.smoke_color {
         "DESKTOP_WORKSPACE_COLOR_VERIFIED"
+    } else if runtime.smoke_workflow {
+        "DESKTOP_WORKSPACE_WORKFLOW_VERIFIED"
     } else if business {
         "DESKTOP_WORKSPACE_BUSINESS_VERIFIED"
     } else if runtime.smoke_workspace_create {
@@ -131,12 +136,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && std::env::args_os().any(|argument| argument == "--workspace-business-smoke");
     let smoke_color = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-color-smoke");
+    let smoke_workflow = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-workflow-smoke");
     let smoke_workspace_open = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-smoke");
     if [
         smoke_workspace_create,
         smoke_workspace_business,
         smoke_color,
+        smoke_workflow,
         smoke_workspace_open,
     ]
     .into_iter()
@@ -150,6 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || smoke_workspace_open
         || smoke_workspace_business
         || smoke_color
+        || smoke_workflow
     {
         let path = PathBuf::from(
             std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
@@ -162,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let smoke_business_directories = if smoke_workspace_business || smoke_color {
+    let smoke_business_directories = if smoke_workspace_business || smoke_color || smoke_workflow {
         let root = smoke_root
             .as_deref()
             .ok_or("Business verification requires a dedicated run")?;
@@ -215,6 +224,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_workspace_create,
             smoke_business_directories,
             smoke_color,
+            smoke_workflow,
         })
         .setup(|app| {
             let runtime = app.state::<RuntimeMode>();
@@ -251,6 +261,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::geometry::annotation_geometry_submit,
             workspace_commands::workflow::workflow_start,
             workspace_commands::workflow::workflow_get,
+            workspace_commands::workflow::workflow_list,
             workspace_commands::color::repair_color_preview,
             workspace_commands::color::repair_color_apply,
             workspace_commands::video::video_import,

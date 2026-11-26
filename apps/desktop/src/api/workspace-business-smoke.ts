@@ -8,6 +8,7 @@ import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, works
 import type { OpenWorkspace } from "./workspace";
 import { makeDraft, seedBoxes } from "../review-document";
 import { verifyWorkspaceColorPanel } from "./workspace-color-smoke";
+import { verifyWorkspaceWorkflowPanel } from "./workspace-workflow-smoke";
 
 const activeStates = new Set(["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"]);
 
@@ -22,7 +23,9 @@ async function completed(workspace: OpenWorkspace, taskId: string) {
   throw new Error("Task did not finish in time");
 }
 
-export async function verifyWorkspaceBusinessIpc(verifyColor = false) {
+export async function verifyWorkspaceBusinessIpc({ verifyColor, verifyWorkflow }: {
+  verifyColor: boolean; verifyWorkflow: boolean;
+}) {
   const name = "WebView2 Business Acceptance";
   let phase = "create Workspace";
   try {
@@ -45,6 +48,13 @@ export async function verifyWorkspaceBusinessIpc(verifyColor = false) {
       throw new Error("Workspace did not return the registered dataset and asset");
     }
     const asset = assets.items[0].asset_id;
+
+    if (verifyWorkflow) {
+      phase = "run the local healthcheck and reopen its report";
+      await verifyWorkspaceWorkflowPanel(workspace, dataset);
+      await acknowledgeWorkspaceVerification();
+      return;
+    }
 
     phase = "display image and run actual geometry";
     const locator = await getDisplayLocator(workspace, asset);

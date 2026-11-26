@@ -5,9 +5,9 @@ use dd_infra::workflow_store::{
     WorkflowStatus, WorkflowStore,
 };
 use dd_ui_contracts::workflow::{
-    WorkflowGeometryTaskView, WorkflowGetRequest, WorkflowPlanSourceView, WorkflowReportGetRequest,
-    WorkflowReportScopeView, WorkflowReportView, WorkflowStartRequest, WorkflowStatusView,
-    WorkflowTaskView, WorkflowView,
+    WorkflowGeometryTaskView, WorkflowGetRequest, WorkflowListRequest, WorkflowPageView,
+    WorkflowPlanSourceView, WorkflowReportGetRequest, WorkflowReportScopeView, WorkflowReportView,
+    WorkflowStartRequest, WorkflowStatusView, WorkflowTaskView, WorkflowView,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
@@ -49,6 +49,19 @@ pub async fn workflow_get(
         thread,
         request.context.request_id.clone(),
         move |commands| commands.get_workflow(request),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_list(
+    request: WorkflowListRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<WorkflowPageView, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.list_workflows(request),
     )
     .await
 }
@@ -121,6 +134,30 @@ impl Commands {
             repair_outcomes: data.repair_outcomes,
             checks: self.report_checks_view(data.checks)?,
             report_artifact_ref: self.wire_artifact(report.reference)?,
+        })
+    }
+
+    fn list_workflows(&self, request: WorkflowListRequest) -> Result<WorkflowPageView, AppError> {
+        let session = self.session(request.context)?;
+        let dataset = self.parse_uuid(request.dataset_id)?;
+        let cursor = request
+            .cursor
+            .map(|value| self.parse_uuid(value))
+            .transpose()?;
+        let page = self
+            .workflow_store()?
+            .list(session, dataset, cursor, request.page_size)
+            .map_err(|error| self.workflow_error(error))?;
+        Ok(WorkflowPageView {
+            items: page
+                .items
+                .into_iter()
+                .map(|view| self.workflow_view(view))
+                .collect::<Result<_, _>>()?,
+            next_cursor: page
+                .next_cursor
+                .map(|id| self.uuid_text(id.to_string()))
+                .transpose()?,
         })
     }
 

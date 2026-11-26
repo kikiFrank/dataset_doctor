@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')][string]$Suite = 'Runtime',
     [string]$PythonExe
 )
 
@@ -36,7 +36,7 @@ try {
         $start.Arguments += ' --workspace-create-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
-    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) {
+    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')) {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
         $business = Join-Path $run 'Synthetic business'
         & $python -I -B (Join-Path $PSScriptRoot 'seed_business_fixture.py') $business
@@ -44,6 +44,9 @@ try {
         if ($Suite -eq 'WorkspaceColor') {
             $start.Arguments += ' --workspace-color-smoke'
             $expected = 'DESKTOP_WORKSPACE_COLOR_VERIFIED'
+        } elseif ($Suite -eq 'WorkspaceWorkflow') {
+            $start.Arguments += ' --workspace-workflow-smoke'
+            $expected = 'DESKTOP_WORKSPACE_WORKFLOW_VERIFIED'
         } else {
             $start.Arguments += ' --workspace-business-smoke'
             $expected = 'DESKTOP_WORKSPACE_BUSINESS_VERIFIED'
@@ -55,7 +58,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) { 55000 } else { 25000 }
+        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow')) { 55000 } else { 25000 }
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
@@ -72,7 +75,10 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
             throw 'The native application did not publish both Workspace files.'
         }
-        if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) {
+        if ($Suite -eq 'WorkspaceWorkflow') {
+            & $python -I -B (Join-Path $PSScriptRoot 'verify_workflow_fixture.py') $business
+            if ($LASTEXITCODE -ne 0) { throw 'The local workflow failed the database and report checks.' }
+        } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) {
             $packages = @(Get-ChildItem -LiteralPath (Join-Path $business 'Exports') -Directory)
             if ($packages.Count -ne 1) { throw 'Expected exactly one published COCO package.' }
             $arguments = @($business, $packages[0].FullName)
