@@ -2,7 +2,7 @@
 
 Local-first desktop application for computer-vision dataset quality governance. Rust Core + Rust Agent Service (Rig) + Python algorithm Worker; Tauri 2 / React / TypeScript frontend. Windows, Linux and macOS are target platforms.
 
-当前处于工程设计与技术验证阶段，L1/L2 已形成方案Ⅰ基线，L3 实施任务与页面原型可供开发。生产应用尚未实现；Rig SDK 独立 PoC 已通过三平台测试。
+L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线构建与启动，首条桌面业务闭环正在实现。Rig SDK 独立 PoC 有三平台验证记录。
 
 - [项目文档入口](docs/README.md)
 - [开发工作守则](docs/development/coding_guidelines.md)（AI Coding 自动阅读入口：[AGENTS.md](AGENTS.md)）
@@ -132,6 +132,8 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 ```
 
 入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。两项集成测试启动真实 Worker，验证 loopback 鉴权、健康查询与正常退出，以及 Rust/Python 的 ArtifactRef 长整数、三种归属和可选字段往返。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。当前 Worker 报告零项已加载计算能力。
+
+已同步 Worker 环境后，`target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/image -v` 可验收实际 PNG/JPEG 解码、EXIF 方向、源字节摘要、损坏输入和像素限制。
 
 Rust/TypeScript 公共整数和归属类型的验收使用 `scripts/contracts/windows/check-ui-wire.ps1 -RustBin $rustBin -NodeExe (Get-Command node.exe).Source`。脚本重新生成 TypeScript 声明，检查文件漂移，再用同一组向量运行 Serde 和 Node TypeScript 解析。显式传入 `-Generate` 更新受版本控制的声明。
 

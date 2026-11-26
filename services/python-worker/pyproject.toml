@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "grpcio>=1.78,<2",
+    "Pillow==12.1.0",
     "protobuf>=6.31,<8",
 ]
 
