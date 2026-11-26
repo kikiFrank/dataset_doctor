@@ -1,6 +1,8 @@
+from datasetdoctor.v1 import common_pb2 as _common_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Optional as _Optional
+from collections.abc import Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -57,3 +59,51 @@ class ExecutionHandle(_message.Message):
     attempt_id: str
     worker_execution_id: str
     def __init__(self, task_id: _Optional[str] = ..., attempt_id: _Optional[str] = ..., worker_execution_id: _Optional[str] = ...) -> None: ...
+
+class ExecutionStarted(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ExecutionSucceeded(_message.Message):
+    __slots__ = ("result_manifest_ref",)
+    RESULT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    result_manifest_ref: _common_pb2.ArtifactRef
+    def __init__(self, result_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ...) -> None: ...
+
+class ReportExecutionRequest(_message.Message):
+    __slots__ = ("context", "execution_event_id", "worker_execution_id", "operation_digest", "source_event_seq", "started", "succeeded")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_EVENT_ID_FIELD_NUMBER: _ClassVar[int]
+    WORKER_EXECUTION_ID_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_EVENT_SEQ_FIELD_NUMBER: _ClassVar[int]
+    STARTED_FIELD_NUMBER: _ClassVar[int]
+    SUCCEEDED_FIELD_NUMBER: _ClassVar[int]
+    context: TaskContext
+    execution_event_id: str
+    worker_execution_id: str
+    operation_digest: str
+    source_event_seq: int
+    started: ExecutionStarted
+    succeeded: ExecutionSucceeded
+    def __init__(self, context: _Optional[_Union[TaskContext, _Mapping]] = ..., execution_event_id: _Optional[str] = ..., worker_execution_id: _Optional[str] = ..., operation_digest: _Optional[str] = ..., source_event_seq: _Optional[int] = ..., started: _Optional[_Union[ExecutionStarted, _Mapping]] = ..., succeeded: _Optional[_Union[ExecutionSucceeded, _Mapping]] = ...) -> None: ...
+
+class TerminalResultReceipt(_message.Message):
+    __slots__ = ("accepted_at", "completion_fingerprint", "result_manifest_ref")
+    ACCEPTED_AT_FIELD_NUMBER: _ClassVar[int]
+    COMPLETION_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    RESULT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
+    accepted_at: str
+    completion_fingerprint: str
+    result_manifest_ref: _common_pb2.ArtifactRef
+    def __init__(self, accepted_at: _Optional[str] = ..., completion_fingerprint: _Optional[str] = ..., result_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ...) -> None: ...
+
+class ReportAck(_message.Message):
+    __slots__ = ("accepted", "execution_event_id", "terminal_receipt")
+    ACCEPTED_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_EVENT_ID_FIELD_NUMBER: _ClassVar[int]
+    TERMINAL_RECEIPT_FIELD_NUMBER: _ClassVar[int]
+    accepted: bool
+    execution_event_id: str
+    terminal_receipt: TerminalResultReceipt
+    def __init__(self, accepted: _Optional[bool] = ..., execution_event_id: _Optional[str] = ..., terminal_receipt: _Optional[_Union[TerminalResultReceipt, _Mapping]] = ...) -> None: ...

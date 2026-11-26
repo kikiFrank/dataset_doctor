@@ -3,6 +3,8 @@
 #[cfg(feature = "execution-rpc")]
 mod result;
 #[cfg(feature = "execution-rpc")]
+pub(crate) use result::ReportScope;
+#[cfg(feature = "execution-rpc")]
 pub use result::{ResultSubmission, TerminalReceipt};
 
 use std::error::Error;
@@ -210,7 +212,25 @@ impl OpenedWorkspace {
             grant,
             receipt,
             now_ms,
-            AttemptEvent::Running,
+            AttemptEvent::Running(None),
+        )
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn record_reported_running(
+        &mut self,
+        workspace_session: Uuid,
+        grant: Uuid,
+        receipt: ClaimReceipt,
+        notice: (Uuid, u64),
+        now_ms: i64,
+    ) -> Result<(), TaskStoreError> {
+        self.record_attempt_event(
+            workspace_session,
+            grant,
+            receipt,
+            now_ms,
+            AttemptEvent::Running(Some(notice)),
         )
     }
 
@@ -245,14 +265,25 @@ impl OpenedWorkspace {
         let attempt = receipt.attempt.to_string();
         let grant = grant.to_string();
         let execution = receipt.execution.to_string();
+        let notice = match event {
+            AttemptEvent::Running(Some((id, seq))) => Some((id.to_string(), seq.to_string())),
+            _ => None,
+        };
+        let event_fields = match &notice {
+            Some((id, seq)) => {
+                serde_json::json!({"last_execution_event_id": id, "last_source_event_seq": seq})
+                    .to_string()
+            }
+            None => "{}".into(),
+        };
         let statement = match event {
             AttemptEvent::Claimed => "UPDATE tasks SET row_revision=row_revision+1, updated_at_ms=?6,
-                 execution_metadata_json=json_set(execution_metadata_json, '$.grant_state', 'CLAIMED', '$.claimed_execution_id', ?5)
+                 execution_metadata_json=json_set(json_patch(execution_metadata_json, json(?7)), '$.grant_state', 'CLAIMED', '$.claimed_execution_id', ?5)
                  WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status='DISPATCHING'
                        AND json_extract(execution_metadata_json, '$.grant_id')=?4
                        AND json_extract(execution_metadata_json, '$.grant_state')='ISSUED'",
-            AttemptEvent::Running => "UPDATE tasks SET row_revision=row_revision+1, updated_at_ms=?6,
-                 status='RUNNING', started_at_ms=?6
+            AttemptEvent::Running(_) => "UPDATE tasks SET row_revision=row_revision+1, updated_at_ms=?6,
+                 status='RUNNING', started_at_ms=?6, execution_metadata_json=json_patch(execution_metadata_json, json(?7))
                  WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status='DISPATCHING'
                        AND json_extract(execution_metadata_json, '$.grant_id')=?4
                        AND json_extract(execution_metadata_json, '$.grant_state')='CLAIMED'
@@ -263,19 +294,32 @@ impl OpenedWorkspace {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let changed = tx.execute(
             statement,
-            params![task, session, attempt, grant, execution, now_ms],
+            params![
+                task,
+                session,
+                attempt,
+                grant,
+                execution,
+                now_ms,
+                event_fields
+            ],
         )?;
         if changed == 0 {
-            let status: Option<String> = tx.query_row(
-                "SELECT status FROM tasks WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3
+            let latest = tx.query_row(
+                "SELECT status, json_extract(execution_metadata_json, '$.last_execution_event_id'),
+                        json_extract(execution_metadata_json, '$.last_source_event_seq')
+                 FROM tasks WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3
                    AND json_extract(execution_metadata_json, '$.grant_id')=?4
                    AND json_extract(execution_metadata_json, '$.grant_state')='CLAIMED'
                    AND json_extract(execution_metadata_json, '$.claimed_execution_id')=?5",
-                params![task, session, attempt, grant, execution], |row| row.get(0),
+                params![task, session, attempt, grant, execution],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?.zip(row.get::<_, Option<String>>(2)?))),
             ).optional()?;
-            match (event, status.as_deref()) {
-                (AttemptEvent::Claimed, Some("DISPATCHING" | "RUNNING"))
-                | (AttemptEvent::Running, Some("RUNNING")) => {}
+            match (event, latest) {
+                (AttemptEvent::Claimed, Some((status, _)))
+                    if matches!(status.as_str(), "DISPATCHING" | "RUNNING") => {}
+                (AttemptEvent::Running(_), Some((status, latest)))
+                    if status == "RUNNING" && (notice.is_none() || notice == latest) => {}
                 _ => return Err(TaskStoreError::AttemptConflict),
             }
         }
@@ -287,7 +331,7 @@ impl OpenedWorkspace {
 #[derive(Clone, Copy)]
 enum AttemptEvent {
     Claimed,
-    Running,
+    Running(Option<(Uuid, u64)>),
 }
 
 fn read_task(row: &Row<'_>) -> rusqlite::Result<StoredTask> {

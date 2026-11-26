@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package datasetdoctor.v1;
 
+import "datasetdoctor/v1/common.proto";
+
 message TaskContext {
   string workspace_id = 1;
   string workspace_session_id = 2;
@@ -32,6 +34,37 @@ message ExecutionHandle {
   string worker_execution_id = 3;
 }
 
+message ExecutionStarted {}
+
+message ExecutionSucceeded {
+  ArtifactRef result_manifest_ref = 1;
+}
+
+message ReportExecutionRequest {
+  TaskContext context = 1;
+  string execution_event_id = 2;
+  string worker_execution_id = 3;
+  string operation_digest = 4;
+  uint64 source_event_seq = 5;
+  oneof event {
+    ExecutionStarted started = 6;
+    ExecutionSucceeded succeeded = 7;
+  }
+}
+
+message TerminalResultReceipt {
+  string accepted_at = 1;
+  string completion_fingerprint = 2;
+  ArtifactRef result_manifest_ref = 3;
+}
+
+message ReportAck {
+  bool accepted = 1;
+  string execution_event_id = 2;
+  TerminalResultReceipt terminal_receipt = 3;
+}
+
 service CoreExecutionControl {
   rpc ClaimGrant(ClaimGrantRequest) returns (ExecutionHandle);
+  rpc ReportExecution(ReportExecutionRequest) returns (ReportAck);
 }

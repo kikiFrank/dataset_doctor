@@ -13,8 +13,9 @@ use dd_infra::json::JsonContracts;
 use dd_infra::task_store::{ResultSubmission, TaskStoreError, TaskSubmission};
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_protocol::v1::{
-    self as wire, ArtifactRef, ExecutionLookup, GeometryAuditInput, GeometryAuditRequest,
-    TaskContext, WorkerInputFile,
+    self as wire, ArtifactRef, ExecutionLookup, ExecutionStarted, ExecutionSucceeded,
+    GeometryAuditInput, GeometryAuditRequest, ReportExecutionRequest, TaskContext, WorkerInputFile,
+    report_execution_request::Event as ReportEvent,
 };
 use prost::Message;
 use rusqlite::Connection;
@@ -97,13 +98,14 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     let mut operation = Sha256::new();
     operation.update(b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0");
     operation.update(input.encode_to_vec());
+    let operation_digest = operation.finalize();
     let scope = GrantScope {
         workspace_session: session,
         task: task.task_id,
         attempt,
         executor_session: executor,
         input_fingerprint,
-        operation_digest: operation.finalize().into(),
+        operation_digest: operation_digest.into(),
         reservation: Uuid::new_v4(),
     };
     let grant = grants
@@ -172,6 +174,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         }),
         parameters: Some(input),
     };
+    let context = request.context.clone().unwrap();
     let mut altered = request.clone();
     altered.parameters.as_mut().unwrap().max_pixels = 101;
     assert_eq!(
@@ -265,12 +268,66 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         execution,
         node_spec_fingerprint: [0x34; 32],
         execution_event_id: Uuid::new_v4(),
+        source_event_seq: 2,
         verified,
     };
     assert!(matches!(
         thread.record_success(done.clone(), 5000),
         Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
     ));
+    let mut reporter = wire::core_execution_control_client::CoreExecutionControlClient::connect(
+        format!("http://{core_address}"),
+    )
+    .await
+    .unwrap();
+    let completion = ReportExecutionRequest {
+        context: Some(context),
+        execution_event_id: done.execution_event_id.to_string(),
+        worker_execution_id: first.worker_execution_id.clone(),
+        operation_digest: format!("{operation_digest:x}"),
+        source_event_seq: 2,
+        event: Some(ReportEvent::Succeeded(ExecutionSucceeded {
+            result_manifest_ref: Some(manifest_ref.clone()),
+        })),
+    };
+    assert_eq!(
+        reporter
+            .report_execution(authorized(completion.clone(), Uuid::new_v4()))
+            .await
+            .unwrap_err()
+            .code(),
+        Code::Unauthenticated
+    );
+    let early = reporter
+        .report_execution(authorized(completion.clone(), core_key))
+        .await
+        .unwrap_err();
+    assert_eq!(early.code(), Code::FailedPrecondition);
+    let started = ReportExecutionRequest {
+        execution_event_id: Uuid::new_v4().to_string(),
+        source_event_seq: 1,
+        event: Some(ReportEvent::Started(ExecutionStarted {})),
+        ..completion.clone()
+    };
+    let started = reporter
+        .report_execution(authorized(started, core_key))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(started.accepted);
+    assert!(started.terminal_receipt.is_none());
+    let out_of_order = ReportExecutionRequest {
+        source_event_seq: 1,
+        ..completion.clone()
+    };
+    assert_eq!(
+        reporter
+            .report_execution(authorized(out_of_order, core_key))
+            .await
+            .unwrap_err()
+            .code(),
+        Code::FailedPrecondition
+    );
     thread
         .record_running(session, grant, execution, 4000)
         .unwrap();
@@ -290,9 +347,48 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
         thread.record_success(stale_node, 5000),
         Err(WorkspaceThreadError::Task(TaskStoreError::AttemptConflict))
     ));
-    let saved = thread.record_success(done.clone(), 5000).unwrap();
-    assert_eq!(saved.accepted_at, "1970-01-01T00:00:05Z");
-    assert_eq!(thread.record_success(done.clone(), 6000).unwrap(), saved);
+    let mut bad_node = completion.clone();
+    bad_node.context.as_mut().unwrap().node_spec_fingerprint = "ff".repeat(32);
+    assert_eq!(
+        reporter
+            .report_execution(authorized(bad_node, core_key))
+            .await
+            .unwrap_err()
+            .code(),
+        Code::FailedPrecondition
+    );
+    let ack = reporter
+        .report_execution(authorized(completion.clone(), core_key))
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(ack.accepted);
+    assert_eq!(ack.execution_event_id, done.execution_event_id.to_string());
+    let saved = thread.record_success(done.clone(), 6000).unwrap();
+    assert_eq!(
+        ack.terminal_receipt.as_ref().unwrap().accepted_at,
+        saved.accepted_at
+    );
+    assert_eq!(
+        ack.terminal_receipt
+            .as_ref()
+            .unwrap()
+            .completion_fingerprint,
+        saved.completion_fingerprint
+    );
+    assert_eq!(
+        reporter
+            .report_execution(authorized(completion, core_key))
+            .await
+            .unwrap()
+            .into_inner(),
+        ack
+    );
+    let accepted_at = time::OffsetDateTime::parse(
+        &saved.accepted_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .unwrap();
     let conflicting = ResultSubmission {
         execution_event_id: Uuid::new_v4(),
         ..done.clone()
@@ -350,6 +446,7 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
             .unwrap()
             .success()
     );
+    drop(reporter);
     stop.send(()).unwrap();
     timeout(TIMEOUT, core_server).await.unwrap().unwrap();
     thread.close(session).unwrap();
@@ -362,7 +459,11 @@ async fn real_python_worker_checks_geometry_only_after_a_durable_core_grant() {
     assert_eq!(path, format!("{result_directory}/result-manifest.json"));
     assert_eq!(
         (finished, revision, event),
-        (5000, 4, done.execution_event_id.to_string())
+        (
+            i64::try_from(accepted_at.unix_timestamp_nanos() / 1_000_000).unwrap(),
+            4,
+            done.execution_event_id.to_string()
+        )
     );
 }
 

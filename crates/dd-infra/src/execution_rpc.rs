@@ -6,13 +6,16 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use dd_core::execution_grant::{ClaimContext, GrantBook, GrantError};
 use dd_core::workspace::WorkspaceAccessError;
 use dd_protocol::v1::{
-    ClaimGrantRequest, ExecutionHandle, core_execution_control_server::CoreExecutionControl,
+    ClaimGrantRequest, ExecutionHandle, ReportAck, ReportExecutionRequest, TerminalResultReceipt,
+    core_execution_control_server::CoreExecutionControl, report_execution_request::Event,
 };
 use subtle::ConstantTimeEq;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::task_store::TaskStoreError;
+use crate::artifact_manifest::{TaskManifestScope, verify_task_result_manifest};
+use crate::json::JsonContracts;
+use crate::task_store::{ReportScope, ResultSubmission, TaskStoreError};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 pub struct CoreClaimService {
@@ -37,7 +40,7 @@ impl CoreClaimService {
         }
     }
 
-    fn authenticate(&self, request: &Request<ClaimGrantRequest>) -> Result<(), Status> {
+    fn authenticate<T>(&self, request: &Request<T>) -> Result<(), Status> {
         let all = request.metadata().get_all("authorization");
         let mut values = all.iter();
         let token = values.next().ok_or_else(invalid_credential)?;
@@ -87,13 +90,8 @@ impl CoreExecutionControl for CoreClaimService {
             let receipt = grants
                 .validate_claim(grant, executor, &claim, now)
                 .map_err(claim_status)?;
-            let epoch = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|_| Status::internal("Core clock unavailable"))?;
-            let now_ms = i64::try_from(epoch.as_millis())
-                .map_err(|_| Status::internal("Core clock unavailable"))?;
             workspace
-                .record_claimed(claim.workspace_session, grant, receipt, now_ms)
+                .record_claimed(claim.workspace_session, grant, receipt, utc_now_ms()?)
                 .map_err(storage_status)?;
             grants
                 .claim(grant, executor, &claim, now)
@@ -107,6 +105,135 @@ impl CoreExecutionControl for CoreClaimService {
             worker_execution_id: receipt.execution.to_string(),
         }))
     }
+
+    async fn report_execution(
+        &self,
+        request: Request<ReportExecutionRequest>,
+    ) -> Result<Response<ReportAck>, Status> {
+        self.authenticate(&request)?;
+        let request = request.into_inner();
+        let context = request
+            .context
+            .ok_or_else(|| Status::invalid_argument("Execution context is required"))?;
+        if parse_uuid(&context.executor_session_id)? != self.executor {
+            return Err(Status::permission_denied(
+                "Executor session does not own this connection",
+            ));
+        }
+        if request.source_event_seq == 0 {
+            return Err(Status::invalid_argument(
+                "Execution event sequence starts at one",
+            ));
+        }
+        let claim = ClaimContext {
+            workspace_session: parse_uuid(&context.workspace_session_id)?,
+            task: parse_uuid(&context.task_id)?,
+            attempt: parse_uuid(&context.attempt_id)?,
+            execution: parse_uuid(&request.worker_execution_id)?,
+            input_fingerprint: parse_digest(&context.input_fingerprint)?,
+            operation_digest: parse_digest(&request.operation_digest)?,
+        };
+        let grant = parse_uuid(&context.grant_id)?;
+        let workspace_id = parse_uuid(&context.workspace_id)?;
+        let node_spec_fingerprint = parse_digest(&context.node_spec_fingerprint)?;
+        let event_id = parse_uuid(&request.execution_event_id)?;
+        let source_event_seq = request.source_event_seq;
+        let event = request
+            .event
+            .ok_or_else(|| Status::invalid_argument("Execution event is required"))?;
+        let executor = self.executor;
+        let grants = Arc::clone(&self.grants);
+        let workspace = Arc::clone(&self.workspace);
+
+        let terminal_receipt = tokio::task::spawn_blocking(
+            move || -> Result<Option<TerminalResultReceipt>, Status> {
+                let execution = grants
+                    .lock()
+                    .map_err(|_| Status::internal("Core grant state unavailable"))?
+                    .validate_claim(grant, executor, &claim, Instant::now())
+                    .map_err(claim_status)?;
+                let directory = workspace
+                    .report_directory(ReportScope {
+                        workspace: workspace_id,
+                        workspace_session: claim.workspace_session,
+                        grant,
+                        execution,
+                        input_fingerprint: claim.input_fingerprint,
+                        node_spec_fingerprint,
+                    })
+                    .map_err(storage_status)?;
+                match event {
+                    Event::Started(_) => {
+                        workspace
+                            .record_reported_running(
+                                claim.workspace_session,
+                                grant,
+                                execution,
+                                (event_id, source_event_seq),
+                                utc_now_ms()?,
+                            )
+                            .map_err(storage_status)?;
+                        Ok(None)
+                    }
+                    Event::Succeeded(success) => {
+                        let reference = success.result_manifest_ref.ok_or_else(|| {
+                            Status::invalid_argument(
+                                "Verified result manifest reference is required",
+                            )
+                        })?;
+                        let contracts = JsonContracts::new()
+                            .map_err(|_| Status::internal("Core result validator unavailable"))?;
+                        let verified = verify_task_result_manifest(
+                            &directory,
+                            &contracts,
+                            &TaskManifestScope {
+                                task: claim.task,
+                                attempt: claim.attempt,
+                                input_fingerprint: claim.input_fingerprint,
+                            },
+                            &reference,
+                        )
+                        .map_err(|_| {
+                            Status::failed_precondition("Core rejected the result manifest")
+                        })?;
+                        let receipt = workspace
+                            .record_success(
+                                ResultSubmission {
+                                    workspace_session: claim.workspace_session,
+                                    grant,
+                                    execution,
+                                    node_spec_fingerprint,
+                                    execution_event_id: event_id,
+                                    source_event_seq,
+                                    verified,
+                                },
+                                utc_now_ms()?,
+                            )
+                            .map_err(storage_status)?;
+                        Ok(Some(TerminalResultReceipt {
+                            accepted_at: receipt.accepted_at,
+                            completion_fingerprint: receipt.completion_fingerprint,
+                            result_manifest_ref: Some(reference),
+                        }))
+                    }
+                }
+            },
+        )
+        .await
+        .map_err(|_| Status::internal("Core report did not complete"))??;
+        Ok(Response::new(ReportAck {
+            accepted: true,
+            execution_event_id: event_id.to_string(),
+            terminal_receipt,
+        }))
+    }
+}
+
+fn utc_now_ms() -> Result<i64, Status> {
+    let epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| Status::internal("Core clock unavailable"))?;
+    i64::try_from(epoch.as_millis()).map_err(|_| Status::internal("Core clock unavailable"))
 }
 
 fn parse_uuid(value: &str) -> Result<Uuid, Status> {

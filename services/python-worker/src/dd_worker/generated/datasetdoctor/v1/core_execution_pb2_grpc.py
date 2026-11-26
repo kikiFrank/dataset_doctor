@@ -39,12 +39,23 @@ class CoreExecutionControlStub:
                 request_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ClaimGrantRequest.SerializeToString,
                 response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
                 _registered_method=True)
+        self.ReportExecution = channel.unary_unary(
+                '/datasetdoctor.v1.CoreExecutionControl/ReportExecution',
+                request_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ReportExecutionRequest.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ReportAck.FromString,
+                _registered_method=True)
 
 
 class CoreExecutionControlServicer:
     """Missing associated documentation comment in .proto file."""
 
     def ClaimGrant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReportExecution(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -57,6 +68,11 @@ def add_CoreExecutionControlServicer_to_server(servicer, server):
                     servicer.ClaimGrant,
                     request_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ClaimGrantRequest.FromString,
                     response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.SerializeToString,
+            ),
+            'ReportExecution': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReportExecution,
+                    request_deserializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ReportExecutionRequest.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_core__execution__pb2.ReportAck.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -86,6 +102,33 @@ class CoreExecutionControl:
             '/datasetdoctor.v1.CoreExecutionControl/ClaimGrant',
             datasetdoctor_dot_v1_dot_core__execution__pb2.ClaimGrantRequest.SerializeToString,
             datasetdoctor_dot_v1_dot_core__execution__pb2.ExecutionHandle.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReportExecution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.CoreExecutionControl/ReportExecution',
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ReportExecutionRequest.SerializeToString,
+            datasetdoctor_dot_v1_dot_core__execution__pb2.ReportAck.FromString,
             options,
             channel_credentials,
             insecure,

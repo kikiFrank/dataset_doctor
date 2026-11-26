@@ -14,7 +14,7 @@ use dd_core::workspace::{
 use uuid::Uuid;
 
 #[cfg(feature = "execution-rpc")]
-use crate::task_store::{ResultSubmission, TerminalReceipt};
+use crate::task_store::{ReportScope, ResultSubmission, TerminalReceipt};
 use crate::task_store::{StoredTask, TaskStoreError, TaskSubmission};
 use crate::workspace::{OpenedWorkspace, SqliteWorkspaceStore, WorkspaceOpenError};
 
@@ -173,6 +173,30 @@ impl WorkspaceThread {
     ) -> Result<(), WorkspaceThreadError> {
         self.task(session, move |workspace| {
             workspace.record_claimed(session, grant, receipt, now_ms)
+        })
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn report_directory(
+        &self,
+        scope: ReportScope,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.task(scope.workspace_session, move |workspace| {
+            workspace.report_directory(&scope)
+        })
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn record_reported_running(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+        receipt: ClaimReceipt,
+        notice: (Uuid, u64),
+        now_ms: i64,
+    ) -> Result<(), WorkspaceThreadError> {
+        self.task(session, move |workspace| {
+            workspace.record_reported_running(session, grant, receipt, notice, now_ms)
         })
     }
 
