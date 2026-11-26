@@ -3,10 +3,17 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::{File, OpenOptions, TryLockError};
-use std::io;
-use std::path::Path;
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+
+use rusqlite::{Connection, OpenFlags};
+use serde::Deserialize;
+
+use crate::json::{ContractError, JsonContracts, JsonProfile};
+use crate::sqlite::{WorkspaceMigrationError, open_existing_workspace_database};
 
 const FILE_NAME: &str = ".datasetdoctor.lock";
+const MARKER_LIMIT: u64 = 1_048_576;
 
 #[derive(Debug)]
 pub enum WorkspaceLockError {
@@ -58,6 +65,128 @@ impl WorkspaceLock {
             Err(TryLockError::Error(error)) => Err(WorkspaceLockError::Io(error)),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum WorkspaceOpenError {
+    Io(io::Error),
+    Lock(WorkspaceLockError),
+    InvalidFile(&'static str),
+    MarkerTooLarge,
+    Marker(ContractError),
+    MarkerMapping(serde_json::Error),
+    Database(rusqlite::Error),
+    Migration(WorkspaceMigrationError),
+}
+
+impl Display for WorkspaceOpenError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "Workspace filesystem: {error}"),
+            Self::Lock(error) => Display::fmt(error, formatter),
+            Self::InvalidFile(name) => write!(formatter, "Workspace {name} must be a regular file"),
+            Self::MarkerTooLarge => write!(formatter, "Workspace marker exceeds 1 MiB"),
+            Self::Marker(error) => Display::fmt(error, formatter),
+            Self::MarkerMapping(_) => {
+                write!(formatter, "Workspace marker does not map to identity")
+            }
+            Self::Database(error) => write!(formatter, "Open workspace.db: {error}"),
+            Self::Migration(error) => Display::fmt(error, formatter),
+        }
+    }
+}
+
+impl Error for WorkspaceOpenError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::Lock(error) => Some(error),
+            Self::Marker(error) => Some(error),
+            Self::MarkerMapping(error) => Some(error),
+            Self::Database(error) => Some(error),
+            Self::Migration(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq)]
+pub struct WorkspaceIdentity {
+    pub workspace_id: String,
+    #[serde(rename = "name")]
+    pub display_name: String,
+}
+
+#[derive(Debug)]
+pub struct OpenedWorkspace {
+    root: PathBuf,
+    identity: WorkspaceIdentity,
+    // Field drop order closes SQLite before releasing the file lock.
+    _connection: Connection,
+    _lock: WorkspaceLock,
+}
+
+impl OpenedWorkspace {
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub fn identity(&self) -> &WorkspaceIdentity {
+        &self.identity
+    }
+}
+
+/// Opens a Workspace directory that Core has authorized.
+pub fn open_workspace(
+    approved_root: &Path,
+    contracts: &JsonContracts,
+    busy_timeout_ms: u32,
+) -> Result<OpenedWorkspace, WorkspaceOpenError> {
+    let root = approved_root
+        .canonicalize()
+        .map_err(WorkspaceOpenError::Io)?;
+    let lock = WorkspaceLock::acquire(&root).map_err(WorkspaceOpenError::Lock)?;
+    let mut marker_options = OpenOptions::new();
+    marker_options.read(true);
+    prevent_replacement(&mut marker_options);
+    let marker = marker_options
+        .open(root.join("workspace.json"))
+        .map_err(WorkspaceOpenError::Io)?;
+    if !ordinary_file(&marker.metadata().map_err(WorkspaceOpenError::Io)?) {
+        return Err(WorkspaceOpenError::InvalidFile("workspace.json"));
+    }
+    let mut bytes = Vec::new();
+    marker
+        .take(MARKER_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(WorkspaceOpenError::Io)?;
+    if bytes.len() as u64 > MARKER_LIMIT {
+        return Err(WorkspaceOpenError::MarkerTooLarge);
+    }
+    let document = contracts
+        .validate(JsonProfile::WorkspaceConfig, &bytes)
+        .map_err(WorkspaceOpenError::Marker)?;
+    let identity: WorkspaceIdentity =
+        serde_json::from_value(document).map_err(WorkspaceOpenError::MarkerMapping)?;
+
+    let database = root.join("workspace.db");
+    if !ordinary_file(&std::fs::symlink_metadata(&database).map_err(WorkspaceOpenError::Io)?) {
+        return Err(WorkspaceOpenError::InvalidFile("workspace.db"));
+    }
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX
+        | OpenFlags::SQLITE_OPEN_NOFOLLOW;
+    let connection =
+        Connection::open_with_flags(database, flags).map_err(WorkspaceOpenError::Database)?;
+    let connection =
+        open_existing_workspace_database(connection, busy_timeout_ms, &identity.workspace_id)
+            .map_err(WorkspaceOpenError::Migration)?;
+    Ok(OpenedWorkspace {
+        root,
+        identity,
+        _connection: connection,
+        _lock: lock,
+    })
 }
 
 #[cfg(windows)]

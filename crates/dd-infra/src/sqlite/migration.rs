@@ -95,10 +95,29 @@ pub fn migrate_workspace_database(
     workspace_id: &str,
     now_ms: i64,
 ) -> Result<Connection, WorkspaceMigrationError> {
+    prepare_workspace_database(connection, busy_timeout_ms, workspace_id, Some(now_ms))
+}
+
+pub(crate) fn open_existing_workspace_database(
+    connection: Connection,
+    busy_timeout_ms: u32,
+    workspace_id: &str,
+) -> Result<Connection, WorkspaceMigrationError> {
+    prepare_workspace_database(connection, busy_timeout_ms, workspace_id, None)
+}
+
+fn prepare_workspace_database(
+    connection: Connection,
+    busy_timeout_ms: u32,
+    workspace_id: &str,
+    now_ms: Option<i64>,
+) -> Result<Connection, WorkspaceMigrationError> {
     use WorkspaceMigrationStage::*;
 
     // Reject an unrelated or unsupported database before changing its journal mode.
-    schema_is_empty(&connection, workspace_id)?;
+    if schema_is_empty(&connection, workspace_id)? && now_ms.is_none() {
+        return Err(WorkspaceMigrationError::MissingMetadata);
+    }
     let mut connection = initialize_workspace_write_connection(connection, busy_timeout_ms)
         .map_err(WorkspaceMigrationError::Connection)?;
     let transaction = sqlite(
@@ -106,6 +125,7 @@ pub fn migrate_workspace_database(
         connection.transaction_with_behavior(TransactionBehavior::Immediate),
     )?;
     if schema_is_empty(&transaction, workspace_id)? {
+        let now_ms = now_ms.ok_or(WorkspaceMigrationError::MissingMetadata)?;
         sqlite(CreateSchema, transaction.execute_batch(INITIAL_SCHEMA))?;
         sqlite(
             InsertMetadata,

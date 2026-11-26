@@ -1,6 +1,8 @@
+mod support;
+
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -11,22 +13,6 @@ const FILE_NAME: &str = ".datasetdoctor.lock";
 const CHILD_ROOT: &str = "DD_WORKSPACE_TEST_CHILD_ROOT";
 const CHILD_EXPECTS: &str = "DD_WORKSPACE_TEST_CHILD_EXPECTS";
 const CASE: &str = "workspace_writer_is_exclusive_across_processes";
-
-fn workspace_root() -> PathBuf {
-    let run = PathBuf::from(
-        env::var_os("DD_WORKSPACE_LOCK_RUN_DIR").expect("set the Workspace lock run directory"),
-    )
-    .canonicalize()
-    .unwrap();
-    let runs = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/p02-workspace/runs")
-        .canonicalize()
-        .unwrap();
-    assert_eq!(run.parent(), Some(runs.as_path()));
-    let workspace = run.join("工作区 synthetic");
-    fs::create_dir(&workspace).unwrap();
-    workspace
-}
 
 #[test]
 fn workspace_writer_is_exclusive_across_processes() {
@@ -40,7 +26,7 @@ fn workspace_writer_is_exclusive_across_processes() {
         return;
     }
 
-    let workspace = workspace_root();
+    let workspace = support::workspace_root("工作区 synthetic");
     let holder = WorkspaceLock::acquire(&workspace).unwrap();
     assert!(workspace.join(FILE_NAME).is_file());
     run_contender(&workspace, "busy");
