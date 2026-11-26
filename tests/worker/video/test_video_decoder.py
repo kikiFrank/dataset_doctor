@@ -102,6 +102,29 @@ class VideoDecoderTests(unittest.TestCase):
         with Image.open(BytesIO(decoder.decode_png(self.vfr, index, 2))) as frame:
             self.assert_color(frame.convert("RGB"), (22, 15), BLUE)
 
+    def test_multistream_container_requires_an_explicit_video_stream(self):
+        from dd_worker.video_decoder import VideoDecodeError
+
+        multistream = self.folder / "multiple-video-streams.mp4"
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=blue:s=48x32:r=10:d=0.4",
+            "-f", "lavfi", "-i", "color=red:s=48x32:r=10:d=0.6",
+            "-map", "0:v", "-map", "1:v", "-c:v", "mpeg4", str(multistream),
+        )
+        decoder = self.decoder()
+        with self.assertRaises(VideoDecodeError) as error:
+            decoder.probe(multistream, digest(multistream))
+        self.assertEqual(error.exception.code, "video_stream_selection_required")
+        index = decoder.probe(multistream, digest(multistream), stream_index=1)
+        self.assertEqual(index.stream_index, 1)
+        self.assertEqual(len(index.frames), 6)
+        with Image.open(BytesIO(decoder.decode_png(multistream, index, 0))) as frame:
+            red, green, blue = frame.convert("RGB").getpixel((22, 15))
+            self.assertTrue(red > 240 and green < 12 and blue < 12)
+        with self.assertRaises(VideoDecodeError) as error:
+            decoder.probe(multistream, digest(multistream), stream_index=2)
+        self.assertEqual(error.exception.code, "invalid_video_stream")
+
     def test_rotation_changes_display_dimensions_and_pixels(self):
         decoder = self.decoder()
         index = decoder.probe(self.rotated, digest(self.rotated))

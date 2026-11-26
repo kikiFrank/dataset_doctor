@@ -60,23 +60,21 @@ class VideoDecoder:
         self.max_frames = max_frames
         self.timeout_seconds = timeout_seconds
 
-    def probe(self, source: Path, expected_sha256: str) -> VideoIndex:
+    def probe(
+        self, source: Path, expected_sha256: str, *, stream_index: int | None = None,
+    ) -> VideoIndex:
         source = _verified_source(source, expected_sha256)
-        output = self._capture(
-            self.ffprobe,
-            [
-                *INPUT_OPTIONS, "-select_streams", "V:0", "-show_streams", "-show_frames",
-                "-show_entries",
-                "stream=index,time_base:stream_side_data=rotation:frame=pts,width,height,pict_type",
-                "-of", "json", "-i", str(source),
-            ],
-            PROBE_BYTE_LIMIT,
-        )
-        _verified_source(source, expected_sha256)
         try:
-            metadata = json.loads(output)
+            stream_index = self._select_stream(source, stream_index)
+            metadata = self._probe_json(
+                source, str(stream_index), "-show_frames",
+                entries="stream=index,time_base:stream_side_data=rotation:frame=pts,width,height,pict_type",
+            )
+            _verified_source(source, expected_sha256)
             stream, = metadata["streams"]
             raw_frames = metadata["frames"]
+            if stream["index"] != stream_index:
+                raise VideoDecodeError("invalid_video_stream")
             if not raw_frames:
                 raise VideoDecodeError("no_display_frames")
             if len(raw_frames) > self.max_frames:
@@ -93,6 +91,30 @@ class VideoDecoder:
                               _right_angle(rotation), frames)
         except (KeyError, TypeError, ValueError) as error:
             raise VideoDecodeError("decode_failed") from error
+
+    def _select_stream(self, source: Path, requested: int | None) -> int:
+        metadata = self._probe_json(source, "V", entries="stream=index")
+        indices = [stream["index"] for stream in metadata.get("streams", [])]
+        if not indices:
+            raise VideoDecodeError("invalid_video_stream")
+        if requested is None:
+            if len(indices) != 1:
+                raise VideoDecodeError("video_stream_selection_required")
+            return indices[0]
+        if type(requested) is not int or requested not in indices:
+            raise VideoDecodeError("invalid_video_stream")
+        return requested
+
+    def _probe_json(self, source: Path, streams: str, *options: str, entries: str) -> dict:
+        output = self._capture(
+            self.ffprobe,
+            [
+                *INPUT_OPTIONS, "-select_streams", streams, "-show_streams", *options,
+                "-show_entries", entries, "-of", "json", "-i", str(source),
+            ],
+            PROBE_BYTE_LIMIT,
+        )
+        return json.loads(output)
 
     def decode_png(self, source: Path, index: VideoIndex, frame_index: int) -> bytes:
         if type(frame_index) is not int or not 0 <= frame_index < len(index.frames):
