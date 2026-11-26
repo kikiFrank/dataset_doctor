@@ -1,4 +1,7 @@
 # P00-01: inspect the existing Windows toolchain without installing anything.
+[CmdletBinding()]
+param([switch]$Locked)
+
 $tools = @(
     @{ Name = 'cargo'; Args = '--version'; Pattern = '^cargo (?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)'; Hint = 'Expose the bin directory of an already installed Rust toolchain.' }
     @{ Name = 'rustc'; Args = '--version'; Pattern = '^rustc (?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)'; Hint = 'Expose the bin directory of an already installed Rust toolchain.' }
@@ -8,6 +11,27 @@ $tools = @(
     @{ Name = 'uv'; Args = '--version'; Pattern = '^uv (?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)'; Hint = 'Expose the local uv executable.' }
     @{ Name = 'protoc'; Args = '--version'; Pattern = '^libprotoc (?<version>\d+(?:\.\d+){1,2})(?:\s|$)'; Hint = 'Expose the local protoc executable.' }
 )
+
+$pinned = $null
+if ($Locked) {
+    if (-not [Environment]::Is64BitProcess -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+        Write-Output 'The locked toolchain requires a Windows x64 process.'
+        exit 1
+    }
+    try {
+        $lockFile = Join-Path $PSScriptRoot '..\config\toolchains\windows-x64.json'
+        $pinned = Get-Content -LiteralPath $lockFile -Raw -Encoding UTF8 -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
+        $missing = @($tools | Where-Object { $pinned.($_.Name) -isnot [string] -or -not $pinned.($_.Name) })
+        if ($missing -or @($pinned.PSObject.Properties).Count -ne $tools.Count) {
+            throw 'Every probe must have one exact version.'
+        }
+    } catch {
+        Write-Output "Invalid Windows toolchain lock: $($_.Exception.Message)"
+        exit 1
+    }
+    Write-Output 'Locked toolchain: windows-x64'
+}
 
 # Use in-memory interop so the preflight does not compile or write a helper file.
 function New-WindowsApi {
@@ -299,6 +323,9 @@ foreach ($tool in $tools) {
         $checkFailed = $true
     } elseif ($candidate.Reason -or -not $candidate.Version) {
         Write-Output "$($tool.Name): UNVERIFIED [$($candidate.Path)]. $($candidate.Reason). $($tool.Hint)"
+        $checkFailed = $true
+    } elseif ($Locked -and $candidate.Version -cne $pinned.($tool.Name)) {
+        Write-Output "$($tool.Name): VERSION MISMATCH [$($candidate.Path)] ($($candidate.Version)). Expected $($pinned.($tool.Name))."
         $checkFailed = $true
     } elseif ($tool.Target -and $candidate.Version -notmatch $tool.Target) {
         Write-Output "$($tool.Name): VERSION MISMATCH [$($candidate.Path)] ($($candidate.Version)). $($tool.Hint)"

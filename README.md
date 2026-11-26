@@ -8,6 +8,7 @@ Local-first desktop application for computer-vision dataset quality governance. 
 - [开发工作守则](docs/development/coding_guidelines.md)（AI Coding 自动阅读入口：[AGENTS.md](AGENTS.md)）
 - [前端 HTML 原型](docs/modules/frontend/prototype/index.html)
 - [实施任务与验收](docs/development/implementation_spec_and_tasks.md)
+- [MVP 开发进度与验收证据](docs/development/mvp_progress.md)
 - [Rig SDK 测试报告](docs/testing/rig_sdk_validation.md)
 
 ## Windows 工具链预检（P00-01）
@@ -20,6 +21,8 @@ $LASTEXITCODE
 ```
 
 预检读取当前进程 PATH，只查询可直接运行的本地工具。退出码 `0` 表示清单已核实且满足 Node 24 和 CPython 3.12 系列目标，`1` 表示有缺失、版本偏离或未核实项。完整 P00 还需验证工具链锁定与 Worker 打包。
+
+Windows x64 构建在同一命令末尾加 `-Locked`，按项目版本锁核对七个工具的精确版本。PATH 需优先包含安装好的真实可执行文件路径。已用本机 uv 0.9.26 和 0.11.2 验证接受锁定版本和拒绝偏离。[Windows x64 版本锁](config/toolchains/windows-x64.json)
 
 预检跳过包含目录联接或其他重解析点的 PATH 项，并将发现的工具管理器代理标为未核实。只有能放入专用 Windows 作业对象的进程才会执行版本查询，超时时会清理该次查询的进程树。作业对象负责进程生命周期，未提供网络隔离。
 
