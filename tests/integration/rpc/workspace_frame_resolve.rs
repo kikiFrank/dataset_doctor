@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
@@ -9,6 +10,83 @@ use uuid::Uuid;
 #[path = "support/workspace_video.rs"]
 mod workspace_video;
 use workspace_video::Fixture;
+
+#[tokio::test]
+async fn frame_manifest_preserves_canonical_integer_dimensions_in_the_worker_and_after_reopen() {
+    let fixture =
+        Fixture::create_with("Rounded dimensions.mp4", make_rounded_dimensions_clip).await;
+    let service = FrameService::new(Arc::clone(&fixture.owner)).unwrap();
+    let (queued, job) = service
+        .submit(
+            fixture.session,
+            FrameSubmission {
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                video_id: fixture.video_id,
+                target: FrameTarget::Index(0),
+                policy: SeekPolicy::Nearest,
+            },
+            210,
+        )
+        .unwrap();
+    let mut worker = FrameResolveRuntime::launch(
+        Arc::clone(&fixture.owner),
+        fixture.session,
+        fixture.python,
+        fixture.entry,
+    )
+    .await
+    .unwrap();
+    assert_eq!(worker.run(job.unwrap()).await.unwrap().status, "SUCCEEDED");
+    worker.shutdown().await.unwrap();
+    fixture.owner.close(fixture.session).unwrap();
+    let folder = fixture
+        .owner
+        .grant_selected_directory(fixture.root.clone())
+        .unwrap();
+    let reopened = fixture
+        .owner
+        .open(folder.grant_id)
+        .unwrap()
+        .workspace_session_id;
+    let frame = service
+        .snapshot(reopened, queued.task_id)
+        .unwrap()
+        .frame
+        .unwrap();
+    assert_eq!((frame.frame.width, frame.frame.height), (80, 60));
+    let check = Command::new(std::env::var_os("DD_WORKER_PYTHON").unwrap())
+        .args(["-I", "-B", "-c",
+            "import sys; from PIL import Image; im=Image.open(sys.argv[1]); assert im.size == (80, 60); assert im.getpixel((10,10))[2] > 240"])
+        .arg(fixture.root.join(frame.relative_path)).status().unwrap();
+    assert!(check.success());
+}
+
+fn make_rounded_dimensions_clip(output: &Path) {
+    let mut ffmpeg = Command::new(std::env::var_os("DD_WORKER_VIDEO_FFMPEG").unwrap());
+    ffmpeg
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=blue:s=80x60:r=5:d=0.4",
+            "-c:v",
+            "mpeg4",
+            "-threads",
+            "1",
+        ])
+        .arg(output);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        ffmpeg.creation_flags(0x08000000);
+    }
+    assert!(ffmpeg.status().unwrap().success());
+}
 
 #[tokio::test]
 async fn workspace_frame_tasks_decode_the_selected_pixels_and_reopen_a_verified_cache() {

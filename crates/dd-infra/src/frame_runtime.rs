@@ -15,7 +15,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::artifact_manifest::{MANIFEST_FILE, TaskManifestScope, parse_stored_manifest_reference};
-use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
+use crate::input_fingerprint::{
+    FrozenInputManifest, deserialize_manifest_u32, freeze_input_manifest,
+};
 use crate::json::{JsonContracts, JsonProfile};
 use crate::paths::{
     is_portable_relative_file, open_registered_file, open_scoped_file, publish_immutable,
@@ -79,11 +81,14 @@ pub struct FrameService {
 #[serde(deny_unknown_fields)]
 struct FrameConfiguration {
     video_id: Uuid,
+    #[serde(deserialize_with = "deserialize_manifest_u32")]
     stream_index: u32,
     frame_index: String,
     raw_pts: Option<String>,
     pts_us: Option<String>,
+    #[serde(deserialize_with = "deserialize_manifest_u32")]
     width: u32,
+    #[serde(deserialize_with = "deserialize_manifest_u32")]
     height: u32,
 }
 

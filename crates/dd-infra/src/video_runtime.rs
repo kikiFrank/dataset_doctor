@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::artifact_manifest::{MANIFEST_FILE, TaskManifestScope};
-use crate::input_fingerprint::freeze_input_manifest;
+use crate::input_fingerprint::{freeze_input_manifest, manifest_u32};
 use crate::json::{JsonContracts, JsonProfile};
 use crate::paths::{is_portable_relative_file, open_registered_file, open_scoped_file};
 use crate::task_store::{TaskOutcome, TaskStoreError, format_digest, parse_digest};
@@ -292,8 +292,17 @@ fn load_binding(
     {
         return Err(VideoRuntimeError::InvalidBinding);
     }
-    let stream_index = serde_json::from_value(value["resolved_config"]["stream_index"].clone())
-        .map_err(|_| VideoRuntimeError::InvalidBinding)?;
+    let selection = &value["resolved_config"]["stream_index"];
+    let stream_index = if selection.is_null() {
+        None
+    } else {
+        Some(
+            selection
+                .as_number()
+                .and_then(manifest_u32)
+                .ok_or(VideoRuntimeError::InvalidBinding)?,
+        )
+    };
     let path = Path::new(&record.source_path);
     let source_path = match record.source_location.as_str() {
         "EXTERNAL" if path.is_absolute() => path.to_owned(),

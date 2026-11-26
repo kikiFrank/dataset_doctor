@@ -8,7 +8,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{CAPABILITY, TRANSLATION_PROFILE_ID, TrackingError};
-use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
+use crate::input_fingerprint::{
+    FrozenInputManifest, deserialize_manifest_u32 as manifest_u32, freeze_input_manifest,
+};
 use crate::json::JsonContracts;
 use crate::task_store::format_digest;
 use crate::video_keyframes::{ResolvedVideoSampling, VideoAnnotationService};
@@ -63,17 +65,6 @@ pub(super) struct TrackingLimits {
     pub max_frames: u32,
     #[serde(deserialize_with = "manifest_u32")]
     pub timeout_ms: u32,
-}
-
-fn manifest_u32<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
-    let number = serde_json::Number::deserialize(deserializer)?.to_string();
-    let (coefficient, exponent) = number.split_once('e').unwrap_or((&number, "0"));
-    coefficient
-        .parse::<u32>()
-        .ok()
-        .zip(exponent.parse::<u32>().ok())
-        .and_then(|(coefficient, exponent)| coefficient.checked_mul(10_u32.checked_pow(exponent)?))
-        .ok_or_else(|| serde::de::Error::custom("Expected a canonical unsigned 32-bit integer"))
 }
 
 pub(super) fn freeze_plan(

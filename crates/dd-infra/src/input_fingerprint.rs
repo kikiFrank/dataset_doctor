@@ -3,6 +3,10 @@
 use std::error::Error;
 use std::fmt::{self, Display};
 
+#[cfg(feature = "execution-rpc")]
+use serde::Deserialize;
+#[cfg(feature = "execution-rpc")]
+use serde_json::Number;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -54,6 +58,26 @@ pub struct FrozenInputManifest {
     pub bytes: Vec<u8>,
     pub input_fingerprint: [u8; 32],
     pub sha256: [u8; 32],
+}
+
+/// Parse the exact positive-exponent form emitted for canonical integers.
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn manifest_u32(number: &Number) -> Option<u32> {
+    let raw = number.to_string();
+    let (coefficient, exponent) = raw.split_once('e').unwrap_or((&raw, "0"));
+    coefficient
+        .parse::<u32>()
+        .ok()?
+        .checked_mul(10_u32.checked_pow(exponent.parse().ok()?)?)
+}
+
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn deserialize_manifest_u32<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u32, D::Error> {
+    let number = Number::deserialize(deserializer)?;
+    manifest_u32(&number)
+        .ok_or_else(|| serde::de::Error::custom("Expected a canonical unsigned 32-bit integer"))
 }
 
 /// Fingerprint the schema-validated manifest without its fingerprint field.

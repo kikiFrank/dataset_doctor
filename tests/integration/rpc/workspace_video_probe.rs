@@ -13,6 +13,66 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 #[tokio::test]
+async fn a_selected_stream_with_a_canonical_exponent_survives_persisted_probe_and_reopen() {
+    let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
+        .canonicalize()
+        .unwrap();
+    let source = run.join("Eleven Streams.mp4");
+    let mut ffmpeg = Command::new(std::env::var_os("DD_WORKER_VIDEO_FFMPEG").unwrap());
+    ffmpeg.args([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=blue:s=48x32:r=4:d=0.5",
+    ]);
+    for _ in 0..11 {
+        ffmpeg.args(["-map", "0:v"]);
+    }
+    ffmpeg.args(["-c:v", "mpeg4", "-threads", "1"]).arg(&source);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        ffmpeg.creation_flags(0x08000000);
+    }
+    assert!(ffmpeg.status().unwrap().success());
+    let root = run.join("Eleven Stream Workspace");
+    fs::create_dir(&root).unwrap();
+    let owner = Arc::new(WorkspaceThread::start(250, Duration::from_secs(30)).unwrap());
+    let grant = owner.grant_selected_directory(root.clone()).unwrap();
+    let session = owner
+        .create(grant.grant_id, "Eleven Streams".into(), 100)
+        .unwrap()
+        .workspace_session_id;
+    let file = owner.grant_video_file(session, source).unwrap();
+    let registry = VideoRegistry::new(Arc::clone(&owner)).unwrap();
+    let registered = registry
+        .admit(
+            session,
+            VideoImport {
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+                file_grant_id: file.grant_id,
+                display_name: None,
+                stream_index: Some(10),
+            },
+            200,
+        )
+        .unwrap();
+    let mut worker = launch(&owner, session).await;
+    assert_eq!(worker.run(registered).await.unwrap().status, "SUCCEEDED");
+    worker.shutdown().await.unwrap();
+    reopen(&owner, &root, session);
+    let reopened = owner.current().unwrap().unwrap().workspace_session_id;
+    let result = read_registered_video_observation(&owner, reopened, registered).unwrap();
+    assert_eq!(result.index.source().stream_index, 10);
+    assert_eq!(result.metadata.unwrap().streams.len(), 11);
+}
+
+#[tokio::test]
 async fn a_registered_probe_survives_reopen_and_persists_a_reusable_video_index() {
     let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
         .canonicalize()
