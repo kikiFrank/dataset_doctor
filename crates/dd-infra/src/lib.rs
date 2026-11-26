@@ -36,6 +36,8 @@ pub mod json;
 pub mod media_display;
 mod paths;
 #[cfg(feature = "execution-rpc")]
+pub mod report_export;
+#[cfg(feature = "execution-rpc")]
 pub mod review_draft;
 #[cfg(feature = "execution-rpc")]
 pub mod review_final;

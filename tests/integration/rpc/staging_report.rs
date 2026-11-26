@@ -1,6 +1,7 @@
 use std::{fs, sync::Arc};
 
 use dd_infra::geometry_runtime::{GeometryAuditRequest, GeometryRuntime};
+use dd_infra::report_export::{ReportExportFormat, ReportExportRequest, ReportExportService};
 use dd_infra::staging::{StagingQuery, StagingState};
 use dd_infra::staging_report::{OptionalStagingCheck, StagingReportRequest, StagingReportService};
 use dd_infra::video_annotation_store::{VideoArtifactOwner, VideoKeyframe};
@@ -232,6 +233,53 @@ async fn build_report_uses_actual_current_geometry_and_preserves_unexecuted_chec
         service.get(reopened, report.task_id).unwrap().reference,
         report.reference
     );
+    let destination = fixture.root.join("Staging report exports");
+    fs::create_dir(&destination).unwrap();
+    let exporter = ReportExportService::new(Arc::clone(owner)).unwrap();
+    let grant = owner
+        .grant_export_directory(reopened, destination.clone())
+        .unwrap();
+    let (export, job) = exporter
+        .submit(
+            reopened,
+            ReportExportRequest {
+                report_ref: report.reference.clone(),
+                format: ReportExportFormat::Json,
+                destination_grant_id: grant.grant_id,
+                request_id: Uuid::new_v4(),
+                idempotency_key: Uuid::new_v4(),
+            },
+        )
+        .unwrap();
+    exporter.run(reopened, job.unwrap()).unwrap();
+    let receipt = exporter
+        .get(reopened, export.task_id)
+        .unwrap()
+        .receipt
+        .unwrap();
+    assert_eq!(receipt.report_ref, report.reference);
+    assert_eq!(
+        fs::read(destination.join(receipt.file_name)).unwrap(),
+        fs::read(fixture.root.join(&current.3)).unwrap()
+    );
     fs::write(fixture.root.join(current.3), b"tampered report").unwrap();
     assert!(service.get(reopened, report.task_id).is_err());
+    let grant = owner
+        .grant_export_directory(reopened, destination.clone())
+        .unwrap();
+    assert!(
+        exporter
+            .submit(
+                reopened,
+                ReportExportRequest {
+                    report_ref: report.reference,
+                    format: ReportExportFormat::Json,
+                    destination_grant_id: grant.grant_id,
+                    request_id: Uuid::new_v4(),
+                    idempotency_key: Uuid::new_v4(),
+                }
+            )
+            .is_err()
+    );
+    assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
 }

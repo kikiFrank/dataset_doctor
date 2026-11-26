@@ -904,6 +904,7 @@ video_annotation_manifest 的当前载荷固定包含 contract_version、source_
 - 每条完整体检流程包含 BUILD_REPORT 节点，由 Core 执行确定性聚合；可把 Agent 已生成的说明作为证据引用，不依赖再次调用模型才能生成报告。
 - 聚合报告列出所需检查、实际覆盖、失败/跳过原因、问题和输入摘要。workflow_runs.result_manifest_path 指向其产物；staging_items.check_task_id 指向这个聚合报告 Task，不随意指向最后一个算法任务。
 - report_id 是相应报告 Artifact 的 artifact_id，不增加 reports 业务表。模型调用失败也能生成包含未执行项的有效报告。
+- 报告导出以 Core 验证过的 `report_ref` 和用户选择的目录为输入。JSON 保留封存报告原始字节，Markdown 列出检查状态与原因，并附完整结构化报告。导出文件和回执有独立摘要。已发布但尚未完成回执写入时，重开后验证文件字节并恢复回执。
 - Artifact 的归属与读取授权分开。TASK 所属产物经任务 manifest 定位；ASSET / REVIEW 所属产物经当前元数据/审核 manifest 定位。候选清理先核对正式依赖，不能删除当前 track map、视频工作状态、已引用报告或仍待恢复的文件。
 - Core 内部的路径字段与对外 ArtifactRef 是不同 DTO。对外引用不带任意可写路径；内部定位字段只由 Core 解析与授权。
 - API JSON 的 uint64、revision、frame_index 使用十进制字符串；COCO 安全整数及本地 SQLite INTEGER、Workspace 配置文件中的非负修订整数保持各自格式。Rust DTO 适配层负责转换，前端不能把 uint64 转为不安全的 JavaScript Number。
