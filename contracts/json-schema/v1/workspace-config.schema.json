@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datasetdoctor.invalid/contracts/json-schema/v1/workspace-config.schema.json",
+  "title": "Dataset Doctor Workspace configuration v1",
+  "type": "object",
+  "required": ["config_format_version", "config_revision", "workspace_id", "name"],
+  "additionalProperties": false,
+  "properties": {
+    "config_format_version": { "type": "integer", "const": 1 },
+    "config_revision": { "type": "integer", "minimum": 0 },
+    "workspace_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "defaults": { "$ref": "#/$defs/workspace_defaults" }
+  },
+  "$defs": {
+    "check_toggle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "sampling_mode": {
+      "enum": ["EVERY_N_FRAMES", "TIME_INTERVAL"]
+    },
+    "sampling_interval_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600000
+    },
+    "workspace_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image_quality": { "$ref": "#/$defs/check_toggle" },
+            "annotation_geometry": { "$ref": "#/$defs/check_toggle" },
+            "semantic": { "$ref": "#/$defs/check_toggle" },
+            "cleanlab": { "$ref": "#/$defs/check_toggle" }
+          }
+        },
+        "video": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tracking": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": { "$ref": "#/$defs/sampling_mode" },
+                "every_n": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                "interval_ms": { "$ref": "#/$defs/sampling_interval_ms" }
+              }
+            },
+            "dataset": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": { "$ref": "#/$defs/sampling_mode" },
+                "every_n": { "type": "integer", "minimum": 1, "maximum": 100000 },
+                "interval_ms": { "$ref": "#/$defs/sampling_interval_ms" },
+                "include_keyframes": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "workflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_adjustments": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "max_cloud_calls": { "type": "integer", "minimum": 0, "maximum": 100 },
+            "max_total_tokens": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "autosave_ms": { "type": "integer", "minimum": 300, "maximum": 10000 }
+          }
+        },
+        "repair": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "feather_px": { "type": "integer", "minimum": 0, "maximum": 64 }
+          }
+        },
+        "export": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "unreviewed_policy": { "enum": ["BLOCK", "EXCLUDE_WITH_MANIFEST"] }
+          }
+        }
+      }
+    }
+  }
+}

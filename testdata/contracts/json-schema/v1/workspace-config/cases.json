@@ -1,0 +1,194 @@
+[
+  {
+    "id": "complete_workspace_defaults",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"checks\":{\"image_quality\":{\"enabled\":true},\"annotation_geometry\":{\"enabled\":true},\"semantic\":{\"enabled\":false},\"cleanlab\":{\"enabled\":false}},\"video\":{\"tracking\":{\"mode\":\"EVERY_N_FRAMES\",\"every_n\":1,\"interval_ms\":100},\"dataset\":{\"mode\":\"TIME_INTERVAL\",\"every_n\":30,\"interval_ms\":1000,\"include_keyframes\":false}},\"workflow\":{\"max_adjustments\":2,\"max_cloud_calls\":20,\"max_total_tokens\":100000},\"review\":{\"autosave_ms\":1000},\"repair\":{\"feather_px\":0},\"export\":{\"unreviewed_policy\":\"BLOCK\"}}}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "no_defaults",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "partial_defaults_preserve_inactive_preferences",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"video\":{\"tracking\":{\"mode\":\"TIME_INTERVAL\",\"every_n\":1000,\"interval_ms\":1},\"dataset\":{\"mode\":\"EVERY_N_FRAMES\",\"every_n\":100000,\"interval_ms\":3600000,\"include_keyframes\":true}},\"workflow\":{\"max_adjustments\":0,\"max_cloud_calls\":100,\"max_total_tokens\":1000000},\"review\":{\"autosave_ms\":300},\"repair\":{\"feather_px\":64},\"export\":{\"unreviewed_policy\":\"EXCLUDE_WITH_MANIFEST\"}}}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
+  },
+  {
+    "id": "future_format_version",
+    "raw": "{\"config_format_version\":2,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "const"
+    }
+  },
+  {
+    "id": "missing_format_version",
+    "raw": "{\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "missing_revision",
+    "raw": "{\"config_format_version\":1,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "negative_revision",
+    "raw": "{\"config_format_version\":1,\"config_revision\":-1,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "minimum"
+    }
+  },
+  {
+    "id": "missing_workspace_identity",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "required"
+    }
+  },
+  {
+    "id": "malformed_workspace_identity",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"not-a-uuid\",\"name\":\"Industrial Vision\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "pattern"
+    }
+  },
+  {
+    "id": "empty_workspace_name",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "minLength"
+    }
+  },
+  {
+    "id": "unknown_workspace_property",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"extra\":true}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "global_scheduler_is_not_workspace_config",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"scheduler\":{\"gpu_slots\":1}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "check_override_unknown",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"checks\":{\"image_quality\":{\"threshold\":10}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "additionalProperties"
+    }
+  },
+  {
+    "id": "check_enabled_requires_boolean",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"checks\":{\"semantic\":{\"enabled\":1}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "invalid_sampling_mode",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"video\":{\"tracking\":{\"mode\":\"KEYFRAMES\"}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "enum"
+    }
+  },
+  {
+    "id": "tracking_frame_step_too_large",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"video\":{\"tracking\":{\"every_n\":1001}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "maximum"
+    }
+  },
+  {
+    "id": "dataset_interval_too_small",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"video\":{\"dataset\":{\"interval_ms\":0}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "minimum"
+    }
+  },
+  {
+    "id": "keyframes_requires_boolean",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"video\":{\"dataset\":{\"include_keyframes\":1}}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "workflow_limit_too_large",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"workflow\":{\"max_total_tokens\":1000001}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "maximum"
+    }
+  },
+  {
+    "id": "review_interval_too_small",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"review\":{\"autosave_ms\":299}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "minimum"
+    }
+  },
+  {
+    "id": "repair_feather_too_large",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"repair\":{\"feather_px\":65}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "maximum"
+    }
+  },
+  {
+    "id": "unsafe_export_policy",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"export\":{\"unreviewed_policy\":\"INCLUDE\"}}}",
+    "expected": {
+      "stage": "schema",
+      "category": "enum"
+    }
+  },
+  {
+    "id": "null_defaults",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":null}",
+    "expected": {
+      "stage": "schema",
+      "category": "type"
+    }
+  },
+  {
+    "id": "duplicate_nested_key",
+    "raw": "{\"config_format_version\":1,\"config_revision\":0,\"workspace_id\":\"2c823c8a-1a3a-4b0d-97b3-0982e5f2aca9\",\"name\":\"Industrial Vision\",\"defaults\":{\"review\":{\"autosave_ms\":300,\"autosave_ms\":1000}}}",
+    "expected": {
+      "stage": "parse",
+      "category": "duplicate_key"
+    }
+  }
+]

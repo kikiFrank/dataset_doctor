@@ -62,6 +62,8 @@
 
 文件为 UTF-8，禁止重复键；未知字段和高于支持范围的 `config_format_version` 拒绝写入并返回明确错误。`workspace_id` 创建后不可通过普通设置补丁更换；`name` 为 1–128 个字符。Workspace 只写自身允许项；`config_format_version` 迁移由 Core 管理。读取旧配置遇到可补齐的缺省字段时使用当前明示默认值，返回其来源，不静默重写原文件。
 
+[Workspace 配置 v1 Schema](../../contracts/json-schema/v1/workspace-config.schema.json) 固定磁盘文件的结构。版本、修订号、Workspace UUID 和名称必填，`defaults` 可部分填写。Core 负责合并实际生效的默认值，并在打开工作区时比对数据库身份。
+
 #### 推荐参数
 
 下表的数值是 **MVP 初始建议**，需要在目标机器上验证；不是依赖库保证，也不是已测得性能。对于显著改变任务语义的参数，任务启动后使用其冻结值。

@@ -68,7 +68,7 @@ Windows x64 固定 NTFS 实测确认逐连接启用外键、WAL、FULL 同步和
 
 本切片的通过范围为 Windows x64 上的静态 SQLite 来源、连接设置和 NTFS 文件锁。SQL 迁移、备份行为、应用层 Workspace 所有权锁、崩溃恢复及跨平台发行留待后续验收。
 
-## Windows InputManifest 结构检查（P01-01）
+## Windows JSON Schema 结构检查
 
 在仓库根目录运行。使用 Windows x64 上实际安装的 CPython 3.12.12、仓库里的验证依赖锁和已预填的 P01-01 专用 uv 缓存。
 
@@ -82,6 +82,8 @@ $LASTEXITCODE
 入口锁定离线同步验证环境，执行严格 UTF-8 JSON 解析、Draft 2020-12 结构和 UUID 格式检查，并用封闭本地注册表解析引用。输出记录在 `dist/p01-01/logs/check.log`。通过表示结构和合成向量符合契约。操作输入前提、授权与摘要真实性由后续 Core 工作验证。
 
 查看 [InputManifest v1 Schema](contracts/json-schema/v1/input-manifest.schema.json)、[共享向量](testdata/contracts/json-schema/v1/input-manifest/cases.json) 和 [验收依赖及许可](docs/deployment/platform_delivery.md#p01-01-inputmanifest)。
+
+默认同时验证 InputManifest 和 Workspace 配置。可在命令末尾加 `-Suite InputManifest` 或 `-Suite WorkspaceConfig` 单独运行。Workspace 配置覆盖必填身份和版本、部分默认设置、未知字段、采样与工作流参数边界、重复键及 Unicode 名称长度。[Workspace 配置 v1 Schema](contracts/json-schema/v1/workspace-config.schema.json) · [共享向量](testdata/contracts/json-schema/v1/workspace-config/cases.json)
 
 ## Windows ArtifactRef 线格式检查（P01-02）
 

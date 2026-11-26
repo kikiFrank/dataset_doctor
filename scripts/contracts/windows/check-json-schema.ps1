@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
-    [Parameter(Mandatory = $true)][string]$UvCacheDir
+    [Parameter(Mandatory = $true)][string]$UvCacheDir,
+    [ValidateSet('All', 'InputManifest', 'WorkspaceConfig')][string]$Suite = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,6 +14,11 @@ $logs = Join-Path $artifacts 'logs'
 $venv = Join-Path $artifacts 'venv'
 $temp = Join-Path $artifacts 'temp'
 $utf8 = [Text.UTF8Encoding]::new($false)
+$testPattern = switch ($Suite) {
+    'InputManifest' { 'test_input_manifest.py' }
+    'WorkspaceConfig' { 'test_workspace_config.py' }
+    'All' { 'test_*.py' }
+}
 
 function Initialize-OutputDirectory([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
@@ -113,7 +119,7 @@ try {
     $code = Invoke-LoggedCommand $testPython @('-I', '-B', '-c', $versions)
     if ($code -ne 0) { exit $code }
     $code = Invoke-LoggedCommand $testPython @(
-        '-I', '-B', '-m', 'unittest', 'discover', '-s', $project, '-p', 'test_input_manifest.py', '-v'
+        '-I', '-B', '-m', 'unittest', 'discover', '-s', $project, '-p', $testPattern, '-v'
     )
     exit $code
 } catch {
