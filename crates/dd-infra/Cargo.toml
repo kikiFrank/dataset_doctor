@@ -206,3 +206,8 @@ required-features = ["execution-rpc"]
 [[test]]
 name = "task_store"
 path = "../../tests/storage/tasks/task_store.rs"
+
+[[test]]
+name = "workspace_frame_resolve"
+path = "../../tests/integration/rpc/workspace_frame_resolve.rs"
+required-features = ["execution-rpc"]

@@ -18,6 +18,8 @@ pub mod coco_export;
 pub mod execution_rpc;
 #[cfg(feature = "execution-rpc")]
 pub mod geometry_runtime;
+#[cfg(feature = "execution-rpc")]
+pub mod frame_runtime;
 pub mod import_preflight;
 pub mod import_registration;
 pub mod input_fingerprint;

@@ -6,9 +6,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_domain::video::FrameIndex;
-use dd_protocol::v1::{ArtifactRef, VideoProbeInput, WorkerInputFile, artifact_ref::Owner};
+use dd_protocol::v1::{VideoProbeInput, WorkerInputFile};
 use rusqlite::{OptionalExtension, params};
-use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -196,31 +195,18 @@ fn read_bound_video_observation(
     if directory.canonicalize()? != directory {
         return Err(VideoRuntimeError::InvalidBinding);
     }
-    let reference: StoredManifestRef = serde_json::from_str(
+    let reference = crate::artifact_manifest::parse_stored_manifest_reference(
         binding
             .record
             .manifest_ref
             .as_deref()
             .ok_or(VideoRuntimeError::InvalidBinding)?,
+        receipt.task_id,
     )
     .map_err(|error| VideoRuntimeError::TaskEvidence(Box::new(error)))?;
-    if reference.owner.kind != "TASK" || reference.owner.id != receipt.task_id {
-        return Err(VideoRuntimeError::InvalidBinding);
-    }
     read_video_observation(
         &directory,
-        &ArtifactRef {
-            artifact_id: reference.artifact_id,
-            owner: Some(Owner::OwnerTaskId(receipt.task_id.to_string())),
-            kind: reference.kind,
-            media_type: reference.media_type,
-            size_bytes: reference
-                .size_bytes
-                .parse()
-                .map_err(|_| VideoRuntimeError::InvalidBinding)?,
-            sha256: reference.sha256,
-            schema_id: reference.schema_id,
-        },
+        &reference,
         &TaskManifestScope {
             task: receipt.task_id,
             attempt,
@@ -245,23 +231,6 @@ struct StoredProbe {
     attempt: Option<String>,
     output_path: Option<String>,
     manifest_ref: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct StoredManifestRef {
-    artifact_id: String,
-    owner: StoredOwner,
-    kind: String,
-    media_type: String,
-    size_bytes: String,
-    sha256: String,
-    schema_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct StoredOwner {
-    kind: String,
-    id: Uuid,
 }
 
 struct ProbeBinding {

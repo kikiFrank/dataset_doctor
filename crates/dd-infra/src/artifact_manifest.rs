@@ -190,3 +190,43 @@ pub fn verify_task_result_manifest(
         entries: manifest.entries,
     })
 }
+
+#[derive(Deserialize)]
+struct StoredManifestReference {
+    artifact_id: String,
+    owner: StoredManifestOwner,
+    kind: String,
+    media_type: String,
+    size_bytes: String,
+    sha256: String,
+    schema_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct StoredManifestOwner {
+    kind: String,
+    id: Uuid,
+}
+
+pub(crate) fn parse_stored_manifest_reference(
+    encoded: &str,
+    task: Uuid,
+) -> Result<ArtifactRef, ArtifactValidationError> {
+    let reference: StoredManifestReference =
+        serde_json::from_str(encoded).map_err(ArtifactValidationError::Mapping)?;
+    if reference.owner.kind != "TASK" || reference.owner.id != task {
+        return Err(ArtifactValidationError::ScopeMismatch);
+    }
+    Ok(ArtifactRef {
+        artifact_id: reference.artifact_id,
+        owner: Some(Owner::OwnerTaskId(task.to_string())),
+        kind: reference.kind,
+        media_type: reference.media_type,
+        size_bytes: reference
+            .size_bytes
+            .parse()
+            .map_err(|_| ArtifactValidationError::InvalidReference)?,
+        sha256: reference.sha256,
+        schema_id: reference.schema_id,
+    })
+}

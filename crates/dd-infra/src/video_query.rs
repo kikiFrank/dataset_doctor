@@ -30,6 +30,7 @@ pub struct RegisteredVideoDetail {
     pub source_digest: String,
     pub source_availability: VideoSourceAvailability,
     pub probe_status: Option<String>,
+    pub probe_receipt: Option<VideoImportReceipt>,
     pub metadata: Option<VideoMetadata>,
     pub rotation_ccw: Option<u16>,
 }
@@ -97,6 +98,7 @@ pub fn registered_video_detail(
         source_digest: format_digest(&source.digest),
         source_availability: availability,
         probe_status: None,
+        probe_receipt: None,
         metadata: None,
         rotation_ccw: None,
     };
@@ -108,6 +110,11 @@ pub fn registered_video_detail(
             continue;
         }
         detail.probe_status = Some(status.clone());
+        detail.probe_receipt = Some(VideoImportReceipt {
+            video_id: video,
+            task_id,
+            accepted_at_ms,
+        });
         if status == "SUCCEEDED" {
             let stored = read_stored_video_observation(
                 owner,

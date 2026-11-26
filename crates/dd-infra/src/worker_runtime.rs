@@ -11,9 +11,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use dd_core::execution_grant::{GrantBook, GrantError, GrantScope};
 use dd_core::workspace::WorkspaceSession;
 use dd_protocol::v1::{
-    ArtifactRef, ExecutionHandle, ExecutionLookup, GeometryAuditInput, GeometryAuditRequest,
-    TaskContext, VideoProbeInput, VideoProbeRequest, artifact_ref::Owner,
-    core_execution_control_server::CoreExecutionControlServer,
+    ArtifactRef, ExecutionHandle, ExecutionLookup, FrameResolveInput, FrameResolveRequest,
+    GeometryAuditInput, GeometryAuditRequest, TaskContext, VideoProbeInput, VideoProbeRequest,
+    artifact_ref::Owner, core_execution_control_server::CoreExecutionControlServer,
 };
 use prost::Message;
 use rusqlite::params;
@@ -121,6 +121,7 @@ pub(crate) struct WorkerJob {
 pub(crate) enum WorkerOperation {
     Geometry(GeometryAuditInput),
     VideoProbe(VideoProbeInput),
+    FrameResolve(FrameResolveInput),
 }
 
 impl WorkerOperation {
@@ -128,6 +129,7 @@ impl WorkerOperation {
         match self {
             Self::Geometry(_) => crate::geometry_runtime::CAPABILITY,
             Self::VideoProbe(_) => crate::video_registration::CAPABILITY,
+            Self::FrameResolve(_) => crate::frame_runtime::CAPABILITY,
         }
     }
 
@@ -137,6 +139,11 @@ impl WorkerOperation {
             Self::Geometry(input) => {
                 input.output_directory = output;
                 domain = b"datasetdoctor.v1.PythonWorker.StartAnnotationGeometryAudit\0";
+                input.encode_to_vec()
+            }
+            Self::FrameResolve(input) => {
+                input.output_directory = output;
+                domain = b"datasetdoctor.v1.PythonWorker.StartFrameResolve\0";
                 input.encode_to_vec()
             }
             Self::VideoProbe(input) => {
@@ -161,6 +168,15 @@ impl WorkerOperation {
             Self::Geometry(parameters) => {
                 worker
                     .start_geometry(GeometryAuditRequest {
+                        context: Some(context),
+                        input_manifest_ref: Some(manifest),
+                        parameters: Some(parameters),
+                    })
+                    .await
+            }
+            Self::FrameResolve(parameters) => {
+                worker
+                    .start_frame_resolve(FrameResolveRequest {
                         context: Some(context),
                         input_manifest_ref: Some(manifest),
                         parameters: Some(parameters),
