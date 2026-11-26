@@ -75,15 +75,15 @@ export function DatasetBrowser({ workspace, reviewBlocked, onReviewBlocked }: { 
             {page.next_cursor && <button type="button" disabled={loadingMore} onClick={() => void more()}>更多数据集</button>}
           </div>
           {selected && <AssetTable key={selected.dataset_id} workspace={workspace} dataset={selected}
-            reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} />}
+            reviewBlocked={reviewBlocked} onReviewBlocked={onReviewBlocked} onMembersChanged={refreshDatasets} />}
         </div>
       )}
     </section>
   );
 }
 
-function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
-  workspace: OpenWorkspace; dataset: DatasetSummary;
+function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked, onMembersChanged }: {
+  workspace: OpenWorkspace; dataset: DatasetSummary; onMembersChanged: () => void;
 } & ReviewGuard) {
   const [selected, setSelected] = useState<AssetSummary | null>(null);
   const [page, setPage] = useState<AssetPage | null>(null);
@@ -121,6 +121,7 @@ function AssetTable({ workspace, dataset, reviewBlocked, onReviewBlocked }: {
       <h3>{dataset.name}</h3>
       <DatasetExportPanel workspace={workspace} datasetId={dataset.dataset_id} />
       <StagingPanel workspace={workspace} datasetId={dataset.dataset_id} refreshKey={refresh} selectionBlocked={reviewBlocked}
+        onAccepted={() => { refreshAssets(); onMembersChanged(); }}
         onSelect={item => setSelected({
           asset_id: item.asset_id, dataset_id: item.target_dataset_id, display_name: item.display_name,
           kind: "IMAGE", availability: "ONLINE", annotation_state: "UNREVIEWED",

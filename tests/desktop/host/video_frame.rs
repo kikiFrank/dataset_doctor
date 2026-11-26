@@ -4,9 +4,13 @@ use std::time::Instant;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::media_display::MediaDisplayService;
-use dd_ui_contracts::annotation::MediaGetLocatorRequest;
+use dd_ui_contracts::annotation::{
+    MediaGetLocatorRequest, ReviewCommitRequest, ReviewOpenRequest, ReviewSaveDraftRequest,
+};
 use dd_ui_contracts::dataset_import::{GeometrySubmitRequest, ImportOperationKind, TaskGetRequest};
-use dd_ui_contracts::staging::StagingReportGetRequest;
+use dd_ui_contracts::staging::{
+    StagingCommitRequest, StagingIncompleteCheckAck, StagingReportGetRequest, StagingState,
+};
 use dd_ui_contracts::video::{
     FrameResolution, VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest,
     VideoResolveFrameRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest,
@@ -371,7 +375,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
             },
         )
         .unwrap();
-    assert_eq!(wait(session, checked.task_id).status, "SUCCEEDED");
+    assert_eq!(wait(session, checked.task_id.clone()).status, "SUCCEEDED");
     let deadline = Instant::now() + Duration::from_secs(5);
     let report = loop {
         let list = commands
@@ -523,4 +527,151 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert_eq!(failed.status, "FAILED");
     assert_eq!(failed.error_code.as_deref(), Some("WORKER_START_FAILED"));
     assert_eq!(fs::read(clip).unwrap(), original);
+
+    let dataset = uuid(dataset_id.clone());
+    let current = commands
+        .annotation(dd_ui_contracts::annotation::AnnotationGetRequest {
+            context: context(reopened),
+            asset_id: staged.clone(),
+        })
+        .unwrap();
+    let review = commands
+        .open_review(ReviewOpenRequest {
+            context: context(reopened),
+            dataset_id: dataset.clone(),
+            asset_id: staged.clone(),
+            base_image_digest: current.image_digest,
+            base_annotation_digest: current.annotation_digest,
+        })
+        .unwrap()
+        .review;
+    let mut edited = current.formal_coco.unwrap();
+    edited.annotations[0].bbox[0] += 1.0;
+    let saved = commands
+        .save_review_draft(ReviewSaveDraftRequest {
+            context: context(reopened),
+            review_id: review.review_id.clone(),
+            source_task_id: checked.task_id,
+            expected_review_revision: review.row_revision,
+            expected_draft_revision: None,
+            coco_document: edited,
+        })
+        .unwrap();
+    let final_op = commands
+        .commit_review(ReviewCommitRequest {
+            context: context(reopened),
+            review_id: review.review_id,
+            expected_review_revision: saved.review_revision,
+            base_image_digest: review.base_image_digest,
+            base_annotation_digest: review.base_annotation_digest,
+            draft_digest: saved.draft_digest,
+            confirmed_negative: false,
+        })
+        .unwrap();
+    assert_eq!(wait(reopened, final_op.task_id).status, "SUCCEEDED");
+    let list = |status| {
+        commands
+            .list_staging(dd_ui_contracts::staging::StagingListRequest {
+                context: context(reopened),
+                target_dataset_id: Some(dataset.clone()),
+                cursor: None,
+                status,
+                page_size: 10,
+            })
+            .unwrap()
+    };
+    assert!(matches!(
+        list(None).items[0].state,
+        StagingState::NeedsCheck
+    ));
+    let after_final = commands
+        .start_geometry(
+            geometry::GeometryRunner::new(
+                repo.join("target/dev/worker-venv/Scripts/python.exe"),
+                repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
+            ),
+            GeometrySubmitRequest {
+                context: context(reopened),
+                dataset_id: dataset.clone(),
+                asset_id: staged.clone(),
+            },
+        )
+        .unwrap();
+    assert_eq!(wait(reopened, after_final.task_id).status, "SUCCEEDED");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let current_report = loop {
+        if let Some(item) = list(Some(StagingState::ReadyForAcceptance))
+            .items
+            .into_iter()
+            .next()
+        {
+            break item.current_report_ref.unwrap();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the confirmed frame did not become ready"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let dd_ui_contracts::ArtifactOwner::Task(task_id) = current_report.owner else {
+        panic!("expected Task report");
+    };
+    let key = uuid(Uuid::new_v4().to_string());
+    let submit = |reason: Option<&str>| {
+        let report = commands
+            .get_staging_report(StagingReportGetRequest {
+                context: context(reopened),
+                report_id: None,
+                task_id: Some(task_id.clone()),
+            })
+            .unwrap();
+        let mut command_context = context(reopened);
+        command_context.idempotency_key = Some(key.clone());
+        StagingCommitRequest {
+            context: command_context,
+            target_dataset_id: dataset.clone(),
+            asset_ids: vec![staged.clone()],
+            quality_report_ref: report.report_artifact_ref,
+            expected_schema_fingerprint: report.scope.label_schema_digest,
+            acknowledged_findings: vec![],
+            acknowledged_incomplete_checks: reason.map(|reason| {
+                vec![StagingIncompleteCheckAck {
+                    check_id: "semantic_review".into(),
+                    reason: reason.into(),
+                }]
+            }),
+        }
+    };
+    assert_eq!(
+        commands.commit_staging(submit(None)).unwrap_err().code,
+        "INVALID_ARGUMENT"
+    );
+    let reason = "Reviewed sample locally";
+    let accepted = commands.commit_staging(submit(Some(reason))).unwrap();
+    let result = wait(reopened, accepted.task_id.clone());
+    assert_eq!(result.status, "SUCCEEDED");
+    assert!(matches!(
+        result.operation_kind,
+        ImportOperationKind::StagingCommit
+    ));
+    let receipt = result.staging_commit.unwrap();
+    assert_eq!(receipt.accepted_asset_ids, [staged.clone()]);
+    assert_eq!(receipt.acknowledged_incomplete_checks[0].reason, reason);
+    assert!(list(None).items.is_empty());
+    let members = owner
+        .list_assets(reopened, Uuid::parse_str(&dataset_id).unwrap(), None, 10)
+        .unwrap();
+    assert!(
+        members
+            .items
+            .iter()
+            .any(|item| item.asset_id.to_string() == String::from(staged.clone()))
+    );
+    assert_eq!(
+        commands
+            .commit_staging(submit(Some(reason)))
+            .unwrap()
+            .task_id,
+        accepted.task_id
+    );
 }

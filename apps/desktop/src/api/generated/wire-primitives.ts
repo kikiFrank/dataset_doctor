@@ -86,6 +86,14 @@ export type StagingReportReasonView = { code: string, message: string, };
 
 export type StagingReportFindingView = { issue_id: UuidText, asset_id: UuidText, check_id: string, finding_code: string, severity: string, input_fingerprint: string, explanation: string, annotation_id: DecimalU64 | null, };
 
+export type StagingFindingAck = { issue_id: UuidText, reason?: string, };
+
+export type StagingIncompleteCheckAck = { check_id: string, reason: string, };
+
+export type StagingCommitRequest = { context: CommandContext, target_dataset_id: UuidText, asset_ids: Array<UuidText>, quality_report_ref: ArtifactReference, expected_schema_fingerprint: string, acknowledged_findings: Array<StagingFindingAck>, acknowledged_incomplete_checks?: Array<StagingIncompleteCheckAck>, };
+
+export type StagingCommitView = { target_dataset_id: UuidText, accepted_asset_ids: Array<UuidText>, quality_report_ref: ArtifactReference, acknowledged_findings: Array<StagingFindingAck>, acknowledged_incomplete_checks: Array<StagingIncompleteCheckAck>, };
+
 export type DatasetExportFormat = "COCO_DETECTION";
 
 export type DatasetExportSelection = "ALL_MEMBERS";
@@ -104,7 +112,7 @@ export type DatasetImportExternalRequest = { context: CommandContext, import_pla
 
 export type TaskGetRequest = { context: CommandContext, task_id: UuidText, };
 
-export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE";
+export type ImportOperationKind = "DATASET_IMPORT_INSPECT" | "DATASET_IMPORT_EXTERNAL" | "ANNOTATION_GEOMETRY" | "VIDEO_PROBE" | "REVIEW_COMMIT" | "DATASET_EXPORT" | "WORKSPACE_BACKUP" | "FRAME_RESOLVE" | "VIDEO_SAMPLE" | "STAGING_COMMIT";
 
 export type ImportOperationRef = { operation_kind: ImportOperationKind, task_id: UuidText, status: string, accepted_at: string, };
 
@@ -114,7 +122,7 @@ export type DatasetImportPreview = { plan_id: UuidText, plan_fingerprint: string
 
 export type DatasetImportRegistration = { dataset_id: UuidText, asset_count: DecimalU64, };
 
-export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, };
+export type ImportTaskView = { task_id: UuidText, operation_kind: ImportOperationKind, status: string, error_code: string | null, preview: DatasetImportPreview | null, registration: DatasetImportRegistration | null, geometry_report: GeometryReportView | null, coco_export: CocoExportView | null, workspace_backup?: WorkspaceBackupView, video_frame?: VideoFrame, video_sample?: VideoSampleView, staging_commit?: StagingCommitView, };
 
 export type GeometrySubmitRequest = { context: CommandContext, dataset_id: UuidText, asset_id: UuidText, };
 

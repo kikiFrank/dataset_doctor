@@ -111,6 +111,7 @@ impl Commands {
             excluded_count: (receipt.exclusions.len() as u64).into(),
         });
         Ok(ImportTaskView {
+            staging_commit: None,
             task_id: self.uuid_text(task_id.to_string())?,
             operation_kind: ImportOperationKind::DatasetExport,
             status: task.status,

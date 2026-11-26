@@ -15,12 +15,13 @@ const labels: Record<StagingState, string> = {
   READY_FOR_ACCEPTANCE: "可接收",
 };
 
-export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocked, onSelect }: {
+export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocked, onSelect, onAccepted }: {
   workspace: OpenWorkspace;
   datasetId: string;
   refreshKey: number;
   selectionBlocked: boolean;
   onSelect: (item: StagingItem) => void;
+  onAccepted: () => void;
 }) {
   const [status, setStatus] = useState<StagingState | undefined>();
   const [page, setPage] = useState<StagingPage | null>(null);
@@ -88,6 +89,10 @@ export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocke
     </table>}
     {page?.next_cursor && <button type="button" disabled={busy} onClick={() => void more()}>更多待接收样本</button>}
     {reportItem && <StagingReportPanel key={reportItem.current_report_ref?.artifact_id}
-      workspace={workspace} item={reportItem} onClose={() => setReportAsset(null)} />}
+      workspace={workspace} item={reportItem} acceptanceBlocked={selectionBlocked}
+      onClose={() => setReportAsset(null)} onAccepted={() => {
+        setReportAsset(null);
+        onAccepted();
+      }} />}
   </section>;
 }

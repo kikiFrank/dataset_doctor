@@ -119,6 +119,47 @@ impl StagingCommitService {
         })
     }
 
+    pub fn get(
+        &self,
+        session: Uuid,
+        task: Uuid,
+    ) -> Result<Option<StagingCommitReceipt>, StagingCommitError> {
+        let row = self.owner.workspace_action(session, move |workspace| {
+            workspace
+                .connection
+                .query_row(
+                    "SELECT dataset_id,status,finished_at_ms,
+                         json_extract(execution_metadata_json,'$.staging_commit_receipt')
+                 FROM tasks WHERE task_id=?1 AND operation_kind=?2 AND capability_id=?3",
+                    params![task.to_string(), KIND, CAPABILITY],
+                    |row| {
+                        Ok((
+                            row_uuid(row, 0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                            row.get::<_, String>(3)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(database)
+        })?;
+        let Some((dataset, status, finish, encoded)) = row else {
+            return Ok(None);
+        };
+        let receipt: StagingCommitReceipt =
+            serde_json::from_str(&encoded).map_err(|_| StagingCommitError::InvalidReceipt)?;
+        if status != "SUCCEEDED"
+            || receipt.task_id != task
+            || receipt.target_dataset_id != dataset
+            || receipt.accepted_asset_ids.len() != 1
+            || receipt.accepted_at_ms != finish
+        {
+            return Err(StagingCommitError::InvalidReceipt);
+        }
+        Ok(Some(receipt))
+    }
+
     pub fn commit(
         &self,
         session: Uuid,

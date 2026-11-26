@@ -1,4 +1,8 @@
-import type { StagingItem, StagingReportCheckView, StagingReportView } from "./api/generated/wire-primitives";
+import type {
+  StagingCommitRequest, StagingItem, StagingReportCheckView, StagingReportView,
+} from "./api/generated/wire-primitives";
+
+export type StagingCommitDetails = Omit<StagingCommitRequest, "context">;
 
 export function matchesCurrentReport(item: StagingItem, report: StagingReportView): boolean {
   const current = item.current_report_ref;
@@ -26,4 +30,28 @@ export function reportCheckLabel(check: Pick<StagingReportCheckView, "execution_
       }
     default: return "未评估";
   }
+}
+
+export function findingsToAcknowledge(report: StagingReportView) {
+  return report.checks.flatMap(check => check.findings.filter(finding => finding.severity !== "INFO"));
+}
+
+export function stagingCommitDetails(
+  item: StagingItem,
+  report: StagingReportView,
+  reasons: Readonly<Record<string, string>>,
+  reviewedFindings: ReadonlySet<string>,
+): StagingCommitDetails | null {
+  if (item.state !== "READY_FOR_ACCEPTANCE" || !matchesCurrentReport(item, report)) return null;
+  const findings = findingsToAcknowledge(report);
+  const gaps = report.unexecuted_checks.map(check_id => ({ check_id, reason: reasons[check_id]?.trim() ?? "" }));
+  if (findings.some(finding => !reviewedFindings.has(finding.issue_id)) || gaps.some(gap => !gap.reason)) return null;
+  return {
+    asset_ids: [item.asset_id],
+    target_dataset_id: report.scope.dataset_id,
+    quality_report_ref: report.report_artifact_ref,
+    expected_schema_fingerprint: report.scope.label_schema_digest,
+    acknowledged_findings: findings.map(finding => ({ issue_id: finding.issue_id })),
+    acknowledged_incomplete_checks: gaps,
+  };
 }

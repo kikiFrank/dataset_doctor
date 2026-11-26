@@ -5,9 +5,15 @@ use dd_infra::artifact_reference::{
 };
 use dd_infra::frame_runtime::FrameService;
 use dd_infra::staging::{StagingFrameSource, StagingQuery, StagingState as StoredState};
+use dd_infra::staging_commit::{
+    AcknowledgedFinding, AcknowledgedIncompleteCheck, StagingCommitError,
+    StagingCommitRequest as StoredCommitRequest, StagingCommitService,
+};
 use dd_infra::staging_report::{StagingReportError, StagingReportService};
 use dd_infra::task_store::{TaskStoreError, format_digest};
+use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportOperationRef, ImportTaskView};
 use dd_ui_contracts::staging::{
+    StagingCommitRequest, StagingCommitView, StagingFindingAck, StagingIncompleteCheckAck,
     StagingItem, StagingListRequest, StagingPage, StagingReportCheckView, StagingReportFindingView,
     StagingReportGetRequest, StagingReportReasonView, StagingReportScopeView, StagingReportView,
     StagingState,
@@ -33,6 +39,19 @@ pub async fn report_get(
 }
 
 #[tauri::command]
+pub async fn staging_commit(
+    request: StagingCommitRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<ImportOperationRef, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.commit_staging(request),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn staging_list(
     request: StagingListRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
@@ -46,6 +65,147 @@ pub async fn staging_list(
 }
 
 impl Commands {
+    pub(super) fn commit_staging(
+        &self,
+        request: StagingCommitRequest,
+    ) -> Result<ImportOperationRef, AppError> {
+        let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
+        let reference = request.quality_report_ref;
+        let ArtifactOwner::Task(report_task) = reference.owner else {
+            return Err(self.error("INVALID_ARGUMENT", "请选择待接收区的检查报告。"));
+        };
+        let stored = StoredCommitRequest {
+            request_id,
+            idempotency_key,
+            target_dataset_id: self.parse_uuid(request.target_dataset_id)?,
+            asset_ids: request
+                .asset_ids
+                .into_iter()
+                .map(|id| self.parse_uuid(id))
+                .collect::<Result<_, _>>()?,
+            quality_report_ref: StoredReference {
+                artifact_id: self.parse_uuid(reference.artifact_id)?,
+                owner: StoredOwner::Task(self.parse_uuid(report_task)?),
+                kind: reference.kind,
+                media_type: reference.media_type,
+                sha256: reference.sha256,
+                size_bytes: reference.size_bytes.into(),
+                schema_id: reference.schema_id,
+            },
+            expected_schema_fingerprint: request.expected_schema_fingerprint,
+            acknowledged_findings: request
+                .acknowledged_findings
+                .into_iter()
+                .map(|ack| {
+                    Ok(AcknowledgedFinding {
+                        issue_id: self.parse_uuid(ack.issue_id)?,
+                        reason: ack.reason,
+                    })
+                })
+                .collect::<Result<_, AppError>>()?,
+            acknowledged_incomplete_checks: request
+                .acknowledged_incomplete_checks
+                .unwrap_or_default()
+                .into_iter()
+                .map(|ack| AcknowledgedIncompleteCheck {
+                    check_id: ack.check_id,
+                    reason: ack.reason,
+                })
+                .collect(),
+        };
+        let receipt = self
+            .staging_commits()?
+            .commit(session, stored, self.now_ms()?)
+            .map_err(|error| self.staging_commit_error(error))?;
+        self.import_operation(
+            ImportOperationKind::StagingCommit,
+            receipt.task_id,
+            "SUCCEEDED".into(),
+            receipt.accepted_at_ms,
+        )
+    }
+
+    pub(super) fn staging_commit_task(
+        &self,
+        session: Uuid,
+        task: Uuid,
+    ) -> Result<ImportTaskView, AppError> {
+        let receipt = self
+            .staging_commits()?
+            .get(session, task)
+            .map_err(|error| self.staging_commit_error(error))?
+            .ok_or_else(|| self.error("NOT_FOUND", "当前工作区没有此接收任务。"))?;
+        let staging_commit = StagingCommitView {
+            target_dataset_id: self.uuid_text(receipt.target_dataset_id.to_string())?,
+            accepted_asset_ids: receipt
+                .accepted_asset_ids
+                .into_iter()
+                .map(|id| self.uuid_text(id.to_string()))
+                .collect::<Result<_, _>>()?,
+            quality_report_ref: self.staging_artifact(receipt.quality_report_ref)?,
+            acknowledged_findings: receipt
+                .acknowledged_findings
+                .into_iter()
+                .map(|ack| {
+                    Ok(StagingFindingAck {
+                        issue_id: self.uuid_text(ack.issue_id.to_string())?,
+                        reason: ack.reason,
+                    })
+                })
+                .collect::<Result<_, AppError>>()?,
+            acknowledged_incomplete_checks: receipt
+                .acknowledged_incomplete_checks
+                .into_iter()
+                .map(|ack| StagingIncompleteCheckAck {
+                    check_id: ack.check_id,
+                    reason: ack.reason,
+                })
+                .collect(),
+        };
+        Ok(ImportTaskView {
+            task_id: self.uuid_text(task.to_string())?,
+            operation_kind: ImportOperationKind::StagingCommit,
+            status: "SUCCEEDED".into(),
+            error_code: None,
+            preview: None,
+            registration: None,
+            geometry_report: None,
+            coco_export: None,
+            workspace_backup: None,
+            video_frame: None,
+            video_sample: None,
+            staging_commit: Some(staging_commit),
+        })
+    }
+
+    fn staging_commits(&self) -> Result<StagingCommitService, AppError> {
+        StagingCommitService::new(Arc::clone(&self.thread))
+            .map_err(|error| self.staging_commit_error(error))
+    }
+
+    fn staging_commit_error(&self, error: StagingCommitError) -> AppError {
+        match error {
+            StagingCommitError::Workspace(WorkspaceThreadError::Task(
+                TaskStoreError::IdempotencyConflict,
+            )) => self.error("CONFLICT", "接收请求内容已变化，请重新确认。"),
+            StagingCommitError::Workspace(error) => self.dataset_error(error),
+            StagingCommitError::NotReady | StagingCommitError::Report(_) => {
+                self.error("REPORT_STALE", "Final 或报告已变化，请刷新并重新检查。")
+            }
+            StagingCommitError::AcknowledgementRequired => self.error(
+                "INVALID_ARGUMENT",
+                "请逐项确认报告中的发现和未执行检查，并填写缺少检查的接收理由。",
+            ),
+            StagingCommitError::InvalidRequest | StagingCommitError::Input(_) => {
+                self.error("INVALID_ARGUMENT", "接收样本、报告或数据集类别不匹配。")
+            }
+            StagingCommitError::InvalidReceipt => {
+                self.error("DATA_CORRUPTION", "无法核验已保存的接收回执。")
+            }
+            _ => self.error("INTERNAL", "无法提交待接收样本。"),
+        }
+    }
+
     pub(super) fn list_staging(
         &self,
         request: StagingListRequest,

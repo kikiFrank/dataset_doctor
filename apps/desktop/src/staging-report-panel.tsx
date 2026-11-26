@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StagingItem, StagingReportView } from "./api/generated/wire-primitives";
-import { getStagingReport } from "./api/staging";
+import { commitStaging, getStagingReport } from "./api/staging";
+import { getTask } from "./api/task";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
-import { matchesCurrentReport, reportCheckLabel } from "./staging-report-view";
+import { findingsToAcknowledge, matchesCurrentReport, reportCheckLabel, stagingCommitDetails } from "./staging-report-view";
 
 const checkNames: Record<string, string> = {
   annotation_geometry: "标注几何",
@@ -14,13 +15,19 @@ const reasonMessages: Record<string, string> = {
   ANNOTATION_MISSING: "此样本没有可用于几何检查的标注。",
 };
 
-export function StagingReportPanel({ workspace, item, onClose }: {
+export function StagingReportPanel({ workspace, item, acceptanceBlocked, onClose, onAccepted }: {
   workspace: OpenWorkspace;
   item: StagingItem;
+  acceptanceBlocked: boolean;
   onClose: () => void;
+  onAccepted: () => void;
 }) {
   const [report, setReport] = useState<StagingReportView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [reviewedFindings, setReviewedFindings] = useState(new Set<string>());
+  const [busy, setBusy] = useState(false);
+  const attemptKey = useRef<string | null>(null);
 
   useEffect(() => {
     const owner = item.current_report_ref?.owner;
@@ -38,9 +45,34 @@ export function StagingReportPanel({ workspace, item, onClose }: {
     return () => { current = false; };
   }, [workspace, item]);
 
+  const details = report ? stagingCommitDetails(item, report, reasons, reviewedFindings) : null;
+
+  async function accept() {
+    if (!details || busy || acceptanceBlocked) return;
+    attemptKey.current ??= crypto.randomUUID();
+    setBusy(true);
+    setError(null);
+    try {
+      const operation = await commitStaging(workspace, details, attemptKey.current);
+      const task = await getTask(workspace, operation.task_id);
+      const receipt = task.staging_commit;
+      if (task.status !== "SUCCEEDED" || receipt?.target_dataset_id !== details.target_dataset_id
+          || receipt.accepted_asset_ids.length !== 1 || receipt.accepted_asset_ids[0] !== item.asset_id
+          || receipt.quality_report_ref.sha256 !== details.quality_report_ref.sha256) {
+        setError("无法核验接收回执，请刷新待接收区。");
+        return;
+      }
+      onAccepted();
+    } catch (failure) {
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <section aria-label={item.display_name + " 的检查报告"}>
     <h5>{item.display_name} 的检查报告</h5>
-    <button type="button" onClick={onClose}>关闭报告</button>
+    <button type="button" disabled={busy} onClick={onClose}>关闭报告</button>
     {!report && !error && <p role="status">正在核验检查报告…</p>}
     {error && <p role="alert">{error}</p>}
     {report && <ul>
@@ -57,5 +89,26 @@ export function StagingReportPanel({ workspace, item, onClose }: {
         </ul>}
       </li>)}
     </ul>}
+    {report && item.state === "READY_FOR_ACCEPTANCE" && <fieldset disabled={busy || acceptanceBlocked}>
+      <legend>接收到当前数据集</legend>
+      {findingsToAcknowledge(report).map(finding => <label key={finding.issue_id}>
+        <input type="checkbox" checked={reviewedFindings.has(finding.issue_id)} onChange={event => {
+          const reviewed = new Set(reviewedFindings);
+          if (event.target.checked) reviewed.add(finding.issue_id);
+          else reviewed.delete(finding.issue_id);
+          attemptKey.current = null;
+          setReviewedFindings(reviewed);
+        }} /> 已确认 {finding.finding_code}
+      </label>)}
+      {report.unexecuted_checks.map(check => <label key={check}>
+        接收理由（{checkNames[check] ?? check}未执行）
+        <textarea required value={reasons[check] ?? ""} onChange={event => {
+          attemptKey.current = null;
+          setReasons({ ...reasons, [check]: event.target.value });
+        }} />
+      </label>)}
+      <button type="button" disabled={!details || busy} onClick={() => void accept()}>确认接收</button>
+    </fieldset>}
+    {busy && <p role="status">正在核验并接收样本…</p>}
   </section>;
 }

@@ -124,3 +124,40 @@ pub struct StagingReportFindingView {
     pub explanation: String,
     pub annotation_id: Option<DecimalU64>,
 }
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StagingFindingAck {
+    pub issue_id: UuidText,
+    #[ts(optional)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StagingIncompleteCheckAck {
+    pub check_id: String,
+    pub reason: String,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StagingCommitRequest {
+    pub context: CommandContext,
+    pub target_dataset_id: UuidText,
+    pub asset_ids: Vec<UuidText>,
+    pub quality_report_ref: ArtifactReference,
+    pub expected_schema_fingerprint: String,
+    pub acknowledged_findings: Vec<StagingFindingAck>,
+    #[ts(optional)]
+    pub acknowledged_incomplete_checks: Option<Vec<StagingIncompleteCheckAck>>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingCommitView {
+    pub target_dataset_id: UuidText,
+    pub accepted_asset_ids: Vec<UuidText>,
+    pub quality_report_ref: ArtifactReference,
+    pub acknowledged_findings: Vec<StagingFindingAck>,
+    pub acknowledged_incomplete_checks: Vec<StagingIncompleteCheckAck>,
+}

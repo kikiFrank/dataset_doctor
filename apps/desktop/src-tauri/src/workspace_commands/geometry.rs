@@ -210,6 +210,7 @@ impl Commands {
             None
         };
         Ok(ImportTaskView {
+            staging_commit: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::AnnotationGeometry,
             status: outcome.status,

@@ -232,6 +232,8 @@ video_get 的 video_annotation_manifest_ref 和 video_annotation_manifest 公开
 
 桌面对单个 Staging 样本运行几何检查后，Core 使用已接纳的检查结果生成 BUILD_REPORT，并在 staging_list 返回匹配当前内容的 current_report_ref。报告的 Task ID 可通过 report_get 查询。语义证据没有就绪时保留未执行的原因和覆盖缺口。进入 READY_FOR_ACCEPTANCE 仍需有效 Final 及已通过的必需结构检查。
 
+单样本接收成功后，task_get 返回 staging_commit 回执，其中列出数据集、接收的 Asset ID、报告引用和用户逐项确认的覆盖缺口及发现。接收记录与成员关系的更新同事务提交，重开工作区后可继续查询。
+
 帧解析的 accepted 返回持久 Task，成功后通过 task_get 的 video_frame 读取精确 FrameRef。已核验的缓存直接返回 ready。帧图像使用 media_get_locator 的 artifact_id 与 owner_task_id 申请当前会话显示授权，Core 核对已接纳的帧任务和实际图像摘要。旧 asset_id 图片请求继续兼容。混用两种定位范围返回 INVALID_ARGUMENT。
 
 FrameRef 结构见视频章节。video_resolve_frame 响应是明确的判别联合：{kind:"ready",frame:FrameRef} 或 {kind:"accepted",operation:OperationRef}，前端不能把 accepted 当作已有图片。其余长期计算统一使用异步接口，避免客户端猜测是否已完成。

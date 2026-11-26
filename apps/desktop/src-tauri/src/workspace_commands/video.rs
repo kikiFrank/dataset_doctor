@@ -251,6 +251,7 @@ impl Commands {
         let outcome = VideoProbeRuntime::task_outcome(&self.thread, session, task)
             .map_err(|error| self.dataset_error(error))?;
         Ok(ImportTaskView {
+            staging_commit: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::VideoProbe,
             status: outcome.status,

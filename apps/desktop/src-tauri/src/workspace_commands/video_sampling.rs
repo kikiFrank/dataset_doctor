@@ -131,6 +131,7 @@ impl Commands {
             })
             .transpose()?;
         Ok(ImportTaskView {
+            staging_commit: None,
             task_id: self.uuid_text(snapshot.task_id.to_string())?,
             operation_kind: ImportOperationKind::VideoSample,
             status: snapshot.status,

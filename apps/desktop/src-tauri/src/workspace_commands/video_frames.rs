@@ -103,6 +103,7 @@ impl Commands {
             .and_then(|service| service.snapshot(session, task))
             .map_err(|error| self.frame_error(error))?;
         Ok(ImportTaskView {
+            staging_commit: None,
             task_id: self.uuid_text(task.to_string())?,
             operation_kind: ImportOperationKind::FrameResolve,
             status: snapshot.status,
