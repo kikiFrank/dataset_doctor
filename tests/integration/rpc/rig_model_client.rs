@@ -18,7 +18,7 @@ struct Answer {
 
 #[tokio::test]
 async fn rig_requests_one_typed_response_using_the_reserved_output_budget() {
-    let (endpoint, observed) = provider(r#"{"sample_limit":4}"#, Duration::ZERO).await;
+    let (endpoint, observed) = provider(ProviderReply::Answer(r#"{"sample_limit":4}"#)).await;
     let profile = Uuid::new_v4();
     let client = AgentModelClient::new_openai_chat(
         profile,
@@ -60,7 +60,7 @@ async fn rig_requests_one_typed_response_using_the_reserved_output_budget() {
 
 #[tokio::test]
 async fn rig_deadline_and_malformed_output_do_not_implicitly_retry() {
-    let (endpoint, observed) = provider(r#"{"sample_limit":4}"#, Duration::from_secs(1)).await;
+    let (endpoint, observed) = provider(ProviderReply::WaitForDisconnect).await;
     let profile = Uuid::new_v4();
     let client = AgentModelClient::new_openai_chat(
         profile,
@@ -74,7 +74,7 @@ async fn rig_deadline_and_malformed_output_do_not_implicitly_retry() {
         purpose: ModelPurpose::VisualReview,
         reservation_id: Uuid::new_v4(),
         max_output_tokens: 32,
-        deadline: Duration::from_millis(400),
+        deadline: Duration::from_secs(3),
     };
     assert!(matches!(
         client.request::<Answer>(request, "Synthetic summary").await,
@@ -87,7 +87,7 @@ async fn rig_deadline_and_malformed_output_do_not_implicitly_retry() {
     assert_eq!(seen["model"], "test-model");
 
     let (endpoint, observed) =
-        provider(r#"{"sample_limit":4,"shell":"unexpected"}"#, Duration::ZERO).await;
+        provider(ProviderReply::Answer(r#"{"sample_limit":4,"shell":"unexpected"}"#)).await;
     let client = AgentModelClient::new_openai_chat(
         profile,
         endpoint,
@@ -107,7 +107,12 @@ async fn rig_deadline_and_malformed_output_do_not_implicitly_retry() {
     observed.await.unwrap();
 }
 
-async fn provider(answer: &'static str, delay: Duration) -> (String, JoinHandle<Value>) {
+enum ProviderReply {
+    Answer(&'static str),
+    WaitForDisconnect,
+}
+
+async fn provider(reply: ProviderReply) -> (String, JoinHandle<Value>) {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
     let handle = tokio::spawn(async move {
@@ -138,7 +143,11 @@ async fn provider(answer: &'static str, delay: Duration) -> (String, JoinHandle<
         let mut payload = vec![0; length.unwrap()];
         stream.read_exact(&mut payload).await.unwrap();
         let body: Value = serde_json::from_slice(&payload).unwrap();
-        tokio::time::sleep(delay).await;
+        let ProviderReply::Answer(answer) = reply else {
+            let mut additional_data = [0];
+            assert_eq!(stream.read(&mut additional_data).await.unwrap(), 0);
+            return body;
+        };
         let response = json!({
             "id": "synthetic-completion", "object": "chat.completion", "created": 1, "model": "test-model",
             "choices": [{"index":0, "message":{"role":"assistant", "content":answer}, "finish_reason":"stop"}],
@@ -148,10 +157,7 @@ async fn provider(answer: &'static str, delay: Duration) -> (String, JoinHandle<
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
             response.len()
         );
-        let sent = stream.get_mut().write_all(message.as_bytes()).await;
-        if delay.is_zero() {
-            sent.unwrap();
-        }
+        stream.get_mut().write_all(message.as_bytes()).await.unwrap();
         body
     });
     (endpoint, handle)
