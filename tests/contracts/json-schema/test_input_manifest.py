@@ -2,6 +2,7 @@
 
 import json
 import math
+import sys
 import unittest
 from pathlib import Path
 
@@ -50,6 +51,14 @@ def finite_float(token):
     return value
 
 
+def bounded_int(token):
+    try:
+        return int(token)
+    except ValueError:
+        # The JSON lexer has already verified the base-10 token.
+        raise JsonParseError("integer_too_long") from None
+
+
 def strict_json(data):
     try:
         text = data.decode("utf-8", errors="strict")
@@ -58,6 +67,7 @@ def strict_json(data):
             object_pairs_hook=unique_object,
             parse_constant=reject_constant,
             parse_float=finite_float,
+            parse_int=bounded_int,
         )
     except UnicodeDecodeError:
         raise JsonParseError("invalid_utf8") from None
@@ -170,6 +180,17 @@ class InputManifestTests(unittest.TestCase):
                 self.assert_outcome(
                     fixture_id, case["raw"].encode("utf-8"), case["expected"]
                 )
+
+    def test_overlong_integer_is_rejected_before_schema_validation(self):
+        limit = sys.get_int_max_str_digits()
+        self.assertGreater(limit, 0, "Python integer conversion protection is disabled")
+        digits = b"9" * limit
+        self.assertIsInstance(strict_json(digits), int)
+        self.assert_outcome(
+            "synthetic_overlong_integer",
+            b'{"resolved_config":{"limit":' + digits + b"9}}",
+            {"stage": "parse", "category": "integer_too_long"},
+        )
 
     def test_non_utf8_is_rejected_before_schema_validation(self):
         self.assert_outcome(

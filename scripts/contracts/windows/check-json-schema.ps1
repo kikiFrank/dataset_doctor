@@ -75,7 +75,10 @@ try {
     $uv = (Get-Command uv.exe -CommandType Application | Select-Object -First 1).Source
     $pythonCheck = "import sys, sysconfig; print(sys.version); print(sysconfig.get_platform()); sys.exit(0 if sys.implementation.name == 'cpython' and sys.version_info[:3] == (3, 12, 12) and sysconfig.get_platform() == 'win-amd64' else 1)"
     $code = Invoke-LoggedCommand $python.FullName @('-I', '-S', '-B', '-c', $pythonCheck)
-    if ($code -ne 0) { exit $code }
+    if ($code -ne 0) {
+        Write-CheckLog 'Interpreter check failed. CPython 3.12.12 x64 (win-amd64) is required.'
+        exit $code
+    }
     $code = Invoke-LoggedCommand $uv @('--version')
     if ($code -ne 0) { exit $code }
 

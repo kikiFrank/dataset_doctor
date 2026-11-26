@@ -230,5 +230,21 @@
       "stage": "schema",
       "category": "additionalProperties"
     }
+  },
+  {
+    "id": "uuid_with_non_ascii_digit",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"\\u06666666666-7777-4888-8999-aaaaaaaaaaaa\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "schema",
+      "category": "pattern"
+    }
+  },
+  {
+    "id": "uuid_with_uppercase_ascii_hex",
+    "raw": "{\"dataset_id\":\"11111111-2222-4333-8444-555555555555\",\"label_schema_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"assets\":[{\"asset_id\":\"66666666-7777-4888-8999-AAAAAAAAAAAA\",\"media_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"annotation_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"source_metadata_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}],\"resolved_config\":{\"checks\":{\"enabled\":true},\"threshold\":0.5},\"capability_id\":\"image_quality_inspection\",\"implementation_version\":\"1.0.0\",\"model_identity\":null,\"input_fingerprint\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"}",
+    "expected": {
+      "stage": "ok",
+      "category": "accepted"
+    }
   }
 ]
