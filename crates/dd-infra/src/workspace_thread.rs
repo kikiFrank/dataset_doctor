@@ -244,6 +244,25 @@ impl WorkspaceThread {
         session: Uuid,
         selected: PathBuf,
     ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        self.grant_output_directory(session, WorkspacePathPurpose::Export, selected)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub fn grant_backup_directory(
+        &self,
+        session: Uuid,
+        selected: PathBuf,
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        self.grant_output_directory(session, WorkspacePathPurpose::Backup, selected)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    fn grant_output_directory(
+        &self,
+        session: Uuid,
+        purpose: WorkspacePathPurpose,
+        selected: PathBuf,
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
         let selected = selected
             .canonicalize()
             .ok()
@@ -251,7 +270,7 @@ impl WorkspaceThread {
             .ok_or(WorkspaceThreadError::Access(
                 WorkspaceAccessError::InvalidSelection,
             ))?;
-        self.grant_path(session, WorkspacePathPurpose::Export, selected)
+        self.grant_path(session, purpose, selected)
     }
 
     fn grant_path(
@@ -287,6 +306,15 @@ impl WorkspaceThread {
         grant: Uuid,
     ) -> Result<PathBuf, WorkspaceThreadError> {
         self.consume_path(session, WorkspacePathPurpose::Export, grant)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn consume_backup_directory(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.consume_path(session, WorkspacePathPurpose::Backup, grant)
     }
 
     fn consume_path(

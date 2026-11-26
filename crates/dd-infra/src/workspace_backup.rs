@@ -25,6 +25,9 @@ use crate::sqlite::{
 };
 use crate::workspace::OpenedWorkspace;
 
+#[cfg(feature = "execution-rpc")]
+pub mod task;
+
 const DATABASE: &str = "workspace.db";
 const MARKER: &str = "workspace.json";
 const MANIFEST: &str = "backup-manifest.json";
@@ -39,6 +42,8 @@ pub struct WorkspacePackageReceipt {
 #[derive(Debug)]
 pub enum WorkspacePackageError {
     DestinationExists,
+    InvalidDestination,
+    ReportsRequired,
     InvalidManifest,
     PendingMutation,
     DigestMismatch(PathBuf),
@@ -56,6 +61,10 @@ impl Display for WorkspacePackageError {
             Self::DestinationExists => {
                 formatter.write_str("The selected backup or restore target exists")
             }
+            Self::InvalidDestination => {
+                formatter.write_str("The backup requires a destination outside the Workspace")
+            }
+            Self::ReportsRequired => formatter.write_str("A Workspace backup includes its reports"),
             Self::InvalidManifest => {
                 formatter.write_str("Invalid Workspace backup manifest or registration")
             }
@@ -114,6 +123,17 @@ pub fn create_workspace_backup(
     workspace: &OpenedWorkspace,
     destination: &Path,
 ) -> Result<WorkspacePackageReceipt, WorkspacePackageError> {
+    create_workspace_backup_with(workspace, destination, |_, _| Ok(()))
+}
+
+fn create_workspace_backup_with(
+    workspace: &OpenedWorkspace,
+    destination: &Path,
+    prepare_publication: impl FnOnce(
+        &Path,
+        &WorkspacePackageReceipt,
+    ) -> Result<(), WorkspacePackageError>,
+) -> Result<WorkspacePackageReceipt, WorkspacePackageError> {
     let staging = new_stage(destination)?;
     let root = staging.path().canonicalize()?;
     let workspace_id = Uuid::parse_str(&workspace.identity().workspace_id)
@@ -150,14 +170,19 @@ pub fn create_workspace_backup(
     serde_json::to_writer(&mut sealed, &manifest)
         .map_err(|_| WorkspacePackageError::InvalidManifest)?;
     sealed.flush()?;
+    if sealed.metadata()?.len() > MANIFEST_LIMIT {
+        return Err(WorkspacePackageError::InvalidManifest);
+    }
     sealed.sync_all()?;
     drop(sealed);
     snapshot.close().map_err(|(_, error)| error)?;
-    publish(staging.path(), destination)?;
-    Ok(WorkspacePackageReceipt {
+    let receipt = WorkspacePackageReceipt {
         workspace_id,
         asset_files: manifest.assets.len(),
-    })
+    };
+    prepare_publication(&root, &receipt)?;
+    publish(staging.path(), destination)?;
+    Ok(receipt)
 }
 
 /// Restore into a new path and rebase registrations without opening their old locations.

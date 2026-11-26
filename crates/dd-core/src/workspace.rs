@@ -108,6 +108,7 @@ pub enum WorkspacePathPurpose {
     Import,
     Export,
     VideoImport,
+    Backup,
 }
 
 pub use WorkspacePathPurpose as WorkspaceDirectoryPurpose;

@@ -190,6 +190,11 @@ path = "../../tests/integration/rpc/review_final.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workspace_backup_task"
+path = "../../tests/integration/rpc/workspace_backup_task.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "coco_export"
 path = "../../tests/integration/rpc/coco_export.rs"
 required-features = ["execution-rpc"]
