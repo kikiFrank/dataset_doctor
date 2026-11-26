@@ -21,6 +21,7 @@ use crate::json::{JsonContracts, strict_json};
 use crate::paths::{open_scoped_file, publish_immutable};
 use crate::sqlite::row_uuid;
 use crate::task_store::{TaskStoreError, TaskSubmission, enqueue_task_in, format_digest};
+use crate::worker_runtime::now_ms;
 use crate::workspace::OpenedWorkspace;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -158,6 +159,30 @@ impl StagingReportService {
             owner,
             contracts: JsonContracts::new().map_err(StagingReportError::Evidence)?,
         })
+    }
+
+    /// Publish a report when a desktop geometry task belongs to Staging.
+    /// Ordinary Dataset members continue to expose the geometry result itself.
+    pub fn build_after_geometry(
+        owner: Arc<WorkspaceThread>,
+        session: Uuid,
+        request: StagingReportRequest,
+    ) -> Result<Option<StagingReport>, StagingReportError> {
+        let dataset = request.target_dataset_id;
+        let asset = request.asset_id;
+        let staged = owner.workspace_action(session, move |workspace| {
+            workspace.connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM staging_items WHERE asset_id=?1 AND target_dataset_id=?2)",
+                params![asset.to_string(), dataset.to_string()], |row| row.get::<_, bool>(0),
+            ).map_err(database)
+        })?;
+        if !staged {
+            return Ok(None);
+        }
+        let timestamp = now_ms().map_err(|error| StagingReportError::Evidence(Box::new(error)))?;
+        Self::new(owner)?
+            .build(session, request, timestamp)
+            .map(Some)
     }
 
     pub fn build(

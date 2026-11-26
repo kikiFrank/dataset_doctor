@@ -1,14 +1,36 @@
 use std::sync::Arc;
 
+use dd_infra::artifact_reference::{
+    ArtifactOwner as StoredOwner, ArtifactReference as StoredReference,
+};
 use dd_infra::frame_runtime::FrameService;
 use dd_infra::staging::{StagingFrameSource, StagingQuery, StagingState as StoredState};
-use dd_infra::task_store::format_digest;
-use dd_ui_contracts::staging::{StagingItem, StagingListRequest, StagingPage, StagingState};
+use dd_infra::staging_report::{StagingReportError, StagingReportService};
+use dd_infra::task_store::{TaskStoreError, format_digest};
+use dd_ui_contracts::staging::{
+    StagingItem, StagingListRequest, StagingPage, StagingReportCheckView, StagingReportFindingView,
+    StagingReportGetRequest, StagingReportReasonView, StagingReportScopeView, StagingReportView,
+    StagingState,
+};
 use dd_ui_contracts::video::VideoFrame;
+use dd_ui_contracts::{ArtifactOwner, ArtifactReference, DecimalU64};
 use tauri::State;
 use uuid::Uuid;
 
-use super::{AppError, Commands, WorkspaceThread, run};
+use super::{AppError, Commands, WorkspaceThread, WorkspaceThreadError, run};
+
+#[tauri::command]
+pub async fn report_get(
+    request: StagingReportGetRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<StagingReportView, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.get_staging_report(request),
+    )
+    .await
+}
 
 #[tauri::command]
 pub async fn staging_list(
@@ -70,7 +92,10 @@ impl Commands {
                     state: wire_state(item.state),
                     review_state: item.review_state,
                     source_frame_ref,
-                    current_report_ref: None,
+                    current_report_ref: item
+                        .current_report_ref
+                        .map(|reference| self.staging_artifact(reference))
+                        .transpose()?,
                     blocking_reasons: item
                         .blocking_reasons
                         .into_iter()
@@ -85,6 +110,111 @@ impl Commands {
                 .next_cursor
                 .map(|id| self.uuid_text(id.to_string()))
                 .transpose()?,
+        })
+    }
+
+    pub(super) fn get_staging_report(
+        &self,
+        request: StagingReportGetRequest,
+    ) -> Result<StagingReportView, AppError> {
+        let session = self.session(request.context)?;
+        let task = match (request.report_id, request.task_id) {
+            (Some(id), None) | (None, Some(id)) => self.parse_uuid(id)?,
+            _ => return Err(self.error("INVALID_ARGUMENT", "请提供一个报告 ID 或任务 ID。")),
+        };
+        let service = StagingReportService::new(Arc::clone(&self.thread))
+            .map_err(|_| self.error("INTERNAL", "无法初始化报告读取。"))?;
+        let report = service.get(session, task).map_err(|error| match error {
+            StagingReportError::Workspace(WorkspaceThreadError::Task(
+                TaskStoreError::UnknownTask,
+            )) => self.error("NOT_FOUND", "当前工作区没有此检查报告。"),
+            StagingReportError::Workspace(error) => self.dataset_error(error),
+            _ => self.error("REPORT_STALE", "报告无法核验，请重新运行检查。"),
+        })?;
+        let data = report.data;
+        let scope = data.scope;
+        let checks = data
+            .checks
+            .into_iter()
+            .map(|check| {
+                let findings = check
+                    .findings
+                    .into_iter()
+                    .map(|finding| {
+                        Ok(StagingReportFindingView {
+                            issue_id: self.uuid_text(finding.issue_id.to_string())?,
+                            asset_id: self.uuid_text(finding.asset_id.to_string())?,
+                            check_id: finding.check_id,
+                            finding_code: finding.finding_code,
+                            severity: finding.severity,
+                            input_fingerprint: finding.input_fingerprint,
+                            explanation: finding.explanation,
+                            annotation_id: finding.annotation_id.map(Into::into),
+                        })
+                    })
+                    .collect::<Result<_, AppError>>()?;
+                let evidence_refs = check
+                    .evidence_refs
+                    .into_iter()
+                    .map(|reference| self.staging_artifact(reference))
+                    .collect::<Result<_, AppError>>()?;
+                Ok(StagingReportCheckView {
+                    check_id: check.check_id,
+                    check_contract_version: check.check_contract_version,
+                    execution_status: check.execution_status,
+                    assessment: check.assessment,
+                    skip_or_failure_reason: check.skip_or_failure_reason.map(|reason| {
+                        StagingReportReasonView {
+                            code: reason.code,
+                            message: reason.message,
+                        }
+                    }),
+                    input_fingerprint: check.input_fingerprint,
+                    processed_assets: check.processed_assets,
+                    total_assets: check.total_assets,
+                    finding_count: check.finding_count,
+                    findings,
+                    evidence_refs,
+                    started_at: check.started_at,
+                    finished_at: check.finished_at,
+                })
+            })
+            .collect::<Result<_, AppError>>()?;
+        Ok(StagingReportView {
+            report_id: self.uuid_text(data.report_id.to_string())?,
+            scope: StagingReportScopeView {
+                dataset_id: self.uuid_text(scope.dataset_id.to_string())?,
+                asset_id: self.uuid_text(scope.asset_id.to_string())?,
+                media_digest: scope.media_digest,
+                annotation_digest: scope.annotation_digest,
+                label_schema_digest: scope.label_schema_digest,
+            },
+            input_fingerprint: data.input_fingerprint,
+            execution_coverage: data.execution_coverage,
+            findings_by_severity: data.findings_by_severity,
+            human_ack_status: data.human_ack_status,
+            unexecuted_checks: data.unexecuted_checks,
+            repair_outcomes: data.repair_outcomes,
+            checks,
+            report_artifact_ref: self.staging_artifact(report.reference)?,
+        })
+    }
+
+    fn staging_artifact(&self, reference: StoredReference) -> Result<ArtifactReference, AppError> {
+        let owner = match reference.owner {
+            StoredOwner::Task(id) => ArtifactOwner::Task(self.uuid_text(id.to_string())?),
+            StoredOwner::Asset(id) => ArtifactOwner::Asset(self.uuid_text(id.to_string())?),
+            StoredOwner::Review(id) => ArtifactOwner::Review(self.uuid_text(id.to_string())?),
+        };
+        Ok(ArtifactReference {
+            artifact_id: self.uuid_text(reference.artifact_id.to_string())?,
+            owner,
+            kind: reference.kind,
+            media_type: reference.media_type,
+            sha256: reference.sha256,
+            size_bytes: DecimalU64::try_from(reference.size_bytes)
+                .map_err(|_| self.error("DATA_CORRUPTION", "报告记录的大小无效。"))?,
+            schema_id: reference.schema_id,
         })
     }
 

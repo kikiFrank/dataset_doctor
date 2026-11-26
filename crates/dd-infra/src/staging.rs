@@ -324,7 +324,7 @@ impl StagingCandidate {
         Option<&'static str>,
         Option<ArtifactReference>,
     ) {
-        if state != StagingState::NeedsCheck {
+        if !matches!(state, StagingState::NeedsCheck | StagingState::NeedsReview) {
             return (state, reason, None);
         }
         let Some(report) = self
@@ -337,13 +337,20 @@ impl StagingCandidate {
         };
         let row = &self.row;
         let scope = &report.data.scope;
+        let schema = row
+            .categories
+            .as_ref()
+            .map(|categories| format!("{:x}", Sha256::digest(categories.as_bytes())));
         if Some(scope.dataset_id) != row.dataset
             || scope.asset_id != row.asset
-            || Some(&scope.media_digest) != row.confirmed_media.as_ref()
-            || scope.annotation_digest != row.confirmed_annotation
-            || Some(&scope.label_schema_digest) != row.confirmed_schema.as_ref()
+            || Some(&scope.media_digest) != row.media_digest.as_ref()
+            || scope.annotation_digest != row.annotation_digest
+            || Some(&scope.label_schema_digest) != schema.as_ref()
         {
             return (state, reason, None);
+        }
+        if state == StagingState::NeedsReview {
+            return (state, reason, Some(report.reference));
         }
         if report.data.required_geometry_passed() {
             return (

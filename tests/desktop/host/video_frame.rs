@@ -5,7 +5,8 @@ use std::time::Instant;
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_infra::media_display::MediaDisplayService;
 use dd_ui_contracts::annotation::MediaGetLocatorRequest;
-use dd_ui_contracts::dataset_import::{ImportOperationKind, TaskGetRequest};
+use dd_ui_contracts::dataset_import::{GeometrySubmitRequest, ImportOperationKind, TaskGetRequest};
+use dd_ui_contracts::staging::StagingReportGetRequest;
 use dd_ui_contracts::video::{
     FrameResolution, VideoGetKeyframeDraftRequest, VideoGetRequest, VideoImportRequest,
     VideoResolveFrameRequest, VideoSampleSubmitRequest, VideoSaveKeyframeDraftRequest,
@@ -356,6 +357,66 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
             .artifact_id,
         frame.image_ref.artifact_id
     );
+    let geometry = geometry::GeometryRunner::new(
+        repo.join("target/dev/worker-venv/Scripts/python.exe"),
+        repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
+    );
+    let checked = commands
+        .start_geometry(
+            geometry,
+            GeometrySubmitRequest {
+                context: context(session),
+                dataset_id: uuid(dataset_id.clone()),
+                asset_id: staged.clone(),
+            },
+        )
+        .unwrap();
+    assert_eq!(wait(session, checked.task_id).status, "SUCCEEDED");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let report = loop {
+        let list = commands
+            .list_staging(dd_ui_contracts::staging::StagingListRequest {
+                context: context(session),
+                target_dataset_id: Some(uuid(dataset_id.clone())),
+                cursor: None,
+                status: None,
+                page_size: 10,
+            })
+            .unwrap();
+        let item = list.items.into_iter().next().unwrap();
+        assert!(matches!(
+            item.state,
+            dd_ui_contracts::staging::StagingState::NeedsReview
+        ));
+        if let Some(reference) = item.current_report_ref {
+            break reference;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "geometry completion did not publish a Staging report"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let dd_ui_contracts::ArtifactOwner::Task(report_task) = report.owner else {
+        panic!("expected report Task owner");
+    };
+    let report_get = |scope| StagingReportGetRequest {
+        context: context(scope),
+        report_id: Some(report_task.clone()),
+        task_id: None,
+    };
+    let readable = commands.get_staging_report(report_get(session)).unwrap();
+    assert_eq!(readable.scope.asset_id, staged);
+    assert_eq!(readable.report_artifact_ref.artifact_id, report.artifact_id);
+    assert_eq!(readable.checks[0].assessment, "PASS");
+    assert_eq!(readable.checks[1].assessment, "NOT_EVALUATED");
+    assert_eq!(readable.unexecuted_checks, ["semantic_review"]);
+    let mut ambiguous = report_get(session);
+    ambiguous.task_id = ambiguous.report_id.clone();
+    assert_eq!(
+        commands.get_staging_report(ambiguous).unwrap_err().code,
+        "INVALID_ARGUMENT"
+    );
     assert_eq!(
         commands
             .start_video_sample(Some(Arc::clone(&runner)), sample_request(2, None))
@@ -382,6 +443,21 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     assert_eq!(response.status(), 403);
     let grant = owner.grant_selected_directory(root).unwrap();
     let reopened = owner.open(grant.grant_id).unwrap().workspace_session_id;
+    assert_eq!(
+        commands
+            .get_staging_report(report_get(session))
+            .unwrap_err()
+            .code,
+        "STALE_WORKSPACE_SESSION"
+    );
+    assert_eq!(
+        commands
+            .get_staging_report(report_get(reopened))
+            .unwrap()
+            .scope
+            .asset_id,
+        staged
+    );
     let restored = detail(reopened);
     assert_eq!(
         wait(reopened, sample_id).video_sample.unwrap().samples[0].asset_id,

@@ -74,6 +74,18 @@ export type StagingItem = { asset_id: UuidText, target_dataset_id: UuidText | nu
 
 export type StagingPage = { items: Array<StagingItem>, next_cursor: UuidText | null, };
 
+export type StagingReportGetRequest = { context: CommandContext, report_id?: UuidText, task_id?: UuidText, };
+
+export type StagingReportView = { report_id: UuidText, scope: StagingReportScopeView, input_fingerprint: string, execution_coverage: { [key in string]: number }, findings_by_severity: { [key in string]: number }, human_ack_status: string, unexecuted_checks: Array<string>, repair_outcomes: unknown[], checks: Array<StagingReportCheckView>, report_artifact_ref: ArtifactReference, };
+
+export type StagingReportScopeView = { dataset_id: UuidText, asset_id: UuidText, media_digest: string, annotation_digest: string | null, label_schema_digest: string, };
+
+export type StagingReportCheckView = { check_id: string, check_contract_version: string, execution_status: string, assessment: string, skip_or_failure_reason: StagingReportReasonView | null, input_fingerprint: string, processed_assets: number, total_assets: number, finding_count: number, findings: Array<StagingReportFindingView>, evidence_refs: Array<ArtifactReference>, started_at: string | null, finished_at: string | null, };
+
+export type StagingReportReasonView = { code: string, message: string, };
+
+export type StagingReportFindingView = { issue_id: UuidText, asset_id: UuidText, check_id: string, finding_code: string, severity: string, input_fingerprint: string, explanation: string, annotation_id: DecimalU64 | null, };
+
 export type DatasetExportFormat = "COCO_DETECTION";
 
 export type DatasetExportSelection = "ALL_MEMBERS";

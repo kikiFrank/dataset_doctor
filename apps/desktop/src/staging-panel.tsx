@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { StagingItem, StagingPage, StagingState } from "./api/generated/wire-primitives";
 import { listStaging } from "./api/staging";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
+import { StagingReportPanel } from "./staging-report-panel";
 
 const labels: Record<StagingState, string> = {
   OFFLINE: "文件离线",
@@ -26,6 +27,7 @@ export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocke
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [reportAsset, setReportAsset] = useState<string | null>(null);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -60,6 +62,7 @@ export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocke
     }
   }
 
+  const reportItem = page?.items.find(item => item.asset_id === reportAsset && item.current_report_ref);
   return <section aria-label="待接收样本">
     <h4>待接收样本</h4>
     <label>状态 <select value={status ?? ""} onChange={event => setStatus(event.target.value as StagingState || undefined)}>
@@ -71,7 +74,7 @@ export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocke
     {error && <p role="alert">{error}</p>}
     {page?.items.length === 0 && !page.next_cursor && <p>当前没有符合条件的待接收样本。</p>}
     {page && page.items.length > 0 && <table>
-      <thead><tr><th scope="col">文件名</th><th scope="col">状态</th><th scope="col">来源帧</th></tr></thead>
+      <thead><tr><th scope="col">文件名</th><th scope="col">状态</th><th scope="col">来源帧</th><th scope="col">检查报告</th></tr></thead>
       <tbody>{page.items.map(item => <tr key={item.asset_id}>
         <td><button type="button" className="asset-link"
           disabled={selectionBlocked || item.state === "OFFLINE" || item.target_dataset_id !== datasetId}
@@ -80,8 +83,11 @@ export function StagingPanel({ workspace, datasetId, refreshKey, selectionBlocke
         <td>{item.source_frame_ref
           ? "帧 " + item.source_frame_ref.frame_index + (item.source_frame_ref.pts_us === null ? "" : " · " + item.source_frame_ref.pts_us + " µs")
           : "—"}</td>
+        <td>{item.current_report_ref && <button type="button" onClick={() => setReportAsset(item.asset_id)}>查看报告</button>}</td>
       </tr>)}</tbody>
     </table>}
     {page?.next_cursor && <button type="button" disabled={busy} onClick={() => void more()}>更多待接收样本</button>}
+    {reportItem && <StagingReportPanel key={reportItem.current_report_ref?.artifact_id}
+      workspace={workspace} item={reportItem} onClose={() => setReportAsset(null)} />}
   </section>;
 }

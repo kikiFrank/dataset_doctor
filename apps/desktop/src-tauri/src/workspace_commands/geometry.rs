@@ -5,6 +5,7 @@ use dd_infra::geometry_runtime::{
     GeometryAuditJob, GeometryAuditRequest, GeometryRuntime, GeometryRuntimeError,
     read_geometry_report,
 };
+use dd_infra::staging_report::{OptionalStagingCheck, StagingReportRequest, StagingReportService};
 use dd_infra::task_store::TaskStoreError;
 use dd_infra::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 use dd_ui_contracts::dataset_import::{
@@ -44,6 +45,7 @@ impl GeometryRunner {
         workspace: Arc<WorkspaceThread>,
         session: Uuid,
         job: GeometryAuditJob,
+        staging_report: StagingReportRequest,
     ) {
         let _reservation = Reservation(Arc::clone(&self));
         let task = job.task().task_id;
@@ -56,9 +58,18 @@ impl GeometryRunner {
         .await;
         let startup_failed = match worker {
             Ok(mut worker) => {
-                let audit = worker.audit_admitted(job).await;
-                if audit.is_ok() {
+                if let Ok(outcome) = worker.audit_admitted(job).await {
                     let _ = worker.shutdown().await;
+                    if outcome.status == "SUCCEEDED" {
+                        let _ = tauri::async_runtime::spawn_blocking(move || {
+                            StagingReportService::build_after_geometry(
+                                workspace,
+                                session,
+                                staging_report,
+                            )
+                        })
+                        .await;
+                    }
                     return;
                 }
                 if worker.terminate().await.is_err() {
@@ -152,7 +163,15 @@ impl Commands {
             *active = Some(idempotency_key);
             drop(active);
             let workspace = Arc::clone(&self.thread);
-            tauri::async_runtime::spawn(runner.execute(workspace, session, job));
+            let report = StagingReportRequest {
+                request_id,
+                idempotency_key: job.task().task_id,
+                target_dataset_id: dataset_id,
+                asset_id,
+                geometry_task_id: job.task().task_id,
+                optional_checks: vec![OptionalStagingCheck::SemanticReview],
+            };
+            tauri::async_runtime::spawn(runner.execute(workspace, session, job, report));
         }
         Ok(operation)
     }

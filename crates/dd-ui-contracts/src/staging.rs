@@ -1,7 +1,11 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{ArtifactReference, UuidText, video::VideoFrame, workspace::CommandContext};
+use crate::{
+    ArtifactReference, DecimalU64, UuidText, video::VideoFrame, workspace::CommandContext,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -49,4 +53,74 @@ pub struct StagingItem {
 pub struct StagingPage {
     pub items: Vec<StagingItem>,
     pub next_cursor: Option<UuidText>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StagingReportGetRequest {
+    pub context: CommandContext,
+    #[ts(optional)]
+    pub report_id: Option<UuidText>,
+    #[ts(optional)]
+    pub task_id: Option<UuidText>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingReportView {
+    pub report_id: UuidText,
+    pub scope: StagingReportScopeView,
+    pub input_fingerprint: String,
+    pub execution_coverage: BTreeMap<String, u32>,
+    pub findings_by_severity: BTreeMap<String, u32>,
+    pub human_ack_status: String,
+    pub unexecuted_checks: Vec<String>,
+    #[ts(type = "unknown[]")]
+    pub repair_outcomes: Vec<serde_json::Value>,
+    pub checks: Vec<StagingReportCheckView>,
+    pub report_artifact_ref: ArtifactReference,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingReportScopeView {
+    pub dataset_id: UuidText,
+    pub asset_id: UuidText,
+    pub media_digest: String,
+    pub annotation_digest: Option<String>,
+    pub label_schema_digest: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingReportCheckView {
+    pub check_id: String,
+    pub check_contract_version: String,
+    pub execution_status: String,
+    pub assessment: String,
+    pub skip_or_failure_reason: Option<StagingReportReasonView>,
+    pub input_fingerprint: String,
+    pub processed_assets: u32,
+    pub total_assets: u32,
+    #[ts(type = "number")]
+    pub finding_count: usize,
+    pub findings: Vec<StagingReportFindingView>,
+    pub evidence_refs: Vec<ArtifactReference>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingReportReasonView {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct StagingReportFindingView {
+    pub issue_id: UuidText,
+    pub asset_id: UuidText,
+    pub check_id: String,
+    pub finding_code: String,
+    pub severity: String,
+    pub input_fingerprint: String,
+    pub explanation: String,
+    pub annotation_id: Option<DecimalU64>,
 }
