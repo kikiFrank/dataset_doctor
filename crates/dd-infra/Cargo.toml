@@ -159,6 +159,11 @@ path = "../../tests/integration/rpc/workspace_color_preview.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workspace_color_apply"
+path = "../../tests/integration/rpc/workspace_color_apply.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "worker_process"
 path = "../../tests/integration/rpc/worker_process.rs"
 required-features = ["execution-rpc"]

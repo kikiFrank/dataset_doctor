@@ -7,6 +7,61 @@ use sha2::{Digest, Sha256};
 
 use crate::workspace::{ordinary_file, prevent_replacement};
 
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn registered_digest(path: &Path, limit: u64) -> io::Result<Option<String>> {
+    let file = match open_registered_file(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut digest = Sha256::new();
+    if io::copy(&mut file.take(limit + 1), &mut digest)? > limit {
+        return Err(io::Error::new(
+            ErrorKind::InvalidData,
+            "Registered file exceeds its size limit",
+        ));
+    }
+    Ok(Some(format!("{:x}", digest.finalize())))
+}
+
+#[cfg(feature = "execution-rpc")]
+pub(crate) fn replace_verified_file(
+    path: &Path,
+    before: Option<&str>,
+    after: &str,
+    bytes: &[u8],
+    limit: u64,
+) -> io::Result<bool> {
+    let actual = registered_digest(path, limit)?;
+    if actual.as_deref() == Some(after) {
+        return Ok(true);
+    }
+    if actual.as_deref() != before {
+        return Ok(false);
+    }
+    let parent = path.parent().ok_or(ErrorKind::InvalidData)?;
+    if parent.canonicalize()? != parent {
+        return Ok(false);
+    }
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.as_file().sync_all()?;
+    if registered_digest(path, limit)? != actual {
+        return Ok(false);
+    }
+    let published = if actual.is_some() {
+        temporary.persist(path)
+    } else {
+        temporary.persist_noclobber(path)
+    };
+    match published {
+        Ok(file) => drop(file),
+        Err(error) if error.error.kind() == ErrorKind::AlreadyExists => return Ok(false),
+        Err(error) => return Err(error.error),
+    }
+    Ok(registered_digest(path, limit)?.as_deref() == Some(after))
+}
+
 pub(crate) fn is_portable_relative_file(path: &Path) -> bool {
     path.file_name().is_some()
         && path.components().all(|component| {

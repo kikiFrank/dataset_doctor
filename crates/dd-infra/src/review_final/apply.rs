@@ -1,18 +1,17 @@
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde_json::json;
-use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use super::{
     FinalManifest, FinalOperation, FinalOperationState, KIND, MAX_ANNOTATION, MAX_IMAGE,
     ReviewFinalError, ReviewFinalService, database, digest, file_digest, new_annotation_path,
-    operation_state, verified_parent,
+    operation_state,
 };
 use crate::json::strict_json;
-use crate::paths::open_scoped_file;
+use crate::paths::{open_scoped_file, replace_verified_file};
 use crate::review_store::ReviewStatus;
 use crate::workspace_thread::WorkspaceThreadError;
 
@@ -261,38 +260,17 @@ fn apply_files(
     {
         return Ok(FinalOperationState::Conflict);
     }
-    let target = &manifest.target_path;
-    let current = file_digest(target, MAX_ANNOTATION)?;
-    if current.as_deref() == Some(manifest.new_annotation_digest.as_str()) {
-        return Ok(FinalOperationState::Committed);
-    }
-    if current != manifest.old_annotation_digest {
-        return Ok(FinalOperationState::Conflict);
-    }
-    let mut temporary = NamedTempFile::new_in(verified_parent(target)?)?;
-    temporary.write_all(payload)?;
-    temporary.as_file().sync_all()?;
-    if file_digest(target, MAX_ANNOTATION)? != current {
-        return Ok(FinalOperationState::Conflict);
-    }
-    let published = if current.is_some() {
-        temporary.persist(target)
+    if replace_verified_file(
+        &manifest.target_path,
+        manifest.old_annotation_digest.as_deref(),
+        &manifest.new_annotation_digest,
+        payload,
+        MAX_ANNOTATION,
+    )? {
+        Ok(FinalOperationState::Committed)
     } else {
-        temporary.persist_noclobber(target)
-    };
-    match published {
-        Ok(file) => drop(file),
-        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Ok(FinalOperationState::Conflict);
-        }
-        Err(error) => return Err(error.error.into()),
+        Ok(FinalOperationState::Conflict)
     }
-    if file_digest(target, MAX_ANNOTATION)?.as_deref()
-        != Some(manifest.new_annotation_digest.as_str())
-    {
-        return Ok(FinalOperationState::Conflict);
-    }
-    Ok(FinalOperationState::Committed)
 }
 
 fn commit_rows(

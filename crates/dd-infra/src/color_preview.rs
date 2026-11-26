@@ -33,7 +33,7 @@ pub use crate::worker_runtime::WorkerRuntimeError as ColorPreviewError;
 pub(crate) const CAPABILITY: &str = "color_preview.v1";
 const KIND: &str = "COLOR_PREVIEW";
 const MAX_PIXELS: u32 = 100_000_000;
-const MAX_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
+pub(crate) const MAX_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_INPUT_BYTES: u64 = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -98,7 +98,7 @@ pub struct ColorPreviewSnapshot {
 
 pub struct ColorPreviewService {
     owner: Arc<WorkspaceThread>,
-    contracts: JsonContracts,
+    pub(crate) contracts: JsonContracts,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -442,7 +442,11 @@ fn locator(path: &Path, sha256: String) -> Result<WorkerInputFile, ColorPreviewE
     Ok(WorkerInputFile { path, sha256 })
 }
 
-fn read_scoped(root: &Path, path: &Path, limit: u64) -> Result<Vec<u8>, ColorPreviewError> {
+pub(crate) fn read_scoped(
+    root: &Path,
+    path: &Path,
+    limit: u64,
+) -> Result<Vec<u8>, ColorPreviewError> {
     let mut bytes = Vec::new();
     open_scoped_file(root, path)?
         .take(limit + 1)

@@ -130,6 +130,7 @@ struct FinalTarget {
     binding: RegisteredImage,
     location: String,
     asset_revision: i64,
+    pending: bool,
 }
 
 impl ReviewFinalService {
@@ -175,12 +176,15 @@ impl ReviewFinalService {
                 let binding = owner
                     .registered_image(review.dataset_id, review.asset_id)
                     .map_err(WorkspaceThreadError::Dataset)?;
-                let (location, asset_revision) = owner
+                let (location, asset_revision, pending) = owner
                     .connection
                     .query_row(
-                        "SELECT location_kind, row_revision FROM assets WHERE asset_id=?1",
+                        "SELECT location_kind,row_revision,
+                           EXISTS(SELECT 1 FROM file_operations f
+                                  WHERE f.asset_id=a.asset_id AND f.status='PREPARED')
+                         FROM assets a WHERE asset_id=?1",
                         [review.asset_id.to_string()],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )
                     .map_err(database)?;
                 Ok(FinalTarget {
@@ -189,11 +193,13 @@ impl ReviewFinalService {
                     binding,
                     location,
                     asset_revision,
+                    pending,
                 })
             })
             .map_err(ReviewFinalError::Storage)?;
         let review = &target.review;
-        if review.status != ReviewStatus::Open
+        if target.pending
+            || review.status != ReviewStatus::Open
             || review.row_revision != request.expected_review_revision
             || review.base_image_digest != request.base_image_digest
             || review.base_annotation_digest != request.base_annotation_digest
