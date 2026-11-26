@@ -4,6 +4,8 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender, SyncSender, TrySendError};
+#[cfg(feature = "execution-rpc")]
+use std::sync::{Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -83,6 +85,8 @@ enum Request {
 pub struct WorkspaceThread {
     requests: Option<SyncSender<Request>>,
     owner: Option<JoinHandle<()>>,
+    #[cfg(feature = "execution-rpc")]
+    final_operations: Mutex<()>,
 }
 
 impl WorkspaceThread {
@@ -137,6 +141,8 @@ impl WorkspaceThread {
         Ok(Self {
             requests: Some(requests),
             owner: Some(owner),
+            #[cfg(feature = "execution-rpc")]
+            final_operations: Mutex::new(()),
         })
     }
 
@@ -226,8 +232,17 @@ impl WorkspaceThread {
     }
 
     pub fn close(&self, expected_session_id: Uuid) -> Result<(), WorkspaceThreadError> {
+        #[cfg(feature = "execution-rpc")]
+        let _guard = self.lock_final_operations()?;
         self.request(|reply| Request::Close(expected_session_id, reply))?
             .map_err(WorkspaceThreadError::Access)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn lock_final_operations(&self) -> Result<MutexGuard<'_, ()>, WorkspaceThreadError> {
+        self.final_operations
+            .lock()
+            .map_err(|_| WorkspaceThreadError::Stopped)
     }
 
     pub fn open_review(

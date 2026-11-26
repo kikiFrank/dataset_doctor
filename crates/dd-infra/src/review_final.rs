@@ -1,5 +1,7 @@
 //! Explicit approval and durable intent for publishing a reviewed COCO file.
 
+mod apply;
+
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs;
@@ -132,6 +134,10 @@ impl ReviewFinalService {
         request: ReviewFinalRequest,
         now_ms: i64,
     ) -> Result<FinalOperation, ReviewFinalError> {
+        let _guard = self
+            .owner
+            .lock_final_operations()
+            .map_err(ReviewFinalError::Storage)?;
         let key = request.idempotency_key.to_string();
         let fingerprint = request_fingerprint(&request)?;
         let old_key = key.clone();
@@ -310,14 +316,18 @@ fn matching_operation(
     if fingerprint != expected_fingerprint {
         return Err(ReviewFinalError::Conflict);
     }
-    let state = match status.as_str() {
+    operation_state(&operation_id, &status)
+}
+
+fn operation_state(operation_id: &str, status: &str) -> Result<FinalOperation, ReviewFinalError> {
+    let state = match status {
         "PREPARED" => FinalOperationState::Prepared,
         "COMMITTED" => FinalOperationState::Committed,
         "CONFLICT" => FinalOperationState::Conflict,
         _ => return Err(ReviewFinalError::InvalidOperation),
     };
     let operation_id =
-        Uuid::parse_str(&operation_id).map_err(|_| ReviewFinalError::InvalidOperation)?;
+        Uuid::parse_str(operation_id).map_err(|_| ReviewFinalError::InvalidOperation)?;
     Ok(FinalOperation {
         operation_id,
         state,
