@@ -11,6 +11,7 @@ rusqlite.workspace = true
 jsonschema = { version = "=0.63.1", default-features = false, features = ["arbitrary-precision"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["raw_value"] }
+uuid = "=1.29.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem"] }
@@ -38,3 +39,7 @@ path = "../../tests/storage/workspace/open.rs"
 [[test]]
 name = "workspace_access"
 path = "../../tests/storage/workspace/access.rs"
+
+[[test]]
+name = "workspace_thread"
+path = "../../tests/storage/workspace/thread.rs"
