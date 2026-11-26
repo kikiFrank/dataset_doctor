@@ -41,7 +41,8 @@ impl WorkflowStore {
         if stored.reference(run)? != request.reference {
             return Err(WorkflowError::RevisionConflict);
         }
-        let fingerprint = command_fingerprint(&request);
+        let fingerprint =
+            command_fingerprint(&request, b"datasetdoctor.workflow.start-profile.v1\0");
         let first_key = request.idempotency_key.to_string();
         let expected_fingerprint = format_digest(&fingerprint);
         if row.status != "READY" {
@@ -150,9 +151,9 @@ impl WorkflowStore {
     }
 }
 
-fn command_fingerprint(request: &WorkflowProfileRequest) -> [u8; 32] {
+pub(super) fn command_fingerprint(request: &WorkflowProfileRequest, domain: &[u8]) -> [u8; 32] {
     let mut digest = Sha256::new();
-    digest.update(b"datasetdoctor.workflow.start-profile.v1\0");
+    digest.update(domain);
     digest.update(request.reference.run_id.as_bytes());
     digest.update(request.reference.plan_revision.to_le_bytes());
     digest.update(request.reference.input_fingerprint);

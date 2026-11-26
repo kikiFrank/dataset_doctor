@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::dataset_query::{RegisteredImage, RegisteredInputFile};
-use crate::input_fingerprint::freeze_input_manifest;
+use crate::input_fingerprint::{FrozenInputManifest, freeze_input_manifest};
 use crate::json::JsonContracts;
 use crate::paths::publish_immutable;
 use crate::task_store::{StoredTask, TaskOutcome, TaskSubmission, format_digest};
@@ -96,6 +96,16 @@ impl GeometryRuntime {
         session: Uuid,
         request: GeometryAuditRequest,
     ) -> Result<GeometryAuditJob, GeometryRuntimeError> {
+        let prepared = Self::prepare(workspace, session, request)?;
+        let task = workspace.enqueue_task(prepared.submission.clone(), now_ms()?)?;
+        Ok(prepared.into_job(task))
+    }
+
+    pub(crate) fn prepare(
+        workspace: &WorkspaceThread,
+        session: Uuid,
+        request: GeometryAuditRequest,
+    ) -> Result<PreparedGeometry, GeometryRuntimeError> {
         let root = workspace.storage_root(session)?;
         prepare(workspace, &root, session, request)
     }
@@ -149,12 +159,35 @@ impl GeometryAuditJob {
     }
 }
 
+pub(crate) struct PreparedGeometry {
+    pub(crate) submission: TaskSubmission,
+    frozen: FrozenInputManifest,
+    parameters: GeometryAuditInput,
+}
+
+impl PreparedGeometry {
+    pub(crate) fn manifest_bytes(&self) -> &[u8] {
+        &self.frozen.bytes
+    }
+
+    pub(crate) fn into_job(self, task: StoredTask) -> GeometryAuditJob {
+        GeometryAuditJob {
+            session: self.submission.workspace_session,
+            task,
+            input_fingerprint: self.frozen.input_fingerprint,
+            manifest_sha: self.frozen.sha256,
+            manifest_size: self.frozen.bytes.len() as u64,
+            parameters: self.parameters,
+        }
+    }
+}
+
 fn prepare(
     workspace: &WorkspaceThread,
     root: &Path,
     session: Uuid,
     request: GeometryAuditRequest,
-) -> Result<GeometryAuditJob, GeometryRuntimeError> {
+) -> Result<PreparedGeometry, GeometryRuntimeError> {
     if request.max_pixels == 0 {
         return Err(GeometryRuntimeError::InvalidBinding);
     }
@@ -190,26 +223,20 @@ fn prepare(
     let mut request_digest = Sha256::new();
     request_digest.update(b"datasetdoctor.task.annotation-geometry.v1\0");
     request_digest.update(frozen.input_fingerprint);
-    let task = workspace.enqueue_task(
-        TaskSubmission {
-            workspace_session: session,
-            dataset_id: Some(dataset_id),
-            request_id: request.request_id,
-            idempotency_key: request.idempotency_key,
-            operation_kind: "ANNOTATION_GEOMETRY".into(),
-            capability_id: CAPABILITY.into(),
-            input_manifest_path: relative,
-            request_fingerprint: request_digest.finalize().into(),
-            input_fingerprint: frozen.input_fingerprint,
-        },
-        now_ms()?,
-    )?;
-    Ok(GeometryAuditJob {
-        session,
-        task,
+    let submission = TaskSubmission {
+        workspace_session: session,
+        dataset_id: Some(dataset_id),
+        request_id: request.request_id,
+        idempotency_key: request.idempotency_key,
+        operation_kind: "ANNOTATION_GEOMETRY".into(),
+        capability_id: CAPABILITY.into(),
+        input_manifest_path: relative,
+        request_fingerprint: request_digest.finalize().into(),
         input_fingerprint: frozen.input_fingerprint,
-        manifest_sha: frozen.sha256,
-        manifest_size: frozen.bytes.len() as u64,
+    };
+    Ok(PreparedGeometry {
+        submission,
+        frozen,
         parameters,
     })
 }

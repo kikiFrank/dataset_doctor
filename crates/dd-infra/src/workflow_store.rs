@@ -2,7 +2,11 @@
 
 mod adjustment;
 #[cfg(feature = "execution-rpc")]
+mod geometry;
+#[cfg(feature = "execution-rpc")]
 mod profile;
+#[cfg(feature = "execution-rpc")]
+pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
 #[cfg(feature = "execution-rpc")]
 pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
 
@@ -34,6 +38,7 @@ const OPERATION: &str = "WORKFLOW_PLAN_PREVIEW";
 const CAPABILITY: &str = "workflow_plan_preview.v1";
 const PLANNING_NODE: &str = "plan";
 const PROFILE_NODE: &str = "dataset_profile";
+const GEOMETRY_NODE: &str = "annotation_geometry";
 const MANIFEST_LIMIT: u64 = 64 * 1024 * 1024;
 
 pub struct WorkflowDraftRequest {
@@ -79,10 +84,18 @@ pub struct WorkflowSnapshot {
     pub not_executed: BTreeMap<Step, DefaultSkipReason>,
     pub adjustments: Vec<AdjustmentRecord>,
     pub profile_task: Option<WorkflowTaskSnapshot>,
+    pub geometry_tasks: Vec<WorkflowGeometryTask>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct WorkflowTaskSnapshot {
+    pub task_id: Uuid,
+    pub status: String,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct WorkflowGeometryTask {
+    pub asset_id: Uuid,
     pub task_id: Uuid,
     pub status: String,
 }
@@ -95,6 +108,7 @@ pub enum WorkflowError {
     Plan(PlanError),
     Adjustment(AdjustmentError),
     Execution(Box<dyn Error + Send + Sync>),
+    UpstreamNotReady,
     ExecutionControlRequired,
     InputChanged,
     InvalidInputScope,
@@ -113,6 +127,9 @@ impl fmt::Display for WorkflowError {
             Self::Plan(error) => error.fmt(formatter),
             Self::Adjustment(error) => error.fmt(formatter),
             Self::Execution(error) => write!(formatter, "Prepare workflow execution: {error}"),
+            Self::UpstreamNotReady => {
+                formatter.write_str("The required upstream task has not succeeded")
+            }
             Self::ExecutionControlRequired => {
                 formatter.write_str("The adjustment requires an executing workflow node")
             }
@@ -206,6 +223,9 @@ struct RowData {
     input_path: String,
     plan_json: String,
     profile_task: Option<WorkflowTaskSnapshot>,
+    #[cfg(feature = "execution-rpc")]
+    node_states_json: String,
+    geometry_tasks: Vec<WorkflowGeometryTask>,
 }
 
 impl WorkflowStore {
@@ -454,6 +474,7 @@ impl WorkflowStore {
             not_executed: plan.not_executed,
             adjustments: plan.adjustments,
             profile_task: row.profile_task,
+            geometry_tasks: row.geometry_tasks,
         })
     }
 
@@ -483,9 +504,9 @@ impl WorkflowStore {
                         .execute(
                             "UPDATE tasks SET status='INTERRUPTED',error_code='SESSION_ENDED',
                         finished_at_ms=?4,updated_at_ms=?4,row_revision=row_revision+1
-                     WHERE workflow_run_id=?1 AND workspace_session_id<>?2 AND node_id=?3
+                     WHERE workflow_run_id=?1 AND workspace_session_id<>?2 AND (node_id=?3 OR node_id GLOB ?5)
                        AND status IN ('QUEUED','DISPATCHING','RUNNING','CANCELLING')",
-                            params![&workflow, &session, PROFILE_NODE, now],
+                    params![&workflow, &session, PROFILE_NODE, now, format!("{GEOMETRY_NODE}/*")],
                         )
                         .map_err(database)?;
                 }
@@ -519,15 +540,29 @@ impl WorkflowStore {
 
     fn read_row(&self, session: Uuid, run: Uuid) -> Result<RowData, WorkflowError> {
         self.owner.workspace_action(session, move |owner| {
-            owner.connection.query_row(
+            let mut record = owner.connection.query_row(
                 "SELECT w.workflow_run_id,w.dataset_id,w.workspace_session_id,w.template_key,w.status,w.row_revision,
-                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status
+                        w.input_manifest_path,w.plan_json,t.task_id,p.task_id,p.status,w.node_states_json
                  FROM workflow_runs w JOIN tasks t ON t.workflow_run_id=w.workflow_run_id AND t.node_id=?3
                     AND t.operation_kind=w.operation_kind
                  LEFT JOIN tasks p ON p.workflow_run_id=w.workflow_run_id AND p.node_id=?4
                  WHERE w.workflow_run_id=?1 AND w.operation_kind=?2 AND w.plan_kind='template_instance'",
                 params![run.to_string(),OPERATION,PLANNING_NODE,PROFILE_NODE], decode_row,
-            ).optional().map_err(database)
+            ).optional().map_err(database)?;
+            if let Some(row) = &mut record && row.profile_task.is_some() {
+                let mut statement = owner.connection.prepare(
+                    "SELECT task_id,status,substr(node_id,?3) FROM tasks
+                     WHERE workflow_run_id=?1 AND node_id GLOB ?2 AND operation_kind='ANNOTATION_GEOMETRY'
+                     ORDER BY node_id",
+                ).map_err(database)?;
+                row.geometry_tasks = statement.query_map(
+                    params![run.to_string(), format!("{GEOMETRY_NODE}/*"), GEOMETRY_NODE.len() as i64 + 2],
+                    |task| Ok(WorkflowGeometryTask {
+                        task_id: row_uuid(task, 0)?, status: task.get(1)?, asset_id: row_uuid(task, 2)?,
+                    }),
+                ).map_err(database)?.collect::<rusqlite::Result<Vec<_>>>().map_err(database)?;
+            }
+            Ok(record)
         }).map_err(WorkflowError::Storage)?.ok_or(WorkflowError::UnknownRun)
     }
 
@@ -749,6 +784,9 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
         input_path: row.get(6)?,
         plan_json: row.get(7)?,
         profile_task,
+        #[cfg(feature = "execution-rpc")]
+        node_states_json: row.get(11)?,
+        geometry_tasks: Vec::new(),
     })
 }
 
