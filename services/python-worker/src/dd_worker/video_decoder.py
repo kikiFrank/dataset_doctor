@@ -1,6 +1,7 @@
 """Index and decode local video frames with a configured FFmpeg executable pair."""
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from hashlib import file_digest
 import json
 from math import isfinite
@@ -37,12 +38,24 @@ class DisplayFrame:
 
 
 @dataclass(frozen=True)
+class VideoStream:
+    stream_index: int
+    codec: str | None
+    width: int | None
+    height: int | None
+    duration_ms: int | None
+
+
+@dataclass(frozen=True)
 class VideoIndex:
     source_sha256: str
     stream_index: int
     time_base: tuple[int, int] | None
     rotation_ccw: int
     frames: tuple[DisplayFrame, ...]
+    duration_ms: int | None
+    streams: tuple[VideoStream, ...]
+    variable_frame_rate: bool | None
 
 
 class VideoDecoder:
@@ -68,7 +81,21 @@ class VideoDecoder:
     ) -> VideoIndex:
         source = _verified_source(source, expected_sha256)
         try:
-            stream_index = self._select_stream(source, stream_index)
+            description = self._probe_json(
+                source, "V", "-show_format",
+                entries="stream=index,codec_name,width,height,duration:format=duration",
+            )
+            streams = tuple(
+                VideoStream(
+                    stream_index=stream["index"],
+                    codec=stream.get("codec_name"),
+                    width=_positive_dimension(stream.get("width")),
+                    height=_positive_dimension(stream.get("height")),
+                    duration_ms=_duration_ms(stream.get("duration")),
+                )
+                for stream in description.get("streams", [])
+            )
+            stream_index = _select_stream(streams, stream_index)
             metadata = self._probe_json(
                 source, str(stream_index), "-show_frames",
                 entries="stream=index,time_base:stream_side_data=rotation:frame=pts,width,height,pict_type",
@@ -90,23 +117,18 @@ class VideoDecoder:
             if any((frame.width, frame.height) != (frames[0].width, frames[0].height)
                    for frame in frames):
                 raise VideoDecodeError("changing_frame_dimensions")
-            return VideoIndex(expected_sha256, stream["index"], time_base,
-                              _right_angle(rotation), frames)
+            return VideoIndex(
+                source_sha256=expected_sha256,
+                stream_index=stream_index,
+                time_base=time_base,
+                rotation_ccw=_right_angle(rotation),
+                frames=frames,
+                duration_ms=_duration_ms(description.get("format", {}).get("duration")),
+                streams=streams,
+                variable_frame_rate=_variable_frame_rate(frames) if time_base else None,
+            )
         except (KeyError, TypeError, ValueError) as error:
             raise VideoDecodeError("decode_failed") from error
-
-    def _select_stream(self, source: Path, requested: int | None) -> int:
-        metadata = self._probe_json(source, "V", entries="stream=index")
-        indices = [stream["index"] for stream in metadata.get("streams", [])]
-        if not indices:
-            raise VideoDecodeError("invalid_video_stream")
-        if requested is None:
-            if len(indices) != 1:
-                raise VideoDecodeError("video_stream_selection_required")
-            return indices[0]
-        if type(requested) is not int or requested not in indices:
-            raise VideoDecodeError("invalid_video_stream")
-        return requested
 
     def _probe_json(self, source: Path, streams: str, *options: str, entries: str) -> dict:
         output = self._capture(
@@ -193,6 +215,53 @@ class VideoDecoder:
                         process.kill()
         except OSError as error:
             raise VideoDecodeError("decode_failed") from error
+
+
+def _select_stream(streams: tuple[VideoStream, ...], requested: int | None) -> int:
+    if not streams:
+        raise VideoDecodeError("invalid_video_stream")
+    if requested is None:
+        if len(streams) != 1:
+            raise VideoDecodeError("video_stream_selection_required")
+        return streams[0].stream_index
+    if type(requested) is not int or all(stream.stream_index != requested for stream in streams):
+        raise VideoDecodeError("invalid_video_stream")
+    return requested
+
+
+def _duration_ms(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        seconds = Decimal(value)
+    except InvalidOperation:
+        return None
+    if not seconds.is_finite() or not 0 <= seconds <= Decimal(2**64 - 1) / 1000:
+        return None
+    return int(seconds * 1000)
+
+
+def _positive_dimension(value: int | None) -> int | None:
+    return value if type(value) is int and value > 0 else None
+
+
+def _variable_frame_rate(frames: tuple[DisplayFrame, ...]) -> bool | None:
+    ticks = [frame.raw_pts for frame in frames]
+    if len(ticks) < 3 or any(tick is None for tick in ticks):
+        return None
+    intervals = {after - before for before, after in zip(ticks, ticks[1:])}
+    if min(intervals) <= 0:
+        return None
+    if max(intervals) - min(intervals) > 1:
+        return True
+    # A constant rate can alternate between adjacent tick counts after rounding.
+    # Its observed timeline still stays within one tick of a uniform cadence.
+    steps = len(ticks) - 1
+    span = ticks[-1] - ticks[0]
+    return any(
+        abs((tick - ticks[0]) * steps - span * index) > steps
+        for index, tick in enumerate(ticks)
+    )
 
 
 def _verified_source(source: Path, expected_sha256: str) -> Path:

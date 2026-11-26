@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use dd_domain::video::SeekPolicy;
 use dd_infra::artifact_manifest::TaskManifestScope;
-use dd_infra::video_index::read_video_index;
+use dd_infra::video_index::read_video_observation;
 use dd_infra::worker_process::WorkerProcessError;
 use dd_protocol::v1::{VideoProbeInput, VideoProbeRequest};
 use serde_json::json;
@@ -81,7 +81,7 @@ async fn granted_worker_probes_real_frames_and_core_resolves_normalized_time() {
     };
     let reference = completed.result_manifest_ref.as_ref().unwrap();
     let read = |stream| {
-        read_video_index(
+        read_video_observation(
             &task.output,
             reference,
             &scope,
@@ -90,7 +90,19 @@ async fn granted_worker_probes_real_frames_and_core_resolves_normalized_time() {
             Some(stream),
         )
     };
-    let index = read(0).unwrap();
+    let observation = read(0).unwrap();
+    let metadata = observation.metadata.unwrap();
+    assert_eq!(metadata.duration_ms, Some(500));
+    assert_eq!(metadata.variable_frame_rate, Some(false));
+    assert_eq!(metadata.streams.len(), 1);
+    let stream = &metadata.streams[0];
+    assert_eq!(
+        (stream.stream_index, stream.width, stream.height),
+        (0, Some(48), Some(32))
+    );
+    assert_eq!(stream.codec.as_deref(), Some("mpeg4"));
+    assert_eq!(stream.duration_ms, Some(500));
+    let index = observation.index;
     assert!(read(1).is_err());
     let first = index.resolve_index(source_digest, 0).unwrap();
     assert_eq!((first.source_video_id, first.stream_index), (video_id, 0));

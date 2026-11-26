@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dd_infra::video_registration::{VideoImport, VideoRegistry};
-use dd_infra::video_runtime::{VideoProbeRuntime, read_registered_video_index};
+use dd_infra::video_runtime::{
+    VideoProbeRuntime, read_registered_video_index, read_registered_video_observation,
+};
 use dd_infra::workspace_thread::WorkspaceThread;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -60,8 +62,12 @@ async fn a_registered_probe_survives_reopen_and_persists_a_reusable_video_index(
 
     reopen(&owner, &root, session);
     let session = owner.current().unwrap().unwrap().workspace_session_id;
-    let index = read_registered_video_index(&owner, session, registered).unwrap();
-    let frame = index.resolve_index(sha, 1).unwrap();
+    let stored = read_registered_video_observation(&owner, session, registered).unwrap();
+    let metadata = stored.metadata.unwrap();
+    assert_eq!(metadata.duration_ms, Some(1000));
+    assert_eq!(metadata.variable_frame_rate, Some(false));
+    assert_eq!(metadata.streams[0].stream_index, 0);
+    let frame = stored.index.resolve_index(sha, 1).unwrap();
     assert_eq!(frame.source_video_id, registered.video_id);
     assert_eq!(frame.pts_us, Some(250_000));
     assert_eq!(fs::read(&source).unwrap(), original);

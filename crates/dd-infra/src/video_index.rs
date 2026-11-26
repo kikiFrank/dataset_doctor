@@ -1,5 +1,6 @@
 //! Bind a sealed decoder observation to the Core display-frame index.
 
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -17,6 +18,30 @@ use crate::task_store::format_digest;
 
 const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FRAMES: usize = 100_000;
+const MAX_STREAMS: usize = 64;
+
+pub struct VideoProbeObservation {
+    pub index: FrameIndex,
+    pub metadata: Option<VideoMetadata>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VideoMetadata {
+    pub duration_ms: Option<u64>,
+    pub streams: Vec<VideoStreamMetadata>,
+    pub variable_frame_rate: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VideoStreamMetadata {
+    pub stream_index: u32,
+    pub codec: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub duration_ms: Option<u64>,
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +52,8 @@ struct VideoIndexDocument {
     time_base: Option<[u32; 2]>,
     rotation_ccw: u16,
     frames: Vec<ObservedFrame>,
+    #[serde(default)]
+    metadata: Option<VideoMetadata>,
 }
 
 #[derive(Deserialize)]
@@ -64,6 +91,25 @@ pub fn read_video_index(
     source_digest: [u8; 32],
     expected_stream_index: Option<u32>,
 ) -> Result<FrameIndex, Box<dyn Error + Send + Sync>> {
+    read_video_observation(
+        approved_attempt_directory,
+        reference,
+        scope,
+        video_id,
+        source_digest,
+        expected_stream_index,
+    )
+    .map(|observation| observation.index)
+}
+
+pub fn read_video_observation(
+    approved_attempt_directory: &Path,
+    reference: &ArtifactRef,
+    scope: &TaskManifestScope,
+    video_id: Uuid,
+    source_digest: [u8; 32],
+    expected_stream_index: Option<u32>,
+) -> Result<VideoProbeObservation, Box<dyn Error + Send + Sync>> {
     let directory = approved_attempt_directory.canonicalize()?;
     let verified =
         verify_task_result_manifest(&directory, &JsonContracts::new()?, scope, reference)?;
@@ -110,7 +156,24 @@ pub fn read_video_index(
             height: item.height,
         });
     }
-    Ok(FrameIndex::from_display_order(
+    if let Some(metadata) = &document.metadata {
+        let mut indices = BTreeSet::new();
+        if metadata.streams.len() > MAX_STREAMS
+            || metadata.streams.iter().any(|stream| {
+                !indices.insert(stream.stream_index)
+                    || stream.width == Some(0)
+                    || stream.height == Some(0)
+                    || stream
+                        .codec
+                        .as_ref()
+                        .is_some_and(|codec| codec.is_empty() || codec.len() > 128)
+            })
+            || !indices.contains(&document.stream_index)
+        {
+            return Err("Video metadata has an invalid stream inventory".into());
+        }
+    }
+    let index = FrameIndex::from_display_order(
         SourceStream {
             video_id,
             source_digest,
@@ -122,7 +185,11 @@ pub fn read_video_index(
             }),
         },
         decoded,
-    )?)
+    )?;
+    Ok(VideoProbeObservation {
+        index,
+        metadata: document.metadata,
+    })
 }
 
 pub fn read_resolved_video_frame(

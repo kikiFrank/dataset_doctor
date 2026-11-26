@@ -17,7 +17,7 @@ use crate::input_fingerprint::freeze_input_manifest;
 use crate::json::{JsonContracts, JsonProfile};
 use crate::paths::{is_portable_relative_file, open_registered_file, open_scoped_file};
 use crate::task_store::{TaskOutcome, TaskStoreError, format_digest, parse_digest};
-use crate::video_index::read_video_index;
+use crate::video_index::{VideoProbeObservation, read_video_observation};
 use crate::video_registration::{CAPABILITY, VideoImportReceipt};
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
@@ -144,6 +144,15 @@ pub fn read_registered_video_index(
     session: Uuid,
     receipt: VideoImportReceipt,
 ) -> Result<FrameIndex, VideoRuntimeError> {
+    read_registered_video_observation(workspace, session, receipt)
+        .map(|observation| observation.index)
+}
+
+pub fn read_registered_video_observation(
+    workspace: &WorkspaceThread,
+    session: Uuid,
+    receipt: VideoImportReceipt,
+) -> Result<VideoProbeObservation, VideoRuntimeError> {
     let binding = load_binding(workspace, session, receipt)?;
     if binding.record.status != "SUCCEEDED" {
         return Err(VideoRuntimeError::ResultUnconfirmed);
@@ -176,7 +185,7 @@ pub fn read_registered_video_index(
     if reference.owner.kind != "TASK" || reference.owner.id != receipt.task_id {
         return Err(VideoRuntimeError::InvalidBinding);
     }
-    read_video_index(
+    read_video_observation(
         &directory,
         &ArtifactRef {
             artifact_id: reference.artifact_id,

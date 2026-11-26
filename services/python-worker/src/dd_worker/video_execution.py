@@ -1,5 +1,6 @@
 """Write an authorized display-order observation for Core's video index."""
 
+from dataclasses import asdict
 import os
 from pathlib import Path
 from uuid import UUID
@@ -64,6 +65,11 @@ def _probe(request, tools):
         "stream_index": index.stream_index,
         "time_base": index.time_base,
         "rotation_ccw": index.rotation_ccw,
+        "metadata": {
+            "duration_ms": index.duration_ms,
+            "streams": [asdict(stream) for stream in index.streams],
+            "variable_frame_rate": index.variable_frame_rate,
+        },
         "frames": [
             {"raw_pts": None if frame.raw_pts is None else str(frame.raw_pts),
              "width": frame.width, "height": frame.height}

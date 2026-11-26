@@ -125,6 +125,44 @@ class VideoDecoderTests(unittest.TestCase):
             decoder.probe(multistream, digest(multistream), stream_index=2)
         self.assertEqual(error.exception.code, "invalid_video_stream")
 
+    def test_metadata_reports_container_duration_real_streams_and_observed_cadence(self):
+        from dd_worker.video_decoder import VideoDecodeError
+
+        decoder = self.decoder()
+        constant = decoder.probe(self.cfr, digest(self.cfr))
+        variable = decoder.probe(self.vfr, digest(self.vfr))
+        self.assertEqual(constant.duration_ms, 900)
+        self.assertEqual(variable.duration_ms, 320)
+        self.assertEqual(constant.variable_frame_rate, False)
+        self.assertEqual(variable.variable_frame_rate, True)
+        self.assertEqual([(v.stream_index, v.codec, v.width, v.height, v.duration_ms)
+                          for v in constant.streams], [(0, "mpeg4", 48, 32, 900)])
+        multi = self.folder / "metadata-multiple-streams.mp4"
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=blue:s=48x32:r=10:d=0.4",
+            "-f", "lavfi", "-i", "color=red:s=64x40:r=10:d=0.6",
+            "-map", "0:v", "-map", "1:v", "-c:v", "mpeg4", str(multi),
+        )
+        with self.assertRaises(VideoDecodeError) as error:
+            decoder.probe(multi, digest(multi))
+        self.assertEqual(error.exception.code, "video_stream_selection_required")
+        selected = decoder.probe(multi, digest(multi), stream_index=0)
+        self.assertEqual(selected.duration_ms, 600)
+        self.assertEqual([(v.stream_index, v.width, v.height, v.duration_ms)
+                          for v in selected.streams],
+                         [(0, 48, 32, 400), (1, 64, 40, 600)])
+        self.assertIsNone(decoder.probe(self.rotated, digest(self.rotated)).variable_frame_rate)
+
+    def test_constant_rate_in_a_coarse_clock_is_not_reported_as_vfr(self):
+        coarse = self.folder / "constant-30fps.mkv"
+        ffmpeg("-framerate", "30", "-i", str(self.folder / "frame-%02d.png"),
+               "-c:v", "ffv1", str(coarse))
+        index = self.decoder().probe(coarse, digest(coarse))
+        ticks = [frame.raw_pts for frame in index.frames]
+        self.assertEqual(index.time_base, (1, 1000))
+        self.assertEqual({end - start for start, end in zip(ticks, ticks[1:])}, {33, 34})
+        self.assertIs(index.variable_frame_rate, False)
+
     def test_rotation_changes_display_dimensions_and_pixels(self):
         decoder = self.decoder()
         index = decoder.probe(self.rotated, digest(self.rotated))
