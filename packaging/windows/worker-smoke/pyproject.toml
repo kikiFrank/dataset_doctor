@@ -1,0 +1,13 @@
+[project]
+name = "dataset-doctor-worker-smoke"
+version = "0.1.0"
+requires-python = "==3.12.12"
+dependencies = [
+    "Pillow==12.1.0",
+    "PyInstaller==6.18.0",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]
+required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]

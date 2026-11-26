@@ -23,6 +23,23 @@ $LASTEXITCODE
 
 预检跳过包含目录联接或其他重解析点的 PATH 项，并将发现的工具管理器代理标为未核实。只有能放入专用 Windows 作业对象的进程才会执行版本查询，超时时会清理该次查询的进程树。作业对象负责进程生命周期，未提供网络隔离。
 
+## Windows Worker 打包验证（P00-02）
+
+在仓库根目录运行。使用 Windows x64 的实际 CPython 3.12.12 可执行文件、仓库里的 `uv.lock` 和已预填的项目专用 uv 缓存。
+
+```powershell
+$py312 = '<CPython 3.12.12 x64 的 python.exe 绝对路径>'
+$offlineCache = (Resolve-Path -LiteralPath '.\dist\p00-worker-smoke\uv-cache').Path
+powershell.exe -NoProfile -NonInteractive -File .\scripts\packaging\windows\build-worker-smoke.ps1 -PythonExe $py312 -UvCacheDir $offlineCache
+if ($LASTEXITCODE -ne 0) { throw 'Worker build failed.' }
+powershell.exe -NoProfile -NonInteractive -File .\tests\packaging\windows\worker-smoke\verify-worker-smoke.ps1
+$LASTEXITCODE
+```
+
+构建按锁文件从缓存离线安装 Windows x64 wheel，输出为 `dist/p00-worker-smoke/package/worker-smoke/worker-smoke.exe`。构建和验收日志分别位于 `dist/p00-worker-smoke/logs/build.log` 和 `dist/p00-worker-smoke/logs/verify.json`。
+
+已在 Windows 11 x64 和 Windows PowerShell 5.1 实测 CPython 3.12.12、PyInstaller 6.18.0 与 Pillow 12.1.0。打包后的 EXE 在精简 PATH 下完成管道握手，完整解出合成 PNG 的红、蓝像素后受控退出 0。截断 PNG 返回 `decode_failed`，进程退出 2。独立干净系统和正式 Worker 接口留待后续验收。
+
 ## 已有可执行验证
 
 ```sh
