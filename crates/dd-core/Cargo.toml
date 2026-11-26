@@ -11,3 +11,7 @@ uuid = { version = "=1.29.3", features = ["v4"] }
 [[test]]
 name = "grant_claim"
 path = "../../tests/scheduler/grant_claim.rs"
+
+[[test]]
+name = "template_plan"
+path = "../../tests/workflow/template_plan.rs"

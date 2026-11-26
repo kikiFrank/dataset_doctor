@@ -2,4 +2,5 @@
 
 pub mod execution_grant;
 pub mod import_plan;
+pub mod workflow;
 pub mod workspace;
