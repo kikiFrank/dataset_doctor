@@ -177,6 +177,7 @@ impl Commands {
                 WorkflowStatus::Draft => WorkflowStatusView::Draft,
                 WorkflowStatus::Ready => WorkflowStatusView::Ready,
                 WorkflowStatus::Running => WorkflowStatusView::Running,
+                WorkflowStatus::Paused => WorkflowStatusView::Paused,
                 WorkflowStatus::Interrupted => WorkflowStatusView::Interrupted,
                 WorkflowStatus::WaitingReview => WorkflowStatusView::WaitingReview,
                 WorkflowStatus::Failed => WorkflowStatusView::Failed,
@@ -224,6 +225,9 @@ impl Commands {
             WorkflowError::UnknownRun => self.error("NOT_FOUND", "当前工作区没有此体检记录。"),
             WorkflowError::UpstreamNotReady => {
                 self.error("FAILED_PRECONDITION", "体检报告尚未生成。")
+            }
+            WorkflowError::Paused | WorkflowError::ControlUnavailable => {
+                self.error("FAILED_PRECONDITION", "体检当前处于暂停状态或无法暂停。")
             }
             WorkflowError::InputChanged => {
                 self.error("INPUT_CHANGED", "体检输入已变化，请刷新数据集后重新提交。")

@@ -302,6 +302,16 @@ path = "../../tests/integration/rpc/workflow_local_runner.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workflow_pause"
+path = "../../tests/integration/rpc/workflow_pause.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
+name = "workflow_resume"
+path = "../../tests/integration/rpc/workflow_resume.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "workflow_list"
 path = "../../tests/integration/rpc/workflow_list.rs"
 required-features = ["execution-rpc"]

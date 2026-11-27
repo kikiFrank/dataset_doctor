@@ -112,7 +112,7 @@ export type WorkflowPageView = { items: Array<WorkflowView>, next_cursor: UuidTe
 
 export type WorkflowView = { workflow_run_id: UuidText, planning_task_id: UuidText, status: WorkflowStatusView, row_revision: DecimalU64, plan_revision: DecimalU64 | null, input_fingerprint: string | null, plan_source: WorkflowPlanSourceView | null, profile_task: WorkflowTaskView | null, geometry_tasks: Array<WorkflowGeometryTaskView>, report_task_id: UuidText | null, error_code: string | null, };
 
-export type WorkflowStatusView = "DRAFT" | "READY" | "RUNNING" | "INTERRUPTED" | "WAITING_REVIEW" | "FAILED";
+export type WorkflowStatusView = "DRAFT" | "READY" | "RUNNING" | "PAUSED" | "INTERRUPTED" | "WAITING_REVIEW" | "FAILED";
 
 export type WorkflowPlanSourceView = "PROPOSED" | "LOCAL_DEFAULT";
 

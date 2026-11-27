@@ -74,6 +74,7 @@ pub enum WorkflowStatusView {
     Draft,
     Ready,
     Running,
+    Paused,
     Interrupted,
     WaitingReview,
     Failed,

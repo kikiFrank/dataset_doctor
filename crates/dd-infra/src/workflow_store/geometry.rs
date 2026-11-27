@@ -43,6 +43,9 @@ impl WorkflowStore {
                 jobs: Vec::new(),
             });
         }
+        if super::control::pause_requested(&row.status, &row.node_states_json)? {
+            return Err(WorkflowError::Paused);
+        }
         if row.status != "RUNNING"
             || row.session != session
             || row.revision()? != request.expected_row_revision

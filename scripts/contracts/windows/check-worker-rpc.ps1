@@ -83,6 +83,7 @@ $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test
     '--test', 'worker_image_quality', '--test', 'workspace_image_quality',
     '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile', '--test', 'workflow_profile',
     '--test', 'workflow_geometry', '--test', 'workflow_report', '--test', 'workflow_local_runner', '--test', 'workflow_list',
+    '--test', 'workflow_pause', '--test', 'workflow_resume',
     '--test', 'report_export',
     '--test', 'worker_color_preview', '--test', 'workspace_color_preview', '--test', 'workspace_color_apply',
     '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final',

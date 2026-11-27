@@ -214,7 +214,13 @@ impl OpenedWorkspace {
             "UPDATE tasks SET status='DISPATCHING', current_attempt_id=?1, attempt_no=attempt_no+1,
                               execution_metadata_json=?2, row_revision=row_revision+1, updated_at_ms=?3
              WHERE task_id=?4 AND workspace_session_id=?5 AND input_fingerprint=?6
-                   AND status='QUEUED' AND current_attempt_id IS NULL",
+                   AND status='QUEUED' AND current_attempt_id IS NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM workflow_runs AS workflow
+                       WHERE workflow.workflow_run_id=tasks.workflow_run_id
+                         AND (workflow.status='PAUSED' OR
+                              json_extract(workflow.node_states_json,'$.control.pause_requested')=1)
+                   )",
             params![scope.attempt.to_string(), metadata, now_ms, scope.task.to_string(), session, digest],
         )?;
         if changed != 1 {

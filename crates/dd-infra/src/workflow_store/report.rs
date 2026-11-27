@@ -93,6 +93,9 @@ impl WorkflowStore {
                 .map_err(WorkflowError::Storage)??;
             return self.read_report(session, run);
         }
+        if super::control::pause_requested(&row.status, &row.node_states_json)? {
+            return Err(WorkflowError::Paused);
+        }
         if row.status != "RUNNING"
             || row.session != session
             || row.revision()? != request.expected_row_revision

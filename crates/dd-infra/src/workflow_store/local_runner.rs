@@ -147,9 +147,15 @@ impl LocalHealthcheckRuntime {
     pub async fn run(&self, job: LocalHealthcheckJob) -> Result<WorkflowReport, WorkflowError> {
         let session = job.session;
         let run = job.reference.run_id;
+        if self.observe_pause(session, run).await? {
+            return Err(WorkflowError::Paused);
+        }
         match self.execute(job).await {
             Ok(report) => Ok(report),
             Err(failed) => {
+                if self.observe_pause(session, run).await? {
+                    return Err(WorkflowError::Paused);
+                }
                 let store = Arc::clone(&self.store);
                 tokio::task::spawn_blocking(move || {
                     fail_current_run(&store, session, run, failed.code)
@@ -159,6 +165,20 @@ impl LocalHealthcheckRuntime {
                 Err(failed.error)
             }
         }
+    }
+
+    async fn observe_pause(&self, session: Uuid, run: Uuid) -> Result<bool, WorkflowError> {
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || {
+            let row = store.read_row(session, run)?;
+            let pending = super::control::pause_requested(&row.status, &row.node_states_json)?;
+            if pending && row.status == "RUNNING" {
+                store.settle_pause(session, run)?;
+            }
+            Ok(pending)
+        })
+        .await
+        .map_err(execution)?
     }
 
     async fn execute(&self, job: LocalHealthcheckJob) -> Result<WorkflowReport, RunFailure> {
@@ -279,7 +299,8 @@ fn fail_current_run(
         let failed = transaction.execute(
             "UPDATE workflow_runs SET status=?5,error_code=?3,finished_at_ms=?4,
                 updated_at_ms=?4,row_revision=row_revision+1
-             WHERE workflow_run_id=?1 AND workspace_session_id=?2 AND status='RUNNING'",
+             WHERE workflow_run_id=?1 AND workspace_session_id=?2 AND status='RUNNING'
+               AND COALESCE(json_extract(node_states_json,'$.control.pause_requested'),0)=0",
             params![&run,&session,code,now,status],
         ).map_err(database)?;
         if failed == 1 {

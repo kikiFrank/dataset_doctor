@@ -1,6 +1,8 @@
 //! Persist the Core's planning run and bind accepted plans to frozen input.
 
 mod adjustment;
+mod control;
+pub use control::WorkflowPauseReceipt;
 #[cfg(feature = "execution-rpc")]
 mod geometry;
 mod list;
@@ -12,6 +14,8 @@ mod profile;
 #[cfg(feature = "execution-rpc")]
 mod report;
 #[cfg(feature = "execution-rpc")]
+mod resume;
+#[cfg(feature = "execution-rpc")]
 pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
 #[cfg(feature = "execution-rpc")]
 pub use local_runner::{
@@ -22,6 +26,8 @@ pub use local_runner::{
 pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
 #[cfg(feature = "execution-rpc")]
 pub use report::{WorkflowReport, WorkflowReportData, WorkflowReportRequest, WorkflowReportScope};
+#[cfg(feature = "execution-rpc")]
+pub use resume::WorkflowResumeRequest;
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -77,6 +83,7 @@ pub enum WorkflowStatus {
     Draft,
     Ready,
     Running,
+    Paused,
     Interrupted,
     WaitingReview,
     Failed,
@@ -127,6 +134,8 @@ pub enum WorkflowError {
     Adjustment(AdjustmentError),
     Execution(Box<dyn Error + Send + Sync>),
     UpstreamNotReady,
+    Paused,
+    ControlUnavailable,
     ExecutionControlRequired,
     InputChanged,
     InvalidInputScope,
@@ -147,6 +156,10 @@ impl fmt::Display for WorkflowError {
             Self::Execution(error) => write!(formatter, "Prepare workflow execution: {error}"),
             Self::UpstreamNotReady => {
                 formatter.write_str("The required upstream task has not succeeded")
+            }
+            Self::Paused => formatter.write_str("The Workflow is paused"),
+            Self::ControlUnavailable => {
+                formatter.write_str("The Workflow cannot be paused in its current state")
             }
             Self::ExecutionControlRequired => {
                 formatter.write_str("The adjustment requires an executing workflow node")
@@ -241,7 +254,6 @@ struct RowData {
     input_path: String,
     plan_json: String,
     profile_task: Option<WorkflowTaskSnapshot>,
-    #[cfg(feature = "execution-rpc")]
     node_states_json: String,
     geometry_tasks: Vec<WorkflowGeometryTask>,
     report_task_id: Option<Uuid>,
@@ -464,6 +476,11 @@ impl WorkflowStore {
         if row.status == "RUNNING" && row.session != session {
             self.interrupt_ended_session(session, run)?;
             row = self.read_row(session, run)?;
+        } else if row.status == "RUNNING"
+            && control::pause_requested(&row.status, &row.node_states_json)?
+        {
+            self.settle_pause(session, run)?;
+            row = self.read_row(session, run)?;
         }
         let plan = row.plan()?;
         let status = match (
@@ -476,6 +493,7 @@ impl WorkflowStore {
             ("DRAFT", 0, false, false, false) => WorkflowStatus::Draft,
             ("READY", revision, true, false, false) if revision > 0 => WorkflowStatus::Ready,
             ("RUNNING", revision, true, true, false) if revision > 0 => WorkflowStatus::Running,
+            ("PAUSED", revision, true, true, false) if revision > 0 => WorkflowStatus::Paused,
             ("INTERRUPTED", revision, true, true, false) if revision > 0 => {
                 WorkflowStatus::Interrupted
             }
@@ -815,7 +833,6 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
         input_path: row.get(6)?,
         plan_json: row.get(7)?,
         profile_task,
-        #[cfg(feature = "execution-rpc")]
         node_states_json: row.get(11)?,
         geometry_tasks: Vec::new(),
         report_task_id: row
