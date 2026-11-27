@@ -1,18 +1,18 @@
 """Verify a desktop business run with SQLite, Pillow and the target COCO reader."""
 
+import argparse
 from contextlib import closing
 from hashlib import sha256
 from importlib.metadata import version
 import json
 from pathlib import Path
 import sqlite3
-import sys
 
 from PIL import Image
 from pycocotools.coco import COCO
 
 
-def verify(root: Path, package: Path, color: bool = False) -> None:
+def verify(root: Path, package: Path, color: bool = False, pointer_bbox: list[float] | None = None) -> None:
     assert version("pycocotools") == "2.0.11"
     proof = json.loads((root / "input-proof.json").read_text(encoding="utf-8"))
     source = root / "Inputs" / "signal.png"
@@ -77,8 +77,17 @@ def verify(root: Path, package: Path, color: bool = False) -> None:
     annotation = next(iter(reader.anns.values()))
     assert annotation["image_id"] == media["id"]
     assert annotation["category_id"] in reader.cats
-    assert annotation["bbox"] == [30, 20, 40, 30]
-    assert annotation["area"] == 1200
+    if pointer_bbox is None:
+        assert annotation["bbox"] == [30, 20, 40, 30]
+        assert annotation["area"] == 1200
+    else:
+        # Actual mouse input is quantized to screen pixels. Compare to the
+        # independently derived image-space target within one original pixel.
+        assert len(annotation["bbox"]) == 4
+        assert all(abs(actual - expected) <= 1 for actual, expected in zip(annotation["bbox"], pointer_bbox, strict=True))
+        x, y, width, height = annotation["bbox"]
+        assert 0 <= x and 0 <= y and 0 < width <= 200 - x and 0 < height <= 100 - y
+        assert abs(annotation["area"] - width * height) < 1e-6
     result = {"platform": "Windows", "target_reader": version("pycocotools"),
               "workspace": str(database.parent), "coco_package": str(package),
               "tasks": tasks, "confirmed_annotation_digest": digest, "current_image_digest": source_digest,
@@ -88,4 +97,10 @@ def verify(root: Path, package: Path, color: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    verify(Path(sys.argv[1]), Path(sys.argv[2]), color=sys.argv[3:] == ["--color"])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("root", type=Path)
+    parser.add_argument("package", type=Path)
+    parser.add_argument("--color", action="store_true")
+    parser.add_argument("--pointer-bbox", nargs=4, type=float)
+    arguments = parser.parse_args()
+    verify(arguments.root, arguments.package, arguments.color, arguments.pointer_bbox)

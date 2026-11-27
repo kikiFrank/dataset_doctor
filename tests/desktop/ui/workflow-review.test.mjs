@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reviewCompletionPayload, workflowNeedsPolling } from "../../../apps/desktop/src/workflow-review-state.ts";
+import { reviewCompletionPayload, workflowCanResume, workflowNeedsPolling } from "../../../apps/desktop/src/workflow-review-state.ts";
 
 const workflow = {
   workflow_run_id: "run", status: "WAITING_REVIEW", row_revision: "9007199254740993",
@@ -10,6 +10,16 @@ const report = {
   scope: { workflow_run_id: "run", dataset_id: "dataset" }, human_ack_status: "PENDING",
   report_artifact_ref: { artifact_id: "original-report" }, unexecuted_checks: ["semantic_review"],
 };
+
+test("a paused workflow can only resume while its required tasks are still usable", () => {
+  const paused = { ...workflow, status: "PAUSED", profile_task: { status: "QUEUED" }, geometry_tasks: [] };
+  assert.equal(workflowCanResume(paused), true);
+  assert.equal(workflowCanResume({ ...paused, profile_task: { status: "CANCELLED" } }), false);
+  const profiled = { ...paused, profile_task: { status: "SUCCEEDED" } };
+  assert.equal(workflowCanResume(profiled), true);
+  assert.equal(workflowCanResume({ ...profiled, geometry_tasks: [{ status: "SUCCEEDED" }, { status: "QUEUED" }] }), true);
+  assert.equal(workflowCanResume({ ...profiled, geometry_tasks: [{ status: "CANCELLED" }] }), false);
+});
 
 test("review completion requires explicit confirmation, matching report and reasons", () => {
   assert.throws(() => reviewCompletionPayload(workflow, report, {}, false));

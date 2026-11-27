@@ -7,6 +7,14 @@ export function workflowNeedsPolling(workflow: WorkflowView): boolean {
     && !workflow.review_recheck_tasks.some(task => ["FAILED", "INTERRUPTED", "CANCELLED"].includes(task.status));
 }
 
+export function workflowCanResume(workflow: WorkflowView): boolean {
+  if (workflow.status !== "PAUSED") return false;
+  const profile = workflow.profile_task?.status;
+  if (!workflow.geometry_tasks.length) return profile === "QUEUED" || profile === "SUCCEEDED";
+  return profile === "SUCCEEDED"
+    && workflow.geometry_tasks.every(task => task.status === "QUEUED" || task.status === "SUCCEEDED");
+}
+
 export function reviewCompletionPayload(
   workflow: WorkflowView, report: WorkflowReportView, reasons: Record<string, string>, confirmed: boolean,
 ): Omit<WorkflowCompleteReviewRequest, "context"> {

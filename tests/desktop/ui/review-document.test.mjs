@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  adoptTrackingBox, makeDraft, seedBoxes, boxFromDrag, trackSelections,
+  adoptTrackingBox, makeDraft, seedBoxes, boxFromDrag, translateBoxFromDrag, trackSelections,
 } from "../../../apps/desktop/src/review-document.ts";
 
 const image = { id: 1, file_name: "image.png", width: 200, height: 100 };
 const categories = [{ id: 1, name: "helmet" }, { id: 2, name: "vest" }];
+
+test("dragging an existing box translates original pixels and clamps without resizing", () => {
+  const original = [30, 20, 40, 30];
+  assert.deepEqual(translateBoxFromDrag(original, [50, 35], [64, 47], image), [44, 32, 40, 30]);
+  assert.deepEqual(translateBoxFromDrag(original, [50, 35], [315, -20], image), [160, 0, 40, 30]);
+  assert.deepEqual(translateBoxFromDrag([190, 20, 40, 30], [195, 35], [140, 35], image), [135, 20, 40, 30]);
+  assert.equal(translateBoxFromDrag(original, [50, 35], [50, 35], image), null);
+  assert.equal(translateBoxFromDrag([0, 0, 201, 30], [50, 35], [60, 35], image), null);
+  assert.deepEqual(original, [30, 20, 40, 30]);
+});
 
 test("explicit adoption creates one editable box and keeps provenance outside COCO", () => {
   const candidate = { track_id: "track-a", source: "TRACKER", category_id: "2", bbox_xywh: [11, 9, 5, 5] };

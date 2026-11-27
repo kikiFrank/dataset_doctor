@@ -1,8 +1,12 @@
 import type { CancellationReceipt } from "./api/generated/wire-primitives";
 
-export function cancellationState(status: string): "AVAILABLE" | "REQUESTED" | "STOPPED" | "SETTLED" {
-  if (["QUEUED", "DISPATCHING", "RUNNING"].includes(status)) return "AVAILABLE";
-  if (status === "CANCELLING") return "REQUESTED";
+export function cancellationState(status: string, observedStatus?: string): "AVAILABLE" | "REQUESTED" | "STOPPED" | "SETTLED" {
+  if (["QUEUED", "DISPATCHING", "RUNNING", "CANCELLING"].includes(status)) {
+    const latest = observedStatus ?? status;
+    if (latest === "CANCELLED") return "STOPPED";
+    if (latest === "CANCELLING" || status === "CANCELLING") return "REQUESTED";
+    return ["QUEUED", "DISPATCHING", "RUNNING"].includes(latest) ? "AVAILABLE" : "SETTLED";
+  }
   return status === "CANCELLED" ? "STOPPED" : "SETTLED";
 }
 

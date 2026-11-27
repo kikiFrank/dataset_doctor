@@ -85,3 +85,16 @@ export function boxFromDrag(
   const height = clamp(Math.max(start[1], end[1]), image.height) - top;
   return width > 0 && height > 0 ? [left, top, width, height] : null;
 }
+
+export function translateBoxFromDrag(
+  box: BoxCoordinates, start: ImagePoint, end: ImagePoint, image: Pick<CocoImage, "width" | "height">,
+): BoxCoordinates | null {
+  const [x, y, width, height] = box;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  if (!box.every(Number.isFinite) || !Number.isFinite(dx) || !Number.isFinite(dy)
+    || (dx === 0 && dy === 0) || width <= 0 || height <= 0 || width > image.width || height > image.height) return null;
+  const left = Math.min(image.width - width, Math.max(0, x + dx));
+  const top = Math.min(image.height - height, Math.max(0, y + dy));
+  return left === x && top === y ? null : [left, top, width, height];
+}

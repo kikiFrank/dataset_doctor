@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { TaskCancelButton } from "./task-cancel-button";
 import type { WorkflowControlAction, WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
 import { completeWorkflowReview, controlWorkflow, getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
-import { workflowNeedsPolling } from "./workflow-review-state";
+import { workflowCanResume, workflowNeedsPolling } from "./workflow-review-state";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { ReportExportActions } from "./report-export-actions";
 import { reportCheckLabel } from "./staging-report-view";
@@ -65,6 +65,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
   const loadingReport = current?.report_task_id ?? null;
   const running = current !== undefined && workflowNeedsPolling(current);
   const waitingForPause = status === "RUNNING" && pauseRequestedRun === selected;
+  const refreshPausedTasks = status === "PAUSED" ? () => setRefresh(value => value + 1) : undefined;
 
   useEffect(() => {
     setReviewConfirmed(false);
@@ -218,14 +219,15 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     {status === "RUNNING" && <button type="button" disabled={busy || waitingForPause} onClick={() => void control("PAUSE")}>
       暂停体检
     </button>}
-    {status === "PAUSED" && <button type="button" disabled={busy} onClick={() => void control("RESUME")}>
-      继续体检
-    </button>}
+    {current?.status === "PAUSED" && (workflowCanResume(current)
+      ? <button type="button" disabled={busy} onClick={() => void control("RESUME")}>继续体检</button>
+      : <p role="status">当前任务无法继续，可开始新的体检。</p>)}
     {waitingForPause && <p role="status">等待当前计算结束后暂停。</p>}
     {current?.error_code && <p role="alert">{runErrors[current.error_code] ?? current.error_code}</p>}
     {current?.profile_task && <p>
       数据画像任务 · {taskStatusNames[current.profile_task.status] ?? current.profile_task.status}
-      <TaskCancelButton key={current.profile_task.task_id} workspace={workspace} taskId={current.profile_task.task_id} status={current.profile_task.status} />
+      <TaskCancelButton key={current.profile_task.task_id} workspace={workspace} taskId={current.profile_task.task_id}
+        status={current.profile_task.status} onReceipt={refreshPausedTasks} />
     </p>}
     {current && current.review_recheck_tasks.length > 0 && <section aria-label="审核后复检">
       <h5>审核后复检</h5>
@@ -239,7 +241,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       <p>标注几何 {current.geometry_tasks.filter(task => task.status === "SUCCEEDED").length} / {current.geometry_tasks.length}</p>
       <ul>{current.geometry_tasks.map(task => <li key={task.task_id}>
         样本 {task.asset_id.slice(0, 8)} · {taskStatusNames[task.status] ?? task.status}
-        <TaskCancelButton workspace={workspace} taskId={task.task_id} status={task.status} />
+        <TaskCancelButton workspace={workspace} taskId={task.task_id} status={task.status} onReceipt={refreshPausedTasks} />
       </li>)}</ul>
     </section>}
     {error && <>

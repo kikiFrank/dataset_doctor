@@ -283,7 +283,8 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
           <div className="review-layout">
             {media && matchingImage
               ? <ReviewCanvas image={editor.image} locator={media.locator} boxes={editor.boxes} selected={selected}
-                  disabled={editingLocked} onSelect={setSelected} onDraw={draw} onImageError={onImageError} />
+                  disabled={editingLocked} onSelect={setSelected} onDraw={draw}
+                  onMove={(index, bbox) => update(index, { ...editor.boxes[index], bbox })} onImageError={onImageError} />
               : <p>当前图像无法显示，请刷新样本。</p>}
             <div className="review-inspector">
               <label>标注框 <select value={selected ?? ""} onChange={(event) => {

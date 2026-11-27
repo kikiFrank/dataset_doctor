@@ -16,6 +16,12 @@ test("a cancellation request is never presented as a confirmed stop", () => {
   assert.match(cancellationReceiptMessage({ ...receipt, observed_status: "CANCELLED" }), /已停止/);
 });
 
+test("a confirmed stop clears the waiting action even before the parent refreshes", () => {
+  assert.equal(cancellationState("QUEUED", "CANCELLED"), "STOPPED");
+  assert.equal(cancellationState("RUNNING", "CANCELLING"), "REQUESTED");
+  assert.equal(cancellationState("SUCCEEDED", "CANCELLING"), "SETTLED");
+});
+
 test("late cancellation preserves the authoritative completed result", () => {
   for (const status of ["SUCCEEDED", "FAILED", "INTERRUPTED"]) {
     assert.match(cancellationReceiptMessage({ requested: false, observed_status: status }), new RegExp(status));

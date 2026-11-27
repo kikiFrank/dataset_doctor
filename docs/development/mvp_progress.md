@@ -283,3 +283,13 @@ MVP1.1 尚未满足阶段退出条件。产品 CI（含每场景 30 秒预算）
 已填写合成工作区名称 `Native30 acceptance`，首次通过无障碍元素索引点击创建按钮后，9.867 秒内的窗口枚举及观察均未看到目录选择器。本轮桌面操作随后中断。中断后通过文件系统确认本轮合成 `Workspace` 目录仍为空。目录创建及图片导入未验收，现有观察不足以认定产品的选择器出现故障。
 
 接续时先观察当前窗口与模态框，再用真实坐标点击可见的「选择目录并创建」，独立计时并确认 `workspace.json`、`workspace.db` 与 SQLite 完整性。复用上述合成夹具。余下原生用例沿用上一小节，不重复已经通过的远程矩阵。
+
+2026-11-28 原生复验使用同一份合成夹具。真实鼠标点击打开了系统目录选择器，应用窗口与选择器属于同一进程。选择合成 `Workspace` 后，首次回车到可见工作区标题为 11.763 秒。系统图片目录选为 `Inputs`，预检在 6.508 秒观察到 `signal.png` 与 `signal.json` 成对及 `signal` 类别。确认导入后 0.928 秒观察到 `Native signals` 数据集含 1 项资源。独立以只读 SQLite 打开实际库，`integrity_check=ok`，`foreign_key_check` 无记录，两个导入任务均 `SUCCEEDED`，数据库内有 1 条数据集成员。计时为操作发起至观察到对应结果，含工具观察间隔。
+
+从 `Native signals` 发起新体检，3.696 秒观察到「等待人工审核」与 `bbox_out_of_bounds`。样本级几何检查 4.703 秒完成，审核在 12.001 秒内打开。按适合宽度的实际画布拖出合成框，原图坐标约为 `[29.97, 20.20, 39.74, 29.32]`。真实点击选中并移除越界草稿框，随后在 11.391 秒内观察到保存草稿成功。正式 JSON 写权限仍处于待授权状态。
+
+原生复现两项问题。暂停的体检关联的画像任务已在 SQLite 中 `CANCELLED`，桌面仍保留「等待取消确认」与无法成功的继续按钮。拖动已有框仅能选中，缺少移动行为。页面现在采用取消回执更新按钮，刷新暂停体检的任务状态，并按关联任务的状态决定是否显示继续入口。图片审核画布支持拖动已有框，使用原图坐标约束移动范围并保留框大小。COCO 核验工具新增可选 `--pointer-bbox`，用于复核真实鼠标操作生成的坐标，默认夹具仍按固定坐标精确校验。
+
+`node --test --test-timeout=25000 tests/desktop/ui/review-document.test.mjs tests/desktop/ui/task-cancellation.test.mjs tests/desktop/ui/workflow-review.test.mjs` 通过 13 项，套件耗时约 116 毫秒。红绿日志见 `target/dev/logs/native-cancel-feedback-{red,green}.log` 与 `native-canvas-move-{red,green}.log`。通过 `scripts/packaging/windows/build-desktop.ps1` 完成离线重建，日志 `target/dev/logs/native-cancel-canvas-build-green.log`。新版本可见启动 9.937 秒，原生选择器重开工作区 13.962 秒，继续审核并恢复保存的单框草稿 6.496 秒。最后只读 SQLite 检查为 `integrity_check=ok`，外键检查无记录，历史体检状态为 `PAUSED` 与 `WAITING_REVIEW`，审核会话仍为 `OPEN`。
+
+按用户要求暂停在图片审核画布。已打开缩放下拉框，定位点击被桌面控制工具以 WebView2 弹层进程不同拒绝。150% 缩放下的真实拖动与取消反馈的安装后原生复测均未完成。接续先刷新窗口状态，再用键盘选择缩放，通过鼠标拖框并核对坐标，然后完成正式写授权、Final、体检复检、COCO 独立读取、视频、颜色和备份恢复。各测试场景维持 30 秒预算。最新通过的完整产品 CI 仍为 `7a9c30d` 的运行 45994705843，本次改动同步后触发的 CI 另行核对。
