@@ -1,6 +1,7 @@
 //! Run the registered local health check from a Workspace Dataset.
 
 mod input;
+mod resume;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -41,7 +42,7 @@ pub struct LocalHealthcheckJob {
     row_revision: u64,
     request_id: Uuid,
     max_pixels: u32,
-    profile: DatasetProfileJob,
+    profile: Option<DatasetProfileJob>,
 }
 
 pub struct LocalHealthcheckRuntime {
@@ -136,7 +137,7 @@ impl LocalHealthcheckRuntime {
             row_revision: accepted.workflow.row_revision,
             request_id: request.request_id,
             max_pixels: request.max_pixels,
-            profile,
+            profile: Some(profile),
         });
         Ok(LocalHealthcheckAcceptance {
             workflow: accepted.workflow,
@@ -183,22 +184,25 @@ impl LocalHealthcheckRuntime {
 
     async fn execute(&self, job: LocalHealthcheckJob) -> Result<WorkflowReport, RunFailure> {
         let session = job.session;
-        let mut profile = DatasetProfileRuntime::launch_with_program(
-            Arc::clone(&self.store.owner),
-            session,
-            self.program.clone(),
-        )
-        .await
-        .map_err(|error| RunFailure::worker(error, "WORKER_START_FAILED"))?;
-        let outcome = profile.run(job.profile).await;
-        let closed = profile.shutdown().await;
-        let completed = outcome.map_err(|error| RunFailure::worker(error, "WORKER_INTERRUPTED"))?;
-        closed.map_err(|error| RunFailure::worker(error, "WORKER_INTERRUPTED"))?;
-        if completed.status != "SUCCEEDED" {
-            return Err(RunFailure {
-                error: WorkflowError::UpstreamNotReady,
-                code: "PROFILE_FAILED",
-            });
+        if let Some(pending) = job.profile {
+            let mut profile = DatasetProfileRuntime::launch_with_program(
+                Arc::clone(&self.store.owner),
+                session,
+                self.program.clone(),
+            )
+            .await
+            .map_err(|error| RunFailure::worker(error, "WORKER_START_FAILED"))?;
+            let outcome = profile.run(pending).await;
+            let closed = profile.shutdown().await;
+            let completed =
+                outcome.map_err(|error| RunFailure::worker(error, "WORKER_INTERRUPTED"))?;
+            closed.map_err(|error| RunFailure::worker(error, "WORKER_INTERRUPTED"))?;
+            if completed.status != "SUCCEEDED" {
+                return Err(RunFailure {
+                    error: WorkflowError::UpstreamNotReady,
+                    code: "PROFILE_FAILED",
+                });
+            }
         }
 
         let reference = job.reference.clone();

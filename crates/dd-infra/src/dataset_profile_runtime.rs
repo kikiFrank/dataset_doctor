@@ -113,7 +113,9 @@ impl DatasetProfileRuntime {
                         "UPDATE tasks SET status='INTERRUPTED',error_code='SESSION_ENDED',
                     finished_at_ms=?4,updated_at_ms=?4,row_revision=row_revision+1
                  WHERE operation_kind=?1 AND capability_id=?2 AND workspace_session_id<>?3
-                    AND status IN ('QUEUED','DISPATCHING','RUNNING','CANCELLING')",
+                    AND status IN ('QUEUED','DISPATCHING','RUNNING','CANCELLING')
+                    AND NOT EXISTS (SELECT 1 FROM workflow_runs AS workflow
+                        WHERE workflow.workflow_run_id=tasks.workflow_run_id AND workflow.status='PAUSED')",
                         params![OPERATION, CAPABILITY, session.to_string(), now],
                     )
                     .map_err(TaskStoreError::Database)
