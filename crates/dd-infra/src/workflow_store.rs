@@ -118,6 +118,7 @@ pub struct WorkflowSnapshot {
     pub profile_task: Option<WorkflowTaskSnapshot>,
     pub geometry_tasks: Vec<WorkflowGeometryTask>,
     pub review_recheck_tasks: Vec<WorkflowGeometryTask>,
+    pub review_recheck_pending: bool,
     pub report_task_id: Option<Uuid>,
     pub error_code: Option<String>,
 }
@@ -520,6 +521,15 @@ impl WorkflowStore {
         } else {
             None
         };
+        let node_states: serde_json::Value =
+            serde_json::from_str(&row.node_states_json).map_err(WorkflowError::Json)?;
+        let review_recheck_pending = status == WorkflowStatus::WaitingReview
+            && row.error_code.is_none()
+            && node_states["control"]["review_recheck"].is_object()
+            && !row
+                .review_recheck_tasks
+                .iter()
+                .any(|task| matches!(task.status.as_str(), "FAILED" | "INTERRUPTED" | "CANCELLED"));
         Ok(WorkflowSnapshot {
             run_id: row.run_id,
             planning_task_id: row.planning_task_id,
@@ -533,6 +543,7 @@ impl WorkflowStore {
             profile_task: row.profile_task,
             geometry_tasks: row.geometry_tasks,
             review_recheck_tasks: row.review_recheck_tasks,
+            review_recheck_pending,
             report_task_id: row.report_task_id,
             error_code: row.error_code,
         })

@@ -121,6 +121,7 @@ pub struct WorkflowView {
     pub profile_task: Option<WorkflowTaskView>,
     pub geometry_tasks: Vec<WorkflowGeometryTaskView>,
     pub review_recheck_tasks: Vec<WorkflowGeometryTaskView>,
+    pub review_recheck_pending: bool,
     pub report_task_id: Option<UuidText>,
     pub error_code: Option<String>,
 }

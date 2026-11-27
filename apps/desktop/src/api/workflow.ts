@@ -4,6 +4,7 @@ import type {
   WorkflowPauseRequest, WorkflowReportGetRequest, WorkflowReportView, WorkflowResumeRequest, WorkflowStartRequest, WorkflowView,
 } from "./generated/wire-primitives";
 import { context, type OpenWorkspace } from "./workspace";
+import { reviewCompletionPayload } from "../workflow-review-state";
 
 export function startWorkflow(
   workspace: OpenWorkspace, datasetId: string, sampleLimit: number, key: string,
@@ -22,6 +23,17 @@ export function getWorkflow(workspace: OpenWorkspace, runId: string): Promise<Wo
     context: context(workspace, crypto.randomUUID()), workflow_run_id: runId,
   };
   return invoke("workflow_get", { request });
+}
+
+export function completeWorkflowReview(
+  workspace: OpenWorkspace, workflow: WorkflowView, report: WorkflowReportView,
+  reasons: Record<string, string>, confirmed: boolean, key: string,
+): Promise<WorkflowView> {
+  const request = {
+    ...reviewCompletionPayload(workflow, report, reasons, confirmed),
+    context: { ...context(workspace, crypto.randomUUID()), idempotency_key: key },
+  };
+  return invoke("workflow_complete_review", { request });
 }
 
 export function controlWorkflow(

@@ -395,6 +395,7 @@ impl Commands {
                 })
                 .collect::<Result<_, AppError>>()?,
             error_code: snapshot.error_code,
+            review_recheck_pending: snapshot.review_recheck_pending,
         })
     }
 

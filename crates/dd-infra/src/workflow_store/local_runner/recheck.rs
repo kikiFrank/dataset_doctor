@@ -75,6 +75,38 @@ impl LocalHealthcheckRuntime {
         &self,
         job: WorkflowRecheckJob,
     ) -> Result<WorkflowReport, WorkflowError> {
+        let session = job.session;
+        let run = job.review.workflow_run_id;
+        let revision = i64::try_from(job.review.expected_row_revision)
+            .map_err(|_| WorkflowError::InvalidRecord)?;
+        let result = self.execute_review_completion(job).await;
+        if let Err(error) = &result {
+            let code = if matches!(error, WorkflowError::InputChanged) {
+                "INPUT_CHANGED"
+            } else {
+                "REVIEW_RECHECK_FAILED"
+            };
+            if let Ok(now) = now_ms() {
+                let owner = Arc::clone(&self.store.owner);
+                let _ = tokio::task::spawn_blocking(move || owner.workspace_action(session, move |owner| {
+                    owner.connection.execute(
+                        "UPDATE workflow_runs SET error_code=?3,updated_at_ms=?4,row_revision=row_revision+1
+                         WHERE workflow_run_id=?1 AND row_revision=?2 AND status='WAITING_REVIEW'
+                           AND NOT EXISTS(SELECT 1 FROM tasks WHERE workflow_run_id=?1
+                             AND node_id GLOB 'final_annotation/recheck/*' AND status IN ('DISPATCHING','RUNNING'))",
+                        params![run.to_string(), revision, code, now],
+                    ).map_err(database)?;
+                    Ok(())
+                })).await;
+            }
+        }
+        result
+    }
+
+    async fn execute_review_completion(
+        &self,
+        job: WorkflowRecheckJob,
+    ) -> Result<WorkflowReport, WorkflowError> {
         let _dispatch = self.review_dispatch.lock().await;
         let session = job.session;
         let owner = Arc::clone(&self.store.owner);
@@ -381,7 +413,7 @@ impl WorkflowStore {
                 }).map_err(|error| WorkspaceThreadError::Task(crate::task_store::TaskStoreError::Receipt(error)))?;
             }
             let changed = transaction.execute(
-                "UPDATE workflow_runs SET node_states_json=?3,workspace_session_id=?4,
+                "UPDATE workflow_runs SET node_states_json=?3,workspace_session_id=?4,error_code=NULL,
                     updated_at_ms=?5,row_revision=?6
                  WHERE workflow_run_id=?1 AND row_revision=?2 AND status='WAITING_REVIEW'",
                 params![run.to_string(), row.row_revision, states.to_string(), session.to_string(), now, sql_revision],

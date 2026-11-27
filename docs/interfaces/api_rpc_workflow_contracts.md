@@ -496,6 +496,8 @@ Workflow 状态：DRAFT、READY、RUNNING、WAITING_REVIEW、PAUSED、COMPLETED�
 
 MVP1.1 的本地审核完成入口先验证原报告、当前人工 Final、输入摘要和缺项确认，再事务登记 `final_annotation/recheck/<asset_id>` 的真实几何任务及审核批次绑定。工作流在复检期间保持 WAITING_REVIEW。相同幂等请求复用绑定，排队任务重开后核验并切换到当前 Workspace 会话。真实 Worker 成功后，Core 复用 Review Gate 核验 Final 与新几何证据，再原子发布完成报告和 COMPLETED。失败时保留原报告、待审核状态和可查询的失败任务。
 
+当前审核批次仍在执行或等待 Core 核验时，WorkflowView 的 review_recheck_pending 为 true。页面查询此标志及当前批次任务，几何任务 SUCCEEDED 后继续等待 Core 的权威结果。Core 拒绝完成时持久化错误码，结束等待并保留 WAITING_REVIEW。明确的新请求使用当前修订和新幂等键，在上一批次已终止后受理，并保留旧批次证据。旧批次的晚到失败不得覆盖正在执行的新批次。
+
 模板的固定业务关卡为：
 
 ```mermaid

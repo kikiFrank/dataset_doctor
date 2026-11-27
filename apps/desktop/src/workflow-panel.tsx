@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WorkflowControlAction, WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
-import { controlWorkflow, getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
+import { completeWorkflowReview, controlWorkflow, getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
+import { workflowNeedsPolling } from "./workflow-review-state";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { ReportExportActions } from "./report-export-actions";
 import { reportCheckLabel } from "./staging-report-view";
@@ -11,7 +12,6 @@ const statusNames: Record<WorkflowStatusView, string> = {
   COMPLETED: "体检已完成",
   INTERRUPTED: "体检已中断", WAITING_REVIEW: "等待人工审核", FAILED: "体检失败",
 };
-const activeStatuses = new Set<WorkflowStatusView>(["DRAFT", "READY", "RUNNING"]);
 const checkNames: Record<string, string> = {
   dataset_profile: "数据画像", annotation_geometry: "标注几何",
   image_quality: "图像质量", detector_predictions: "检测预测", semantic_review: "语义检查",
@@ -25,6 +25,13 @@ const runErrors: Record<string, string> = {
   WORKER_START_FAILED: "本机 Worker 启动失败。",
   WORKER_INTERRUPTED: "本机 Worker 运行已中断。",
   SESSION_ENDED: "此前工作区会话已结束。",
+  INPUT_CHANGED: "复检期间输入已变化，请重新审核相关样本。",
+  REVIEW_RECHECK_FAILED: "复检或 Final 核验未完成，请检查样本和任务状态后重新确认。",
+};
+const recheckStatusNames: Record<string, string> = {
+  QUEUED: "等待复检", DISPATCHING: "正在派发", RUNNING: "正在复检",
+  SUCCEEDED: "几何检查已完成", FAILED: "复检失败", INTERRUPTED: "复检已中断",
+  CANCELLING: "正在停止", CANCELLED: "复检已取消",
 };
 
 function mergeWorkflow(records: WorkflowView[] | null, update: WorkflowView): WorkflowView[] {
@@ -43,11 +50,27 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
   const [refresh, setRefresh] = useState(0);
   const [pauseRequestedRun, setPauseRequestedRun] = useState<string | null>(null);
   const key = useRef<string | null>(null);
+  const reviewKey = useRef<string | null>(null);
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [reviewReasons, setReviewReasons] = useState<Record<string, string>>({});
   const current = records?.find(item => item.workflow_run_id === selected);
   const status = current?.status;
   const loadingReport = current?.report_task_id ?? null;
-  const running = status !== undefined && activeStatuses.has(status);
+  const running = current !== undefined && workflowNeedsPolling(current);
   const waitingForPause = status === "RUNNING" && pauseRequestedRun === selected;
+
+  useEffect(() => {
+    setReviewConfirmed(false);
+    setReviewReasons({});
+    reviewKey.current = null;
+  }, [selected, loadingReport]);
+
+  useEffect(() => {
+    if (current?.error_code) {
+      setReviewConfirmed(false);
+      reviewKey.current = null;
+    }
+  }, [current?.error_code]);
 
   useEffect(() => {
     let active = true;
@@ -71,7 +94,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
         const update = await getWorkflow(workspace, runId);
         if (!active) return;
         setRecords(previous => mergeWorkflow(previous, update));
-        if (activeStatuses.has(update.status)) timer = setTimeout(() => void poll(), 300);
+        if (workflowNeedsPolling(update)) timer = setTimeout(() => void poll(), 300);
       } catch (failure) {
         if (active) setError(workspaceCommandError(failure));
       }
@@ -110,6 +133,23 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       key.current = null;
       setRecords(previous => [started, ...(previous ?? []).filter(item => item.workflow_run_id !== started.workflow_run_id)]);
       setSelected(started.workflow_run_id);
+    } catch (failure) {
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function completeReview() {
+    if (busy || running || !current || !report) return;
+    setBusy(true);
+    setError(null);
+    reviewKey.current ??= crypto.randomUUID();
+    try {
+      const update = await completeWorkflowReview(workspace, current, report, reviewReasons, reviewConfirmed, reviewKey.current);
+      reviewKey.current = null;
+      setReviewConfirmed(false);
+      setRecords(previous => mergeWorkflow(previous, update));
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -175,7 +215,14 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       继续体检
     </button>}
     {waitingForPause && <p role="status">等待当前计算结束后暂停。</p>}
-    {current?.error_code && <p>{runErrors[current.error_code] ?? current.error_code}</p>}
+    {current?.error_code && <p role="alert">{runErrors[current.error_code] ?? current.error_code}</p>}
+    {current && current.review_recheck_tasks.length > 0 && <section aria-label="审核后复检">
+      <h5>审核后复检</h5>
+      {current.review_recheck_pending && <p role="status">正在核验 Final 并运行复检…</p>}
+      <ul>{current.review_recheck_tasks.map(task => <li key={task.task_id}>
+        样本 {task.asset_id.slice(0, 8)} · {recheckStatusNames[task.status] ?? task.status}
+      </li>)}</ul>
+    </section>}
     {running && current && current.geometry_tasks.length > 0 && <p>
       标注几何 {current.geometry_tasks.filter(task => task.status === "SUCCEEDED").length} / {current.geometry_tasks.length}
     </p>}
@@ -186,7 +233,31 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     {loadingReport && !report && !error && <p role="status">正在核验质量报告…</p>}
     {report && report.scope.workflow_run_id === selected && <section aria-label="质量报告">
       <h5>质量报告</h5>
+      {report.human_ack_status === "ACKNOWLEDGED" && <p role="status">
+        审核已确认，{report.repair_outcomes.length} 个样本的 Final 与复检证据已核验。
+      </p>}
       <ReportExportActions key={report.report_id} workspace={workspace} reference={report.report_artifact_ref} />
+      {status === "WAITING_REVIEW" && <form aria-label="确认审核并复检"
+        onSubmit={event => { event.preventDefault(); void completeReview(); }}>
+        <p>请先完成报告涉及样本的 Final 审核，再确认未执行检查的范围。</p>
+        {report.unexecuted_checks.map(check => <label key={check}>
+          {checkNames[check] ?? check}的未执行确认理由
+          <textarea required value={reviewReasons[check] ?? ""} disabled={busy || running}
+            onChange={event => {
+              const value = event.currentTarget.value;
+              reviewKey.current = null;
+              setReviewConfirmed(false);
+              setReviewReasons(previous => ({ ...previous, [check]: value }));
+            }} />
+        </label>)}
+        <label><input type="checkbox" checked={reviewConfirmed} disabled={busy || running}
+          onChange={event => setReviewConfirmed(event.currentTarget.checked)} />
+          已完成相关样本的 Final 审核，并确认上述未执行检查及理由
+        </label>
+        <button type="submit" disabled={busy || running || !reviewConfirmed}>确认审核并复检</button>
+        {current?.review_recheck_pending && <p role="status">正在等待复检与 Core 核验完成…</p>}
+      </form>}
+      <h6>{report.human_ack_status === "ACKNOWLEDGED" ? "初次检查结果" : "检查结果"}</h6>
       <ul>
         {report.checks.map(check => <li key={check.check_id}>
           <strong>{checkNames[check.check_id] ?? check.check_id}</strong> · {reportCheckLabel(check)}

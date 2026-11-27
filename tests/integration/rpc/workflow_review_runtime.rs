@@ -427,6 +427,15 @@ async fn changed_inputs_and_failed_real_rechecks_cannot_complete_the_workflow() 
     .unwrap();
     assert!(failing.run_review_completion(job).await.is_err());
     assert_eq!(
+        fixture
+            .store
+            .get(session, run)
+            .unwrap()
+            .error_code
+            .as_deref(),
+        Some("REVIEW_RECHECK_FAILED")
+    );
+    assert_eq!(
         fixture.store.get(session, run).unwrap().status,
         WorkflowStatus::WaitingReview
     );
@@ -472,5 +481,46 @@ async fn changed_inputs_and_failed_real_rechecks_cannot_complete_the_workflow() 
         .unwrap(),
         3
     );
+    fixture.workspace.close(session).unwrap();
+}
+
+#[tokio::test]
+async fn a_core_rejection_after_successful_geometry_is_durable_and_stops_pending_state() {
+    let (fixture, runtime, request, _, _) = reviewed_case("Workflow Final Gate Rejection").await;
+    let session = fixture.session;
+    let run = request.workflow_run_id;
+    let job = runtime
+        .prepare_review_completion(session, request.clone())
+        .unwrap();
+    assert!(
+        fixture
+            .store
+            .get(session, run)
+            .unwrap()
+            .review_recheck_pending
+    );
+    let source = fixture.source.join("signal.png");
+    let original = fs::read(&source).unwrap();
+    let entry =
+        serde_json::to_string(fixture.entrypoint.parent().unwrap().to_str().unwrap()).unwrap();
+    let wrapper = fixture.root.join("change-after-compute.py");
+    fs::write(&wrapper, format!("import sys\nfrom pathlib import Path\nsys.path.insert(0, {entry})\nimport entrypoint\noriginal=entrypoint.geometry_execution.compute_result\ndef compute(request):\n    result=original(request)\n    Path(request.parameters.image.path).write_bytes(b'changed after geometry')\n    return result\nentrypoint.geometry_execution.compute_result=compute\nraise SystemExit(entrypoint.main())\n")).unwrap();
+    let changing = LocalHealthcheckRuntime::new(
+        Arc::clone(&fixture.workspace),
+        fixture.interpreter.clone(),
+        wrapper,
+    )
+    .unwrap();
+    assert!(changing.run_review_completion(job).await.is_err());
+    let failed = fixture.store.get(session, run).unwrap();
+    assert_eq!(failed.status, WorkflowStatus::WaitingReview);
+    assert_eq!(failed.review_recheck_tasks[0].status, "SUCCEEDED");
+    assert!(failed.error_code.is_some());
+    assert!(!failed.review_recheck_pending);
+    assert_eq!(
+        fixture.store.read_report(session, run).unwrap().reference,
+        request.expected_report
+    );
+    fs::write(source, original).unwrap();
     fixture.workspace.close(session).unwrap();
 }
