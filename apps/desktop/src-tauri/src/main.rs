@@ -19,6 +19,7 @@ struct RuntimeMode {
     smoke_business_directories: Option<(PathBuf, PathBuf)>,
     smoke_color: bool,
     smoke_workflow: bool,
+    smoke_workflow_controls: bool,
     smoke_report_export: bool,
     smoke_staging_batch: bool,
     smoke_video: Option<PathBuf>,
@@ -37,6 +38,7 @@ struct DesktopReadyResponse {
     verify_workspace_business: bool,
     verify_workspace_color: bool,
     verify_workspace_workflow: bool,
+    verify_workspace_workflow_controls: bool,
     verify_workspace_report_export: bool,
     verify_workspace_staging_batch: bool,
     verify_workspace_video: bool,
@@ -69,7 +71,10 @@ fn desktop_ready(
         verify_workspace_create: runtime.smoke_workspace_create,
         verify_workspace_business: business,
         verify_workspace_color: runtime.smoke_color,
-        verify_workspace_workflow: runtime.smoke_workflow || runtime.smoke_report_export,
+        verify_workspace_workflow: runtime.smoke_workflow
+            || runtime.smoke_workflow_controls
+            || runtime.smoke_report_export,
+        verify_workspace_workflow_controls: runtime.smoke_workflow_controls,
         verify_workspace_report_export: runtime.smoke_report_export,
         verify_workspace_staging_batch: runtime.smoke_staging_batch,
         verify_workspace_video: runtime.smoke_video.is_some(),
@@ -113,6 +118,8 @@ async fn desktop_workspace_verified(
         "DESKTOP_WORKSPACE_COLOR_VERIFIED"
     } else if runtime.smoke_report_export {
         "DESKTOP_WORKSPACE_REPORT_EXPORT_VERIFIED"
+    } else if runtime.smoke_workflow_controls {
+        "DESKTOP_WORKSPACE_WORKFLOW_CONTROLS_VERIFIED"
     } else if runtime.smoke_workflow {
         "DESKTOP_WORKSPACE_WORKFLOW_VERIFIED"
     } else if runtime.smoke_staging_batch {
@@ -155,6 +162,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && std::env::args_os().any(|argument| argument == "--workspace-color-smoke");
     let smoke_workflow = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-workflow-smoke");
+    let smoke_workflow_controls = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-workflow-controls-smoke");
     let smoke_report_export = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-report-export-smoke");
     let smoke_staging_batch = cfg!(debug_assertions)
@@ -168,6 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         smoke_workspace_business,
         smoke_color,
         smoke_workflow,
+        smoke_workflow_controls,
         smoke_report_export,
         smoke_staging_batch,
         smoke_workspace_video,
@@ -185,6 +195,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || smoke_workspace_business
         || smoke_color
         || smoke_workflow
+        || smoke_workflow_controls
         || smoke_report_export
         || smoke_staging_batch
         || smoke_workspace_video
@@ -213,30 +224,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let smoke_business_directories =
-        if smoke_workspace_business || smoke_color || smoke_workflow || smoke_report_export {
-            let root = smoke_root
-                .as_deref()
-                .ok_or("Business verification requires a dedicated run")?;
-            let selected = |name: &str| -> Result<PathBuf, Box<dyn std::error::Error>> {
-                let expected = root.join(name);
-                let resolved = expected.canonicalize()?;
-                if resolved != expected || !resolved.is_dir() {
-                    return Err(
-                        "Business fixture directory must be a direct child of the smoke run".into(),
-                    );
-                }
-                Ok(resolved)
-            };
-            if smoke_workspace.as_ref() != Some(&selected("Workspace")?) {
+    let smoke_business_directories = if smoke_workspace_business
+        || smoke_color
+        || smoke_workflow
+        || smoke_workflow_controls
+        || smoke_report_export
+    {
+        let root = smoke_root
+            .as_deref()
+            .ok_or("Business verification requires a dedicated run")?;
+        let selected = |name: &str| -> Result<PathBuf, Box<dyn std::error::Error>> {
+            let expected = root.join(name);
+            let resolved = expected.canonicalize()?;
+            if resolved != expected || !resolved.is_dir() {
                 return Err(
-                    "Business verification requires the fixture Workspace directory".into(),
+                    "Business fixture directory must be a direct child of the smoke run".into(),
                 );
             }
-            Some((selected("Inputs")?, selected("Exports")?))
-        } else {
-            None
+            Ok(resolved)
         };
+        if smoke_workspace.as_ref() != Some(&selected("Workspace")?) {
+            return Err("Business verification requires the fixture Workspace directory".into());
+        }
+        Some((selected("Inputs")?, selected("Exports")?))
+    } else {
+        None
+    };
     let workspace = Arc::new(WorkspaceThread::start(
         250,
         workspace_commands::GRANT_LIFETIME,
@@ -265,6 +278,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_business_directories,
             smoke_color,
             smoke_workflow,
+            smoke_workflow_controls,
             smoke_report_export,
             smoke_staging_batch,
             smoke_video,
@@ -317,6 +331,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::geometry::annotation_geometry_submit,
             workspace_commands::workflow::workflow_start,
             workspace_commands::workflow::workflow_get,
+            workspace_commands::workflow::workflow_pause,
+            workspace_commands::workflow::workflow_resume,
             workspace_commands::workflow::workflow_list,
             workspace_commands::color::repair_color_preview,
             workspace_commands::color::repair_color_apply,

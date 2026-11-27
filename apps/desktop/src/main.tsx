@@ -34,6 +34,7 @@ function App() {
       if (runtime.verify_workspace_video) await verifyWorkspaceVideoIpc();
       if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc({
         verifyColor: runtime.verify_workspace_color, verifyWorkflow: runtime.verify_workspace_workflow,
+        verifyWorkflowControls: runtime.verify_workspace_workflow_controls,
         verifyReportExport: runtime.verify_workspace_report_export,
       });
     }).catch((failure: unknown) => setError(workspaceCommandError(failure)));

@@ -4,7 +4,7 @@ use dd_core::workflow::EnabledStep;
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::super::{WorkflowError, WorkflowResumeRequest};
+use super::super::{WorkflowError, WorkflowGeometryRequest, WorkflowResumeRequest};
 use super::{
     LocalHealthcheckAcceptance, LocalHealthcheckJob, LocalHealthcheckRuntime, execution,
     local_policy,
@@ -32,12 +32,39 @@ impl LocalHealthcheckRuntime {
         {
             return Err(WorkflowError::InvalidInputScope);
         }
+        let now = now_ms().map_err(execution)?;
+        if !verified.row.geometry_tasks.is_empty() {
+            let ready = self.store.resume_geometry_batch(
+                session,
+                verified,
+                &WorkflowGeometryRequest {
+                    reference: request.reference.clone(),
+                    expected_row_revision: request.expected_row_revision,
+                    request_id,
+                    idempotency_key: Uuid::new_v4(),
+                    max_pixels,
+                },
+                now,
+            )?;
+            let job = LocalHealthcheckJob {
+                session,
+                reference: request.reference,
+                row_revision: ready.workflow.row_revision,
+                request_id,
+                max_pixels,
+                profile: None,
+                geometry_jobs: Some(ready.jobs),
+            };
+            return Ok(LocalHealthcheckAcceptance {
+                workflow: ready.workflow,
+                job: Some(job),
+            });
+        }
         let profile = verified
             .row
             .profile_task
             .as_ref()
             .ok_or(WorkflowError::InvalidRecord)?;
-        let now = now_ms().map_err(execution)?;
         let (workflow, profile) = match profile.status.as_str() {
             "SUCCEEDED" => (
                 self.store.resume_from_profile(session, verified.row, now)?,
@@ -107,6 +134,7 @@ impl LocalHealthcheckRuntime {
             request_id,
             max_pixels,
             profile,
+            geometry_jobs: None,
         };
         Ok(LocalHealthcheckAcceptance {
             workflow,

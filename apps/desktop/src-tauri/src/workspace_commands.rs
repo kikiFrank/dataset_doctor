@@ -115,6 +115,10 @@ mod geometry_tests;
 #[path = "../../../../tests/desktop/host/workflow.rs"]
 mod workflow_tests;
 
+#[cfg(test)]
+#[path = "../../../../tests/desktop/host/workflow_control.rs"]
+mod workflow_control_tests;
+
 #[cfg(all(test, feature = "video-acceptance"))]
 #[path = "../../../../tests/desktop/host/video_frame.rs"]
 mod video_frame_tests;

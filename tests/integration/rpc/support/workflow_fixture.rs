@@ -14,7 +14,7 @@ use dd_infra::workflow_store::{
     WorkflowDraftRequest, WorkflowProfileRequest, WorkflowSnapshot, WorkflowStore,
 };
 use dd_infra::workspace_thread::WorkspaceThread;
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 const PNG: &[u8] = include_bytes!("../../../../testdata/image_io/p00-worker-rgb.png");
@@ -34,6 +34,10 @@ pub struct WorkflowFixture {
 
 impl WorkflowFixture {
     pub fn new(case: &str, annotation: &[u8]) -> Self {
+        Self::with_config(case, annotation, json!({}))
+    }
+
+    pub fn with_config(case: &str, annotation: &[u8], config: Value) -> Self {
         let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
             .canonicalize()
             .unwrap();
@@ -91,7 +95,7 @@ impl WorkflowFixture {
             &JsonContracts::new().unwrap(),
             json!({
                 "dataset_id":dataset, "label_schema_digest":datasets.items[0].schema_fingerprint,
-                "assets":assets, "resolved_config":{}, "implementation_version":"1",
+                "assets":assets, "resolved_config":config, "implementation_version":"1",
                 "capability_id":"workflow_plan_preview.v1", "model_identity":null,
             }),
         )

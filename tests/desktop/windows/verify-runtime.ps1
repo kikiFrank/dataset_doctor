@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceWorkflowControls', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')][string]$Suite = 'Runtime',
     [string]$PythonExe,
     [string]$PackagedWorkerExe,
     [string]$StagingFixturePlan,
@@ -95,7 +95,7 @@ try {
         $start.Arguments += ' --workspace-staging-batch-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_STAGING_BATCH_VERIFIED'
-    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')) {
+    } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceWorkflowControls', 'WorkspaceReportExport')) {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
         $business = Join-Path $run 'Synthetic business'
         & $python -I -B (Join-Path $PSScriptRoot 'seed_business_fixture.py') $business
@@ -106,6 +106,9 @@ try {
         } elseif ($Suite -eq 'WorkspaceWorkflow') {
             $start.Arguments += ' --workspace-workflow-smoke'
             $expected = 'DESKTOP_WORKSPACE_WORKFLOW_VERIFIED'
+        } elseif ($Suite -eq 'WorkspaceWorkflowControls') {
+            $start.Arguments += ' --workspace-workflow-controls-smoke'
+            $expected = 'DESKTOP_WORKSPACE_WORKFLOW_CONTROLS_VERIFIED'
         } elseif ($Suite -eq 'WorkspaceReportExport') {
             $start.Arguments += ' --workspace-report-export-smoke'
             $expected = 'DESKTOP_WORKSPACE_REPORT_EXPORT_VERIFIED'
@@ -120,7 +123,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')) { 55000 } else { 25000 }
+        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceWorkflowControls', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')) { 55000 } else { 25000 }
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
@@ -143,9 +146,10 @@ try {
         } elseif ($Suite -eq 'WorkspaceStagingBatch') {
             & $python -I -B (Join-Path $PSScriptRoot 'verify_staging_batch_fixture.py') $workspace $fixturePlan $sourceDigest
             if ($LASTEXITCODE -ne 0) { throw 'The Staging batch failed the database and source checks.' }
-        } elseif ($Suite -in @('WorkspaceWorkflow', 'WorkspaceReportExport')) {
+        } elseif ($Suite -in @('WorkspaceWorkflow', 'WorkspaceWorkflowControls', 'WorkspaceReportExport')) {
             $arguments = @($business)
             if ($Suite -eq 'WorkspaceReportExport') { $arguments += '--exported' }
+            if ($Suite -eq 'WorkspaceWorkflowControls') { $arguments += '--controlled' }
             & $python -I -B (Join-Path $PSScriptRoot 'verify_workflow_fixture.py') @arguments
             if ($LASTEXITCODE -ne 0) { throw 'The local workflow failed the database and report checks.' }
         } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor')) {

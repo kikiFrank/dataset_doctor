@@ -1,15 +1,17 @@
 //! Admit the planned geometry checks after the upstream profile is verified.
 
-use dd_core::workflow::{EnabledStep, PlanPolicy, validate_plan};
+use dd_core::workflow::{EnabledStep, PlanPolicy, TemplatePlan, validate_plan};
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{GEOMETRY_NODE, WorkflowError, WorkflowSnapshot, WorkflowStore, database};
 use crate::dataset_profile_runtime::read_dataset_profile;
-use crate::geometry_runtime::{GeometryAuditJob, GeometryAuditRequest, GeometryRuntime};
+use crate::geometry_runtime::{
+    GeometryAuditJob, GeometryAuditRequest, GeometryRuntime, PreparedGeometry,
+};
 use crate::task_store::{enqueue_task_in, format_digest};
-use crate::workspace_thread::WorkspaceThreadError;
+use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
 pub type WorkflowGeometryRequest = super::WorkflowProfileRequest;
 
@@ -69,45 +71,16 @@ impl WorkflowStore {
             return Err(WorkflowError::InvalidRecord);
         }
         validate_plan(&source, policy, &plan).map_err(WorkflowError::Plan)?;
-        let limit = plan
-            .enabled_steps
-            .iter()
-            .find_map(|step| match step {
-                EnabledStep::AnnotationGeometry { sample_limit } => Some(*sample_limit as usize),
-                _ => None,
-            })
-            .ok_or(WorkflowError::InvalidInputScope)?;
         let mut prepared = Vec::new();
-        for expected in frozen_scope["assets"]
-            .as_array()
-            .ok_or(WorkflowError::InvalidRecord)?
-            .iter()
-            .take(limit)
-        {
-            let asset: Uuid = expected["asset_id"]
-                .as_str()
-                .and_then(|id| id.parse().ok())
-                .ok_or(WorkflowError::InvalidRecord)?;
-            let job = GeometryRuntime::prepare(
+        for expected in geometry_assets(&plan, &frozen_scope)? {
+            prepared.push(prepare_geometry_task(
                 &self.owner,
                 session,
-                GeometryAuditRequest {
-                    dataset_id: row.dataset_id,
-                    asset_id: asset,
-                    request_id: request.request_id,
-                    idempotency_key: Uuid::new_v4(),
-                    max_pixels: u64::from(request.max_pixels),
-                },
-            )
-            .map_err(|error| WorkflowError::Execution(Box::new(error)))?;
-            let projected: Value =
-                serde_json::from_slice(job.manifest_bytes()).map_err(WorkflowError::Json)?;
-            if projected["assets"][0] != *expected
-                || projected["label_schema_digest"] != frozen_scope["label_schema_digest"]
-            {
-                return Err(WorkflowError::InputChanged);
-            }
-            prepared.push((asset, job));
+                row.dataset_id,
+                expected,
+                &frozen_scope["label_schema_digest"],
+                &request,
+            )?);
         }
         let submissions: Vec<_> = prepared
             .iter()
@@ -171,6 +144,56 @@ impl WorkflowStore {
             jobs,
         })
     }
+}
+
+pub(super) fn geometry_assets<'a>(
+    plan: &TemplatePlan,
+    scope: &'a Value,
+) -> Result<&'a [Value], WorkflowError> {
+    let limit = plan
+        .enabled_steps
+        .iter()
+        .find_map(|step| match step {
+            EnabledStep::AnnotationGeometry { sample_limit } => Some(*sample_limit as usize),
+            _ => None,
+        })
+        .ok_or(WorkflowError::InvalidInputScope)?;
+    let assets = scope["assets"]
+        .as_array()
+        .ok_or(WorkflowError::InvalidRecord)?;
+    Ok(&assets[..limit.min(assets.len())])
+}
+
+pub(super) fn prepare_geometry_task(
+    owner: &WorkspaceThread,
+    session: Uuid,
+    dataset: Uuid,
+    expected: &Value,
+    schema: &Value,
+    request: &WorkflowGeometryRequest,
+) -> Result<(Uuid, PreparedGeometry), WorkflowError> {
+    let asset = expected["asset_id"]
+        .as_str()
+        .and_then(|id| id.parse().ok())
+        .ok_or(WorkflowError::InvalidRecord)?;
+    let prepared = GeometryRuntime::prepare(
+        owner,
+        session,
+        GeometryAuditRequest {
+            dataset_id: dataset,
+            asset_id: asset,
+            request_id: request.request_id,
+            idempotency_key: Uuid::new_v4(),
+            max_pixels: u64::from(request.max_pixels),
+        },
+    )
+    .map_err(|error| WorkflowError::Execution(Box::new(error)))?;
+    let projected: Value =
+        serde_json::from_slice(prepared.manifest_bytes()).map_err(WorkflowError::Json)?;
+    if projected["assets"][0] != *expected || projected["label_schema_digest"] != *schema {
+        return Err(WorkflowError::InputChanged);
+    }
+    Ok((asset, prepared))
 }
 
 fn is_replay(node_states: &str, key: &str, fingerprint: &str) -> Result<bool, WorkflowError> {

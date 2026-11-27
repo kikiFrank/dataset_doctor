@@ -106,6 +106,16 @@ export type WorkflowPolicyOverrides = { sample_limit?: number, };
 
 export type WorkflowGetRequest = { context: CommandContext, workflow_run_id: UuidText, };
 
+export type WorkflowPauseRequest = { context: CommandContext, workflow_run_id: UuidText, expected_revision: DecimalU64, };
+
+export type WorkflowResumeRequest = { context: CommandContext, workflow_run_id: UuidText, expected_revision: DecimalU64, strategy: WorkflowResumeStrategy, };
+
+export type WorkflowResumeStrategy = "RESUME_PAUSED";
+
+export type WorkflowControlAction = "PAUSE" | "RESUME";
+
+export type WorkflowControlReceipt = { workflow_run_id: UuidText, requested: WorkflowControlAction, observed_status: WorkflowStatusView, revision: DecimalU64, blocking_task_ids: Array<UuidText>, };
+
 export type WorkflowListRequest = { context: CommandContext, dataset_id: UuidText, cursor?: UuidText, page_size: number, };
 
 export type WorkflowPageView = { items: Array<WorkflowView>, next_cursor: UuidText | null, };

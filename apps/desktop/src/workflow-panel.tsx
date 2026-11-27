@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
-import { getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
+import type { WorkflowControlAction, WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
+import { controlWorkflow, getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { ReportExportActions } from "./report-export-actions";
 import { reportCheckLabel } from "./staging-report-view";
@@ -26,6 +26,11 @@ const runErrors: Record<string, string> = {
   SESSION_ENDED: "此前工作区会话已结束。",
 };
 
+function mergeWorkflow(records: WorkflowView[] | null, update: WorkflowView): WorkflowView[] {
+  return records?.map(item => item.workflow_run_id === update.workflow_run_id
+    && BigInt(item.row_revision) <= BigInt(update.row_revision) ? update : item) ?? [];
+}
+
 export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspace; datasetId: string }) {
   const [records, setRecords] = useState<WorkflowView[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -35,11 +40,13 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [pauseRequestedRun, setPauseRequestedRun] = useState<string | null>(null);
   const key = useRef<string | null>(null);
   const current = records?.find(item => item.workflow_run_id === selected);
   const status = current?.status;
   const loadingReport = current?.report_task_id ?? null;
   const running = status !== undefined && activeStatuses.has(status);
+  const waitingForPause = status === "RUNNING" && pauseRequestedRun === selected;
 
   useEffect(() => {
     let active = true;
@@ -62,7 +69,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       try {
         const update = await getWorkflow(workspace, runId);
         if (!active) return;
-        setRecords(previous => previous?.map(item => item.workflow_run_id === runId ? update : item) ?? []);
+        setRecords(previous => mergeWorkflow(previous, update));
         if (activeStatuses.has(update.status)) timer = setTimeout(() => void poll(), 300);
       } catch (failure) {
         if (active) setError(workspaceCommandError(failure));
@@ -124,6 +131,26 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     }
   }
 
+  async function control(action: WorkflowControlAction) {
+    if (busy || !current) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const receipt = await controlWorkflow(workspace, current, action);
+      if (receipt.workflow_run_id !== current.workflow_run_id || receipt.requested !== action) {
+        throw new Error("无法核验体检控制回执。");
+      }
+      setPauseRequestedRun(action === "PAUSE" && receipt.blocking_task_ids.length > 0 ? receipt.workflow_run_id : null);
+      const update = await getWorkflow(workspace, receipt.workflow_run_id);
+      if (BigInt(update.row_revision) < BigInt(receipt.revision)) throw new Error("无法读取已更新的体检状态。");
+      setRecords(previous => mergeWorkflow(previous, update));
+    } catch (failure) {
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <section className="workflow-panel" aria-label="数据体检">
     <h4>数据体检</h4>
     <form onSubmit={event => { event.preventDefault(); void start(); }}>
@@ -132,7 +159,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       <button type="submit" disabled={busy || running || records === null}>开始本地体检</button>
     </form>
     {records === null && !error && <p role="status">正在读取体检记录…</p>}
-    {records && records.length > 1 && <label>体检记录 <select value={selected ?? ""}
+    {records && records.length > 1 && <label>体检记录 <select value={selected ?? ""} disabled={busy}
       onChange={event => setSelected(event.target.value)}>
       {records.map(item => <option key={item.workflow_run_id} value={item.workflow_run_id}>
         {statusNames[item.status]} · {item.workflow_run_id.slice(0, 8)}
@@ -140,6 +167,13 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     </select></label>}
     {cursor && <button type="button" disabled={busy} onClick={() => void more()}>更多体检记录</button>}
     {status && <p role="status">{statusNames[status]}</p>}
+    {status === "RUNNING" && <button type="button" disabled={busy || waitingForPause} onClick={() => void control("PAUSE")}>
+      暂停体检
+    </button>}
+    {status === "PAUSED" && <button type="button" disabled={busy} onClick={() => void control("RESUME")}>
+      继续体检
+    </button>}
+    {waitingForPause && <p role="status">等待当前计算结束后暂停。</p>}
     {current?.error_code && <p>{runErrors[current.error_code] ?? current.error_code}</p>}
     {running && current && current.geometry_tasks.length > 0 && <p>
       标注几何 {current.geometry_tasks.filter(task => task.status === "SUCCEEDED").length} / {current.geometry_tasks.length}

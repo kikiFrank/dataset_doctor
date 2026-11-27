@@ -36,6 +36,9 @@ Windows 开发版的自动化业务验收使用 `tests/desktop/windows/verify-ru
 
 使用 `-Suite WorkspaceWorkflow` 可以验收本地体检。测试点击数据集面板、运行真实 Worker，检查几何问题、实际覆盖和未执行原因。关闭并重开 Workspace 后读取同一份报告，保持人工审核关卡和源文件摘要。
 
+使用 `-Suite WorkspaceWorkflowControls` 可复跑暂停与继续体检。测试将真实初次入队固定在派发前，通过 WebView2 点击暂停，
+重开 Workspace 后继续原任务，并用独立脚本核对同一任务的 attempt、会话和质量报告。
+
 使用 `-Suite WorkspaceReportExport` 可以验收报告导出。测试从同一份质量报告导出 JSON 和 Markdown，用独立脚本核验文件、报告摘要和持久化回执。
 
 在命令宿主验收中传入 `-VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe`，从输出的 `Real Staging fixture` 行取得

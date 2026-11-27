@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  WorkflowGetRequest, WorkflowListRequest, WorkflowPageView, WorkflowReportGetRequest,
-  WorkflowReportView, WorkflowStartRequest, WorkflowView,
+  WorkflowControlAction, WorkflowControlReceipt, WorkflowGetRequest, WorkflowListRequest, WorkflowPageView,
+  WorkflowPauseRequest, WorkflowReportGetRequest, WorkflowReportView, WorkflowResumeRequest, WorkflowStartRequest, WorkflowView,
 } from "./generated/wire-primitives";
 import { context, type OpenWorkspace } from "./workspace";
 
@@ -22,6 +22,19 @@ export function getWorkflow(workspace: OpenWorkspace, runId: string): Promise<Wo
     context: context(workspace, crypto.randomUUID()), workflow_run_id: runId,
   };
   return invoke("workflow_get", { request });
+}
+
+export function controlWorkflow(
+  workspace: OpenWorkspace, current: WorkflowView, action: WorkflowControlAction,
+): Promise<WorkflowControlReceipt> {
+  const request: WorkflowPauseRequest = {
+    context: context(workspace, crypto.randomUUID()),
+    workflow_run_id: current.workflow_run_id,
+    expected_revision: current.row_revision,
+  };
+  if (action === "PAUSE") return invoke("workflow_pause", { request });
+  const resume: WorkflowResumeRequest = { ...request, strategy: "RESUME_PAUSED" };
+  return invoke("workflow_resume", { request: resume });
 }
 
 export function listWorkflows(workspace: OpenWorkspace, datasetId: string, cursor?: string): Promise<WorkflowPageView> {

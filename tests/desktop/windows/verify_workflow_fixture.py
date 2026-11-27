@@ -7,7 +7,7 @@ import sqlite3
 import sys
 
 
-def verify(root: Path, exports_requested: bool = False) -> None:
+def verify(root: Path, exports_requested: bool = False, controls_requested: bool = False) -> None:
     expected = json.loads((root / "input-proof.json").read_text(encoding="utf-8"))
     actual = {name: sha256((root / "Inputs" / name).read_bytes()).hexdigest() for name in expected}
     assert actual == expected, "Healthcheck changed source media or annotation"
@@ -35,6 +35,23 @@ def verify(root: Path, exports_requested: bool = False) -> None:
         ).fetchall()
         assert report_path == task_output == f"artifacts/tasks/{task}/report.json"
         assert not database.execute("SELECT 1 FROM review_sessions").fetchall()
+        if controls_requested:
+            revision, node_states = database.execute(
+                "SELECT row_revision,node_states_json FROM workflow_runs WHERE workflow_run_id=?", (run,),
+            ).fetchone()
+            profile, attempt, profile_session = database.execute(
+                "SELECT task_id,attempt_no,workspace_session_id FROM tasks WHERE workflow_run_id=? "
+                "AND operation_kind='DATASET_PROFILE'", (run,),
+            ).fetchone()
+            planning_session, = database.execute(
+                "SELECT workspace_session_id FROM tasks WHERE workflow_run_id=? "
+                "AND operation_kind='WORKFLOW_PLAN_PREVIEW'", (run,),
+            ).fetchone()
+            assert revision == 6 and attempt == 1
+            assert json.loads(node_states)["control"]["pause_requested"] is False
+            assert profile_session != planning_session
+            controls = {"profile_task_id": profile, "profile_attempts": attempt, "workflow_revision": revision,
+                        "planning_session": planning_session, "profile_session": profile_session}
     database.close()
     report_bytes = (workspace / report_path).read_bytes()
     reference = json.loads(metadata)["terminal_receipt"]["result_manifest_ref"]
@@ -57,6 +74,8 @@ def verify(root: Path, exports_requested: bool = False) -> None:
         "task_statuses": tasks, "report_id": report["report_id"], "report_sha256": reference["sha256"],
         "verified_source_sha256": actual,
     }
+    if controls_requested:
+        evidence["controls"] = controls
     if exports_requested:
         evidence["report_exports"] = verify_exports(root, report_bytes, reference)
     else:
@@ -110,4 +129,4 @@ def verify_exports(root: Path, original: bytes, reference: dict) -> list[dict]:
 
 
 if __name__ == "__main__":
-    verify(Path(sys.argv[1]).resolve(strict=True), sys.argv[2:] == ["--exported"])
+    verify(Path(sys.argv[1]).resolve(strict=True), "--exported" in sys.argv[2:], "--controlled" in sys.argv[2:])

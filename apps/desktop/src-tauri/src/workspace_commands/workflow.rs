@@ -2,18 +2,22 @@ use std::sync::Arc;
 
 use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workflow_store::{
-    LocalHealthcheckRequest, LocalHealthcheckRuntime, PlanSource, WorkflowError, WorkflowSnapshot,
-    WorkflowStatus, WorkflowStore,
+    LocalHealthcheckAcceptance, LocalHealthcheckRequest, LocalHealthcheckRuntime, PlanSource,
+    WorkflowError, WorkflowResumeRequest as ResumeBinding, WorkflowSnapshot, WorkflowStatus,
+    WorkflowStore,
 };
 use dd_ui_contracts::workflow::{
-    WorkflowGeometryTaskView, WorkflowGetRequest, WorkflowListRequest, WorkflowPageView,
-    WorkflowPlanSourceView, WorkflowReportGetRequest, WorkflowReportScopeView, WorkflowReportView,
-    WorkflowStartRequest, WorkflowStatusView, WorkflowTaskView, WorkflowView,
+    WorkflowControlAction, WorkflowControlReceipt, WorkflowGeometryTaskView, WorkflowGetRequest,
+    WorkflowListRequest, WorkflowPageView, WorkflowPauseRequest, WorkflowPlanSourceView,
+    WorkflowReportGetRequest, WorkflowReportScopeView, WorkflowReportView, WorkflowResumeRequest,
+    WorkflowResumeStrategy, WorkflowStartRequest, WorkflowStatusView, WorkflowTaskView,
+    WorkflowView,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
 
 use super::{Commands, WorkspaceThread, run};
+use crate::RuntimeMode;
 
 pub(crate) fn configured(
     owner: Arc<WorkspaceThread>,
@@ -29,15 +33,23 @@ pub async fn workflow_start(
     request: WorkflowStartRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
     runtime: State<'_, Option<Arc<LocalHealthcheckRuntime>>>,
+    mode: State<'_, RuntimeMode>,
 ) -> Result<WorkflowView, AppError> {
     let runtime = runtime.inner().clone();
+    let hold_initial_dispatch = mode.smoke_workflow_controls;
     run(
         thread,
         request.context.request_id.clone(),
         move |commands| {
             let runtime = runtime
                 .ok_or_else(|| commands.error("WORKER_UNAVAILABLE", "本机 Worker 未就绪。"))?;
-            commands.start_workflow(runtime, request)
+            if hold_initial_dispatch {
+                // The control smoke pauses an admitted task before its first dispatch.
+                let accepted = commands.admit_workflow(&runtime, request)?;
+                commands.workflow_view(accepted.workflow)
+            } else {
+                commands.start_workflow(runtime, request)
+            }
         },
     )
     .await
@@ -52,6 +64,38 @@ pub async fn workflow_get(
         thread,
         request.context.request_id.clone(),
         move |commands| commands.get_workflow(request),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_pause(
+    request: WorkflowPauseRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+) -> Result<WorkflowControlReceipt, AppError> {
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| commands.pause_workflow(request),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_resume(
+    request: WorkflowResumeRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+    runtime: State<'_, Option<Arc<LocalHealthcheckRuntime>>>,
+) -> Result<WorkflowControlReceipt, AppError> {
+    let runtime = runtime.inner().clone();
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| {
+            let runtime = runtime
+                .ok_or_else(|| commands.error("WORKER_UNAVAILABLE", "本机 Worker 未就绪。"))?;
+            commands.resume_workflow(runtime, request)
+        },
     )
     .await
 }
@@ -75,11 +119,20 @@ impl Commands {
         runtime: Arc<LocalHealthcheckRuntime>,
         request: WorkflowStartRequest,
     ) -> Result<WorkflowView, AppError> {
+        let accepted = self.admit_workflow(&runtime, request)?;
+        self.workflow_view(schedule_workflow(runtime, accepted))
+    }
+
+    fn admit_workflow(
+        &self,
+        runtime: &LocalHealthcheckRuntime,
+        request: WorkflowStartRequest,
+    ) -> Result<LocalHealthcheckAcceptance, AppError> {
         let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
         if request.template_id != LocalHealthcheckRuntime::template_id() {
             return Err(self.error("INVALID_ARGUMENT", "请选择已接入的本地数据体检模板。"));
         }
-        let accepted = runtime
+        runtime
             .admit(
                 session,
                 LocalHealthcheckRequest {
@@ -90,13 +143,71 @@ impl Commands {
                     idempotency_key,
                 },
             )
+            .map_err(|error| self.workflow_error(error))
+    }
+
+    pub(super) fn pause_workflow(
+        &self,
+        request: WorkflowPauseRequest,
+    ) -> Result<WorkflowControlReceipt, AppError> {
+        let session = self.session(request.context)?;
+        let run = self.parse_uuid(request.workflow_run_id.clone())?;
+        let control = self
+            .workflow_store()?
+            .pause(
+                session,
+                run,
+                request.expected_revision.into(),
+                self.now_ms()?,
+            )
             .map_err(|error| self.workflow_error(error))?;
-        if let Some(job) = accepted.job {
-            tauri::async_runtime::spawn(async move {
-                let _ = runtime.run(job).await;
-            });
-        }
-        self.workflow_view(accepted.workflow)
+        Ok(WorkflowControlReceipt {
+            workflow_run_id: request.workflow_run_id,
+            requested: WorkflowControlAction::Pause,
+            observed_status: workflow_status(control.observed_status),
+            revision: control.revision.into(),
+            blocking_task_ids: control
+                .blocking_task_ids
+                .into_iter()
+                .map(|task| self.uuid_text(task.to_string()))
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    pub(super) fn resume_workflow(
+        &self,
+        runtime: Arc<LocalHealthcheckRuntime>,
+        request: WorkflowResumeRequest,
+    ) -> Result<WorkflowControlReceipt, AppError> {
+        let WorkflowResumeStrategy::ResumePaused = request.strategy;
+        let request_id = self.parse_uuid(request.context.request_id.clone())?;
+        let session = self.session(request.context)?;
+        let run = self.parse_uuid(request.workflow_run_id.clone())?;
+        let current = self
+            .workflow_store()?
+            .get(session, run)
+            .map_err(|error| self.workflow_error(error))?;
+        let plan = current
+            .plan_ref
+            .ok_or_else(|| self.workflow_error(WorkflowError::ControlUnavailable))?;
+        let accepted = runtime
+            .resume(
+                session,
+                ResumeBinding {
+                    reference: plan,
+                    expected_row_revision: request.expected_revision.into(),
+                },
+                request_id,
+            )
+            .map_err(|error| self.workflow_error(error))?;
+        let snapshot = schedule_workflow(runtime, accepted);
+        Ok(WorkflowControlReceipt {
+            workflow_run_id: request.workflow_run_id,
+            requested: WorkflowControlAction::Resume,
+            observed_status: workflow_status(snapshot.status),
+            revision: snapshot.row_revision.into(),
+            blocking_task_ids: Vec::new(),
+        })
     }
 
     pub(super) fn get_workflow(
@@ -173,15 +284,7 @@ impl Commands {
         Ok(WorkflowView {
             workflow_run_id: id(snapshot.run_id)?,
             planning_task_id: id(snapshot.planning_task_id)?,
-            status: match snapshot.status {
-                WorkflowStatus::Draft => WorkflowStatusView::Draft,
-                WorkflowStatus::Ready => WorkflowStatusView::Ready,
-                WorkflowStatus::Running => WorkflowStatusView::Running,
-                WorkflowStatus::Paused => WorkflowStatusView::Paused,
-                WorkflowStatus::Interrupted => WorkflowStatusView::Interrupted,
-                WorkflowStatus::WaitingReview => WorkflowStatusView::WaitingReview,
-                WorkflowStatus::Failed => WorkflowStatusView::Failed,
-            },
+            status: workflow_status(snapshot.status),
             row_revision: snapshot.row_revision.into(),
             plan_revision: snapshot
                 .plan_ref
@@ -243,5 +346,29 @@ impl Commands {
             }
             _ => self.error("INTERNAL", "无法处理体检请求。"),
         }
+    }
+}
+
+fn schedule_workflow(
+    runtime: Arc<LocalHealthcheckRuntime>,
+    accepted: LocalHealthcheckAcceptance,
+) -> WorkflowSnapshot {
+    if let Some(job) = accepted.job {
+        tauri::async_runtime::spawn(async move {
+            let _ = runtime.run(job).await;
+        });
+    }
+    accepted.workflow
+}
+
+fn workflow_status(status: WorkflowStatus) -> WorkflowStatusView {
+    match status {
+        WorkflowStatus::Draft => WorkflowStatusView::Draft,
+        WorkflowStatus::Ready => WorkflowStatusView::Ready,
+        WorkflowStatus::Running => WorkflowStatusView::Running,
+        WorkflowStatus::Paused => WorkflowStatusView::Paused,
+        WorkflowStatus::Interrupted => WorkflowStatusView::Interrupted,
+        WorkflowStatus::WaitingReview => WorkflowStatusView::WaitingReview,
+        WorkflowStatus::Failed => WorkflowStatusView::Failed,
     }
 }

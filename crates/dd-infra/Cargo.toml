@@ -317,6 +317,11 @@ path = "../../tests/integration/rpc/workflow_queued_resume.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workflow_geometry_resume"
+path = "../../tests/integration/rpc/workflow_geometry_resume.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "workflow_list"
 path = "../../tests/integration/rpc/workflow_list.rs"
 required-features = ["execution-rpc"]

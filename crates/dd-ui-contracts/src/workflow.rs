@@ -39,6 +39,45 @@ pub struct WorkflowGetRequest {
 
 #[derive(Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct WorkflowPauseRequest {
+    pub context: CommandContext,
+    pub workflow_run_id: UuidText,
+    pub expected_revision: DecimalU64,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowResumeRequest {
+    pub context: CommandContext,
+    pub workflow_run_id: UuidText,
+    pub expected_revision: DecimalU64,
+    pub strategy: WorkflowResumeStrategy,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum WorkflowResumeStrategy {
+    ResumePaused,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum WorkflowControlAction {
+    Pause,
+    Resume,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct WorkflowControlReceipt {
+    pub workflow_run_id: UuidText,
+    pub requested: WorkflowControlAction,
+    pub observed_status: WorkflowStatusView,
+    pub revision: DecimalU64,
+    pub blocking_task_ids: Vec<UuidText>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowListRequest {
     pub context: CommandContext,
     pub dataset_id: UuidText,

@@ -5,6 +5,8 @@ mod control;
 pub use control::WorkflowPauseReceipt;
 #[cfg(feature = "execution-rpc")]
 mod geometry;
+#[cfg(feature = "execution-rpc")]
+mod geometry_resume;
 mod list;
 pub use list::WorkflowPage;
 #[cfg(feature = "execution-rpc")]

@@ -17,7 +17,7 @@ use super::{
     WorkflowReportRequest, WorkflowSnapshot, WorkflowStatus, WorkflowStore, database,
 };
 use crate::dataset_profile_runtime::{DatasetProfileJob, DatasetProfileRuntime};
-use crate::geometry_runtime::GeometryRuntime;
+use crate::geometry_runtime::{GeometryAuditJob, GeometryRuntime};
 use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::now_ms;
 use crate::workspace_thread::WorkspaceThread;
@@ -43,6 +43,7 @@ pub struct LocalHealthcheckJob {
     request_id: Uuid,
     max_pixels: u32,
     profile: Option<DatasetProfileJob>,
+    geometry_jobs: Option<Vec<GeometryAuditJob>>,
 }
 
 pub struct LocalHealthcheckRuntime {
@@ -138,6 +139,7 @@ impl LocalHealthcheckRuntime {
             request_id: request.request_id,
             max_pixels: request.max_pixels,
             profile: Some(profile),
+            geometry_jobs: None,
         });
         Ok(LocalHealthcheckAcceptance {
             workflow: accepted.workflow,
@@ -205,26 +207,31 @@ impl LocalHealthcheckRuntime {
             }
         }
 
-        let reference = job.reference.clone();
-        let store = Arc::clone(&self.store);
-        let checked = tokio::task::spawn_blocking(move || {
-            store.start_geometry(
-                session,
-                &local_policy(),
-                WorkflowGeometryRequest {
-                    reference,
-                    expected_row_revision: job.row_revision,
-                    request_id: job.request_id,
-                    idempotency_key: Uuid::new_v4(),
-                    max_pixels: job.max_pixels,
-                },
-                now_ms().map_err(execution)?,
-            )
-        })
-        .await
-        .map_err(|error| RunFailure::workflow(execution(error)))?
-        .map_err(RunFailure::workflow)?;
-        if !checked.jobs.is_empty() {
+        let (jobs, revision) = if let Some(pending) = job.geometry_jobs {
+            (pending, job.row_revision)
+        } else {
+            let reference = job.reference.clone();
+            let store = Arc::clone(&self.store);
+            let checked = tokio::task::spawn_blocking(move || {
+                store.start_geometry(
+                    session,
+                    &local_policy(),
+                    WorkflowGeometryRequest {
+                        reference,
+                        expected_row_revision: job.row_revision,
+                        request_id: job.request_id,
+                        idempotency_key: Uuid::new_v4(),
+                        max_pixels: job.max_pixels,
+                    },
+                    now_ms().map_err(execution)?,
+                )
+            })
+            .await
+            .map_err(|error| RunFailure::workflow(execution(error)))?
+            .map_err(RunFailure::workflow)?;
+            (checked.jobs, checked.workflow.row_revision)
+        };
+        if !jobs.is_empty() {
             let mut geometry = GeometryRuntime::launch_with_program(
                 Arc::clone(&self.store.owner),
                 session,
@@ -232,7 +239,7 @@ impl LocalHealthcheckRuntime {
             )
             .await
             .map_err(|error| RunFailure::worker(error, "WORKER_START_FAILED"))?;
-            for job in checked.jobs {
+            for job in jobs {
                 if let Err(error) = geometry.audit_admitted(job).await {
                     let _ = geometry.terminate().await;
                     return Err(RunFailure::worker(error, "WORKER_INTERRUPTED"));
@@ -250,7 +257,7 @@ impl LocalHealthcheckRuntime {
                 &local_policy(),
                 WorkflowReportRequest {
                     reference: job.reference,
-                    expected_row_revision: checked.workflow.row_revision,
+                    expected_row_revision: revision,
                     request_id: job.request_id,
                     idempotency_key: Uuid::new_v4(),
                 },
