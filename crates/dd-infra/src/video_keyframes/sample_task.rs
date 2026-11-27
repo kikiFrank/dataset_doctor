@@ -24,6 +24,7 @@ use crate::sqlite::row_uuid;
 use crate::task_store::{TaskStoreError, TaskSubmission, format_digest};
 use crate::video_annotation_store::VideoArtifactReference;
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::now_ms;
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -181,12 +182,29 @@ impl VideoSampleService {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<(), VideoAnnotationError> {
+        self.run_with_program(
+            session,
+            job,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn run_with_program(
+        &self,
+        session: Uuid,
+        job: VideoSampleJob,
+        program: WorkerProgram,
+    ) -> Result<(), VideoAnnotationError> {
         self.start(session, &job)?;
         let task = job.task_id;
         if self.verify_input(session, &job.input).is_err() {
             return self.fail(session, task, "INPUT_MANIFEST_INVALID");
         }
-        let frame_tasks = match self.decode(session, &job, interpreter, entrypoint).await {
+        let frame_tasks = match self.decode(session, &job, program).await {
             Ok(tasks) => tasks,
             Err(code) => return self.fail(session, task, code),
         };
@@ -369,8 +387,7 @@ impl VideoSampleService {
         &self,
         session: Uuid,
         job: &VideoSampleJob,
-        interpreter: PathBuf,
-        entrypoint: PathBuf,
+        program: WorkerProgram,
     ) -> Result<Vec<Uuid>, &'static str> {
         let owner = &self.annotation.owner;
         let video = job.plan.request.source_video_id;
@@ -407,11 +424,10 @@ impl VideoSampleService {
                     .map_err(|_| "FRAME_EVIDENCE_INVALID")?;
                 if let Some(pending) = pending {
                     if worker.is_none() {
-                        match FrameResolveRuntime::launch(
+                        match FrameResolveRuntime::launch_with_program(
                             Arc::clone(owner),
                             session,
-                            interpreter.clone(),
-                            entrypoint.clone(),
+                            program.clone(),
                         )
                         .await
                         {

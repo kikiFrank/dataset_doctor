@@ -43,6 +43,13 @@ Windows 开发版的自动化业务验收使用 `tests/desktop/windows/verify-ru
 `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceStagingBatch -PythonExe $reader -StagingFixturePlan $plan`
 可在真实 WebView2 批选两个已审核合成帧，登记检查缺项理由并接收。每次运行复制一份夹具，独立核对批次回执、成员关系和原始帧字节。
 
+使用 `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceVideo -PythonExe $reader -PackagedWorkerExe $packed -VideoToolsEvidence $tools`
+可验收 Windows 搬移布局。这里 `$packed` 指向已打包的 `dd-worker.exe`，`$tools` 指向已核验的 FFmpeg/ffprobe 工具链证据 JSON。
+测试复制 Worker 及视频工具，关闭开发环境路径，登记合成视频、读取指定帧并重开 Workspace，独立核对两个任务的封存产物、像素及源摘要。
+将该测试运行目录中的 `Packaged desktop` 作为 `$layout`，执行
+`tests/desktop/windows/check-command-handlers.ps1 -RustBin $rustBin -VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe -PackagedVideoResources $layout`
+可进一步复跑同一搬移布局的追踪、训练采样与待接收审核。
+
 打开已有 Workspace 后可分页浏览 Dataset 和样本，查看正式标注与受限的本地图像。命令宿主验收使用 `tests/desktop/windows/check-command-handlers.ps1 -RustBin $rustBin`，图像授权和标注读取可用 `scripts/storage/windows/check-workspace-sqlite.ps1 -RustBin $rustBin -Suite MediaDisplay` 或 `-Suite AnnotationView` 单独复跑。这些命令均可在命令行执行。样本页面的新交互与自定义图像协议仍需实际 WebView2 验收。
 
 在宿主验收附加 `-CocoReaderPythonExe $reader` 可用装有 `pycocotools 2.0.11` 和 Pillow 的本机 Python 重新读取测试生成的 COCO 包。该用例通过宿主完成合成样本导入、检查、审核、Final 确认和导出，产物保存在 `target/desktop-commands/runs/`。

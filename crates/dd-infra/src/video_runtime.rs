@@ -18,6 +18,7 @@ use crate::paths::{is_portable_relative_file, open_registered_file, open_scoped_
 use crate::task_store::{TaskOutcome, TaskStoreError, format_digest, parse_digest};
 use crate::video_index::{VideoProbeObservation, read_video_observation};
 use crate::video_registration::{CAPABILITY, VideoImportReceipt};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -55,8 +56,24 @@ impl VideoProbeRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, VideoRuntimeError> {
+        Self::launch_with_program(
+            workspace,
+            session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        workspace: Arc<WorkspaceThread>,
+        session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, VideoRuntimeError> {
         Ok(Self {
-            runtime: WorkerRuntime::launch(workspace, session, interpreter, entrypoint, CAPABILITY)
+            runtime: WorkerRuntime::launch_with_program(workspace, session, program, CAPABILITY)
                 .await?,
         })
     }

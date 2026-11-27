@@ -1,4 +1,5 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use dd_infra::video_query::{VideoSourceAvailability, registered_video_detail};
 use dd_infra::video_registration::{
@@ -6,6 +7,7 @@ use dd_infra::video_registration::{
 };
 use dd_infra::video_runtime::VideoProbeRuntime;
 use dd_infra::video_runtime::VideoRuntimeError;
+use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workspace_thread::WorkspaceThread;
 use dd_ui_contracts::dataset_import::{ImportOperationKind, ImportTaskView};
 use dd_ui_contracts::video::{
@@ -17,19 +19,25 @@ use tauri::{State, async_runtime};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-use super::{Commands, GRANT_LIFETIME, configured_worker_script, run};
+use super::{Commands, GRANT_LIFETIME, run};
 
 pub(crate) struct VideoRunner {
-    interpreter: PathBuf,
-    entrypoint: PathBuf,
+    program: WorkerProgram,
     slot: async_runtime::Mutex<()>,
 }
 
 impl VideoRunner {
+    #[cfg(test)]
     pub(crate) fn new(interpreter: PathBuf, entrypoint: PathBuf) -> Arc<Self> {
-        Arc::new(Self {
+        Self::from_program(WorkerProgram::Script {
             interpreter,
             entrypoint,
+        })
+    }
+
+    fn from_program(program: WorkerProgram) -> Arc<Self> {
+        Arc::new(Self {
+            program,
             slot: async_runtime::Mutex::new(()),
         })
     }
@@ -51,11 +59,10 @@ impl VideoRunner {
         if !matches!(state, Ok(Ok(outcome)) if outcome.status == "QUEUED") {
             return;
         }
-        let started = FrameResolveRuntime::launch(
+        let started = FrameResolveRuntime::launch_with_program(
             Arc::clone(&workspace),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await;
         let startup_failed = match started {
@@ -77,9 +84,8 @@ impl VideoRunner {
         .await;
     }
 
-    pub(crate) fn configured() -> Option<Arc<Self>> {
-        let (interpreter, entrypoint) = configured_worker_script()?;
-        Some(Self::new(interpreter, entrypoint))
+    pub(crate) fn configured(program: Option<WorkerProgram>) -> Option<Arc<Self>> {
+        program.map(Self::from_program)
     }
 
     pub(super) async fn execute_sample(
@@ -90,12 +96,7 @@ impl VideoRunner {
     ) {
         let _slot = self.slot.lock().await;
         let _ = service
-            .run(
-                session,
-                job,
-                self.interpreter.clone(),
-                self.entrypoint.clone(),
-            )
+            .run_with_program(session, job, self.program.clone())
             .await;
     }
 
@@ -113,11 +114,10 @@ impl VideoRunner {
         if !matches!(queued, Ok(Ok(outcome)) if outcome.status == "QUEUED") {
             return;
         }
-        let launched = VideoTrackingRuntime::launch(
+        let launched = VideoTrackingRuntime::launch_with_program(
             Arc::clone(&workspace),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await;
         let startup_failed = match launched {
@@ -156,11 +156,10 @@ impl VideoRunner {
         if !matches!(status, Ok(Ok(outcome)) if outcome.status == "QUEUED") {
             return;
         }
-        let worker = VideoProbeRuntime::launch(
+        let worker = VideoProbeRuntime::launch_with_program(
             Arc::clone(&workspace),
             session,
-            self.interpreter.clone(),
-            self.entrypoint.clone(),
+            self.program.clone(),
         )
         .await;
         let startup_failed = match worker {

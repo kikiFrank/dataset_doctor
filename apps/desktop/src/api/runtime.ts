@@ -9,6 +9,7 @@ interface RuntimeStatus {
   verify_workspace_workflow: boolean;
   verify_workspace_report_export: boolean;
   verify_workspace_staging_batch: boolean;
+  verify_workspace_video: boolean;
 }
 
 export function acknowledgeDesktopRuntime(): Promise<RuntimeStatus> {

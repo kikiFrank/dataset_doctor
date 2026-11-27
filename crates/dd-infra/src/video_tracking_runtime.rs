@@ -29,6 +29,7 @@ use crate::video_keyframes::{
     VideoAnnotationService, VideoSamplingMode, VideoSamplingPurpose, VideoSamplingRequest,
 };
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{WorkerJob, WorkerOperation, WorkerRuntime, now_ms};
 use crate::workspace_thread::{WorkspaceThread, WorkspaceThreadError};
 
@@ -191,8 +192,24 @@ impl VideoTrackingRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, TrackingError> {
+        Self::launch_with_program(
+            owner,
+            session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        owner: Arc<WorkspaceThread>,
+        session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, TrackingError> {
         Ok(Self {
-            runtime: WorkerRuntime::launch(owner, session, interpreter, entrypoint, CAPABILITY)
+            runtime: WorkerRuntime::launch_with_program(owner, session, program, CAPABILITY)
                 .await?,
             contracts: Arc::new(JsonContracts::new().map_err(TrackingError::TaskEvidence)?),
         })

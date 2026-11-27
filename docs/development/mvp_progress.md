@@ -154,7 +154,8 @@
 | P10 搬移布局中的桌面颜色修复 | `46e2ab7`。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceColor -PythonExe $readerPython -PackagedWorkerExe $packed` 通过。两个开发入口均不可用时，真实 WebView2 生成、显示和比较候选与掩膜，明确采用后真实复检，维持原 COCO 包和目标读取器。红绿 `target/dev/logs/p10-packaged-color-{red,green}.log`，文件证据 `target/desktop-smoke/runs/e850beaf34474662b8d479b8554bb060/verify.log`。最终工作树命令宿主 12 项和 COCO 读取器通过 `target/dev/logs/p10-packaged-color-command-host.log`。 |
 | P08 批次 Staging 接收 | `b4d0189`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test staging_batch_commit --test staging_commit` 专项 2 项通过。两个真实合成视频帧分别完成几何、Final 和复检后生成聚合证据。核对伪造引用、单报告冒充批次、缺确认和一条源报告篡改的拒绝。第二个样本的 SQLite 注入故障回滚整批。重试一次写入成员关系，保留帧和源视频字节、Final 标识，重开可查询报告和回执，反序重放保持幂等。红绿 `target/dev/logs/p08-staging-batch-{red,green,verified}.log`。Windows 累计回归、七套标准 WebView2 和三套随包布局见 `target/dev/logs/p08-staging-batch-regression.log`。 |
 | P08 桌面批次命令 | `b4d0189`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-desktop --features video-acceptance workspace_commands::staging_batch_tests` 专项通过。复用两帧真实夹具，验证 `staging_batch_report_build`、`staging_commit`、`task_get`、范围与重开。命令红绿及类型生成 `target/dev/logs/p08-desktop-staging-batch-{red,green,wire}.log`。夹具复用的两项开发依赖沿用已有锁定版本。累计桌面宿主 14 项和读取器通过见 `target/dev/logs/p08-desktop-staging-batch-command-host.log`。 |
-| P08 WebView2 批选与接收 | 本页所在提交。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceStagingBatch -PythonExe $readerPython -StagingFixturePlan $plan` 专项通过。红测在真实页面等待两个批选控件超时，证据 `target/desktop-smoke/runs/c3cfe27586404707a707e2ea08eadb8c/verify.log`。绿测验证未确认时禁止执行，填写缺项理由并明确接收后两帧同时入库，重开仍为空待接收区。独立校验 SQLite 完整性、外键、回执、Final、报告与源字节。最新证据 `target/desktop-smoke/runs/b278233dae3b4ca9b0100c8b292a5d96/staging-batch-evidence.json`。Windows 累计回归 14 项宿主、八套标准 WebView2、三套搬移布局和 COCO 读取器，以及 Node 15 项、SQLite 双进程锁、JSON Schema 10 项、Protobuf 均通过，日志 `target/dev/logs/p08-staging-batch-ui-{regression,node,sqlite-lock,json,protobuf}.log`。 |
+| P08 WebView2 批选与接收 | `b3ca2ad`。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceStagingBatch -PythonExe $readerPython -StagingFixturePlan $plan` 专项通过。红测在真实页面等待两个批选控件超时，证据 `target/desktop-smoke/runs/c3cfe27586404707a707e2ea08eadb8c/verify.log`。绿测验证未确认时禁止执行，填写缺项理由并明确接收后两帧同时入库，重开仍为空待接收区。独立校验 SQLite 完整性、外键、回执、Final、报告与源字节。最新证据 `target/desktop-smoke/runs/b278233dae3b4ca9b0100c8b292a5d96/staging-batch-evidence.json`。Windows 累计回归 14 项宿主、八套标准 WebView2、三套搬移布局和 COCO 读取器，以及 Node 15 项、SQLite 双进程锁、JSON Schema 10 项、Protobuf 均通过，日志 `target/dev/logs/p08-staging-batch-ui-{regression,node,sqlite-lock,json,protobuf}.log`。 |
+| P10 搬移布局中的桌面视频 | 本页所在提交。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceVideo -PythonExe $readerPython -PackagedWorkerExe $packed -VideoToolsEvidence $tools` 专项通过。开发 Python、入口脚本、FFmpeg、ffprobe 均不可用时，实际 WebView2 登记合成视频、取得六帧索引、显示第 2 帧并重开。独立核验源摘要、1000000 微秒 PTS、实际像素与封存文件、SQLite 完整性和外键。红测在 SQLite 核实 `WORKER_START_FAILED`，日志 `target/dev/logs/p10-webview-packaged-video-{red,red-database,green}.log`。最新文件证据 `target/desktop-smoke/runs/a4df6db0a76443c4a455414a0433ed9a/video-evidence.json`。命令宿主以 `-PackagedVideoResources $layout` 核对同一随包配置的追踪、训练采样和持久回执。红绿 `target/dev/logs/p10-packaged-video-host-{red,green,reusable}.log`。Windows 累计回归 14 项宿主、八套标准 WebView2、四套搬移布局、实际 COCO 读取器和 FFmpeg 15 项通过，日志 `target/dev/logs/p10-packaged-video-{regression,ffmpeg}.log`。正式安装和原生系统选择器待验收。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -169,15 +170,15 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 - P01 还需首切片命令 DTO、专用 StartX 和 Core 执行契约、三语言完整 G-CONTRACT 及统一开发入口。旧发布库升级验收等待实际发布基线。
 - P06 已在命令行跑通合成业务链和目标读取器。Dataset/Asset 分页、只读样本、持久化异步导入和真实 Worker 标注检查已接到 Tauri。审核草稿、画布、显式批准 Final 和 COCO 桌面入口均已接通，宿主链路和目标读取器已实测。Windows WebView2 自动化业务 IPC 已走通创建、导入、检查、Final、导出及目标读取器。系统选择器、画布鼠标操作和可见状态仍待原生窗口验收。
 - 2026-11-27 用户已授权桌面实操验收。恢复时桌面仍显示 Windows 锁屏，继续离线开发和 WebView2 自动验收，原生操作等桌面解锁后接续。
-- 07:22 再次读取合成测试窗口，可见画面仍为 Windows 锁屏。原生选择器与鼠标操作沿用下方工作区接续。
+- 08:11 再次读取合成测试窗口，可见画面仍为 Windows 锁屏。原生选择器与鼠标操作沿用下方工作区接续。
 
 累计存储测试曾因并发执行同一 target 下的测试和重链接而报 Windows LNK1104，日志 target/p01-04/logs/255c8d03e4c1499ba334c424ade93f94.log。等待原测试进程退出后重跑通过。后续对同一 Cargo target 的测试编译与执行按轮顺序运行。
 
 ## 本轮接续检查点
 
-- Dataset 本地体检已在 WebView2 走到人工关卡。接续工作流完成人工审核、变更后的复检以及可选模型。图像质量 Workspace 专项和累计回归已通过，实际结果接入聚合报告待开发。随包画像、几何、报告和颜色在 `46e2ab7` 通过实际搬移布局验收，视频随包启动和正式安装待验证。P08 已通过 Core、桌面宿主和 WebView2 批次专项。可复用的两帧夹具由命令宿主生成，`$plan` 指向宿主日志输出的 `staging-batch-ui.json`。下一条执行随包视频红测，在搬移的桌面和 Worker 布局中禁用开发入口及工具环境变量，由真实 WebView2 页面登记视频并读取指定帧。
+- Dataset 本地体检已在 WebView2 走到人工关卡。工作流暂停已用 `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_pause` 实跑红测，日志 `target/dev/logs/p07-workflow-pause-red-final.log`。接续核对真实画像后的暂停、已排队但未派发的几何任务、重开和故障回滚，再继续恢复、人工审核、变更后的复检与可选模型。图像质量 Workspace 专项已通过，聚合报告待接入。随包画像、几何、报告、颜色和视频已通过搬移布局验收，正式安装待验证。P08 批次可复用夹具为宿主日志输出的 `staging-batch-ui.json`。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
-- P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需随包视频链与可选检查。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
+- P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。
 
 ## 待完成的桌面实操验收

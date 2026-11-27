@@ -27,6 +27,7 @@ use crate::task_store::{TaskOutcome, TaskStoreError, TaskSubmission, format_dige
 use crate::video_index::{ResolvedVideoFrame, read_resolved_video_frame};
 use crate::video_query::{VideoSourceAvailability, registered_video_detail};
 use crate::video_runtime::read_registered_video_index;
+use crate::worker_process::WorkerProgram;
 use crate::worker_runtime::{
     WorkerJob, WorkerOperation, WorkerRuntime, WorkerRuntimeError, now_ms,
 };
@@ -364,8 +365,24 @@ impl FrameResolveRuntime {
         interpreter: PathBuf,
         entrypoint: PathBuf,
     ) -> Result<Self, WorkerRuntimeError> {
+        Self::launch_with_program(
+            owner,
+            session,
+            WorkerProgram::Script {
+                interpreter,
+                entrypoint,
+            },
+        )
+        .await
+    }
+
+    pub async fn launch_with_program(
+        owner: Arc<WorkspaceThread>,
+        session: Uuid,
+        program: WorkerProgram,
+    ) -> Result<Self, WorkerRuntimeError> {
         Ok(Self {
-            runtime: WorkerRuntime::launch(owner, session, interpreter, entrypoint, CAPABILITY)
+            runtime: WorkerRuntime::launch_with_program(owner, session, program, CAPABILITY)
                 .await?,
             contracts: Arc::new(JsonContracts::new().map_err(WorkerRuntimeError::TaskEvidence)?),
         })

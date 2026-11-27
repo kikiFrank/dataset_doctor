@@ -55,10 +55,16 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         thread: Arc::clone(&owner),
         request_id: uuid(Uuid::new_v4().to_string()),
     };
-    let runner = VideoRunner::new(
-        repo.join("target/dev/worker-venv/Scripts/python.exe"),
-        repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
-    );
+    let runner = if let Some(resources) = std::env::var_os("DD_DESKTOP_PACKAGED_VIDEO_RESOURCES") {
+        let program = configured_worker_program(Some(PathBuf::from(resources)));
+        assert!(matches!(program, Some(WorkerProgram::Packaged { .. })));
+        VideoRunner::configured(program).unwrap()
+    } else {
+        VideoRunner::new(
+            repo.join("target/dev/worker-venv/Scripts/python.exe"),
+            repo.join("services/python-worker/src/dd_worker/entrypoint.py"),
+        )
+    };
     let grant = commands.video_file(context(session), clip.clone()).unwrap();
     let imported = commands
         .start_video_import(

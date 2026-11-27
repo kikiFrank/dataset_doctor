@@ -147,6 +147,7 @@ pub async fn path_select(
 ) -> Result<Option<PathGrant>, AppError> {
     let selected_fixture = match (&request.purpose, &request.kind) {
         (PathPurpose::Workspace, PathKind::Directory) => runtime.smoke_workspace.clone(),
+        (PathPurpose::Import, PathKind::File) => runtime.smoke_video.clone(),
         (PathPurpose::Import, PathKind::Directory) => runtime
             .smoke_business_directories
             .as_ref()

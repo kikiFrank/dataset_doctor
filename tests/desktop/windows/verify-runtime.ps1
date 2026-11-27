@@ -1,10 +1,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')][string]$Suite = 'Runtime',
     [string]$PythonExe,
     [string]$PackagedWorkerExe,
-    [string]$StagingFixturePlan
+    [string]$StagingFixturePlan,
+    [string]$VideoToolsEvidence
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,8 +25,8 @@ try {
     $start.RedirectStandardError = $true
     $start.EnvironmentVariables['DD_DESKTOP_SMOKE_ROOT'] = $run
     if ($PackagedWorkerExe) {
-        if ($Suite -notin @('WorkspaceBusiness', 'WorkspaceReportExport', 'WorkspaceColor')) {
-            throw 'Packaged Worker layout requires WorkspaceBusiness, WorkspaceReportExport, or WorkspaceColor.'
+        if ($Suite -notin @('WorkspaceBusiness', 'WorkspaceReportExport', 'WorkspaceColor', 'WorkspaceVideo')) {
+            throw 'The chosen suite does not support a packaged Worker layout.'
         }
         $product = (Resolve-Path -LiteralPath $PackagedWorkerExe).Path
         if ((Split-Path -Leaf $product) -ne 'dd-worker.exe') { throw 'Expected the packaged dd-worker.exe.' }
@@ -58,6 +59,19 @@ try {
         $start.Arguments += ' --workspace-create-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
+    } elseif ($Suite -eq 'WorkspaceVideo') {
+        if (-not $PackagedWorkerExe -or -not $VideoToolsEvidence) {
+            throw 'Pass the packaged Worker executable and the verified FFmpeg toolchain evidence.'
+        }
+        $python = (Resolve-Path -LiteralPath $PythonExe).Path
+        $video = & (Join-Path $PSScriptRoot 'seed_packaged_video.ps1') -Run $run -WorkerFolder $workerFolder -VideoToolsEvidence $VideoToolsEvidence
+        $workspace = Join-Path $run 'Synthetic video Workspace'
+        New-Item -ItemType Directory -Path $workspace | Out-Null
+        $start.Arguments += ' --workspace-video-smoke'
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
+        $start.EnvironmentVariables['DD_WORKER_VIDEO_FFMPEG'] = Join-Path $run 'missing-ffmpeg.exe'
+        $start.EnvironmentVariables['DD_WORKER_VIDEO_FFPROBE'] = Join-Path $run 'missing-ffprobe.exe'
+        $expected = 'DESKTOP_WORKSPACE_VIDEO_VERIFIED'
     } elseif ($Suite -eq 'WorkspaceStagingBatch') {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
         if (-not $StagingFixturePlan) { throw 'Pass a staging-batch-ui.json from the video command host.' }
@@ -106,7 +120,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch')) { 55000 } else { 25000 }
+        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')) { 55000 } else { 25000 }
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
@@ -123,7 +137,10 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
             throw 'The native application did not publish both Workspace files.'
         }
-        if ($Suite -eq 'WorkspaceStagingBatch') {
+        if ($Suite -eq 'WorkspaceVideo') {
+            & $python -I -B (Join-Path $PSScriptRoot 'verify_video_fixture.py') $workspace $video.Source $video.Reference $video.SourceDigest
+            if ($LASTEXITCODE -ne 0) { throw 'The packaged video failed the database, index and frame checks.' }
+        } elseif ($Suite -eq 'WorkspaceStagingBatch') {
             & $python -I -B (Join-Path $PSScriptRoot 'verify_staging_batch_fixture.py') $workspace $fixturePlan $sourceDigest
             if ($LASTEXITCODE -ne 0) { throw 'The Staging batch failed the database and source checks.' }
         } elseif ($Suite -in @('WorkspaceWorkflow', 'WorkspaceReportExport')) {

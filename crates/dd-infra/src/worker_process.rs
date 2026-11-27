@@ -1,6 +1,6 @@
 //! Start and supervise the local Python Worker without shell interpolation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use dd_protocol::v1::{
     ColorPreviewRequest, DatasetProfileRequest, ExecutionHandle, ExecutionLookup,
@@ -86,6 +86,11 @@ impl WorkerProcess {
             .current_dir(parent)
             .env_remove("PYTHONHOME")
             .env_remove("PYTHONPATH");
+        if let Some((ffmpeg, ffprobe)) = bundled_video_tools(parent) {
+            command
+                .env("DD_WORKER_VIDEO_FFMPEG", ffmpeg)
+                .env("DD_WORKER_VIDEO_FFPROBE", ffprobe);
+        }
         Self::start(command, executor_session, core).await
     }
 
@@ -220,4 +225,19 @@ impl WorkerProcess {
     pub(crate) async fn terminate(self) -> Result<(), WorkerProcessError> {
         self.process.terminate().await
     }
+}
+
+fn bundled_video_tools(worker_directory: &Path) -> Option<(PathBuf, PathBuf)> {
+    let root = worker_directory.canonicalize().ok()?;
+    let directory = root.join("video-tools");
+    if directory.canonicalize().ok()? != directory {
+        return None;
+    }
+    let tools = |name: &str| {
+        let suffix = if cfg!(windows) { ".exe" } else { "" };
+        let executable = directory.join(format!("{name}{suffix}"));
+        let resolved = executable.canonicalize().ok()?;
+        (resolved == executable && resolved.is_file()).then_some(resolved)
+    };
+    Some((tools("ffmpeg")?, tools("ffprobe")?))
 }

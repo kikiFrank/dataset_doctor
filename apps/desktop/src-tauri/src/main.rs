@@ -21,6 +21,7 @@ struct RuntimeMode {
     smoke_workflow: bool,
     smoke_report_export: bool,
     smoke_staging_batch: bool,
+    smoke_video: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +39,7 @@ struct DesktopReadyResponse {
     verify_workspace_workflow: bool,
     verify_workspace_report_export: bool,
     verify_workspace_staging_batch: bool,
+    verify_workspace_video: bool,
 }
 
 #[tauri::command]
@@ -62,6 +64,7 @@ fn desktop_ready(
         verify_workspace: runtime.smoke_workspace.is_some()
             && !runtime.smoke_workspace_create
             && !runtime.smoke_staging_batch
+            && runtime.smoke_video.is_none()
             && !business,
         verify_workspace_create: runtime.smoke_workspace_create,
         verify_workspace_business: business,
@@ -69,6 +72,7 @@ fn desktop_ready(
         verify_workspace_workflow: runtime.smoke_workflow || runtime.smoke_report_export,
         verify_workspace_report_export: runtime.smoke_report_export,
         verify_workspace_staging_batch: runtime.smoke_staging_batch,
+        verify_workspace_video: runtime.smoke_video.is_some(),
     })
 }
 
@@ -95,7 +99,7 @@ async fn desktop_workspace_verified(
         }
     }
     if let Some(failure) = failure {
-        if !business && !runtime.smoke_staging_batch {
+        if !business && !runtime.smoke_staging_batch && runtime.smoke_video.is_none() {
             return Err("Business verification mode is inactive".into());
         }
         eprintln!("DESKTOP_WORKSPACE_BUSINESS_FAILED {failure}");
@@ -113,6 +117,8 @@ async fn desktop_workspace_verified(
         "DESKTOP_WORKSPACE_WORKFLOW_VERIFIED"
     } else if runtime.smoke_staging_batch {
         "DESKTOP_WORKSPACE_STAGING_BATCH_VERIFIED"
+    } else if runtime.smoke_video.is_some() {
+        "DESKTOP_WORKSPACE_VIDEO_VERIFIED"
     } else if business {
         "DESKTOP_WORKSPACE_BUSINESS_VERIFIED"
     } else if runtime.smoke_workspace_create {
@@ -153,6 +159,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && std::env::args_os().any(|argument| argument == "--workspace-report-export-smoke");
     let smoke_staging_batch = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-staging-batch-smoke");
+    let smoke_workspace_video = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-video-smoke");
     let smoke_workspace_open = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-smoke");
     if [
@@ -162,6 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         smoke_workflow,
         smoke_report_export,
         smoke_staging_batch,
+        smoke_workspace_video,
         smoke_workspace_open,
     ]
     .into_iter()
@@ -178,6 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || smoke_workflow
         || smoke_report_export
         || smoke_staging_batch
+        || smoke_workspace_video
     {
         let path = PathBuf::from(
             std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
@@ -185,6 +195,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .canonicalize()?;
         if path.parent() != smoke_root.as_deref() {
             return Err("Workspace fixture must be in the desktop smoke run".into());
+        }
+        Some(path)
+    } else {
+        None
+    };
+    let smoke_video = if smoke_workspace_video {
+        let root = smoke_root
+            .as_deref()
+            .ok_or("Video verification requires a dedicated run")?;
+        let expected = root.join("Synthetic motion.mkv");
+        let path = expected.canonicalize()?;
+        if path != expected || !path.is_file() {
+            return Err("The synthetic video must be a direct child of the smoke run".into());
         }
         Some(path)
     } else {
@@ -235,7 +258,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .manage(workspace)
         .manage(media)
         .manage(imports)
-        .manage(workspace_commands::video::VideoRunner::configured())
         .manage(RuntimeMode {
             smoke_root,
             smoke_workspace,
@@ -245,10 +267,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_workflow,
             smoke_report_export,
             smoke_staging_batch,
+            smoke_video,
         })
         .setup(|app| {
             let worker =
                 workspace_commands::configured_worker_program(app.path().resource_dir().ok());
+            app.manage(workspace_commands::video::VideoRunner::configured(
+                worker.clone(),
+            ));
             app.manage(workspace_commands::geometry::GeometryRunner::configured(
                 worker.clone(),
             ));
