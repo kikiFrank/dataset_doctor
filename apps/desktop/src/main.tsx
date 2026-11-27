@@ -6,6 +6,7 @@ import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, selec
 import type { OpenWorkspace } from "./api/workspace";
 import { verifyWorkspaceCreationIpc, verifyWorkspaceIpc } from "./api/workspace-smoke";
 import { verifyWorkspaceBusinessIpc } from "./api/workspace-business-smoke";
+import { verifyWorkspaceStagingBatchIpc } from "./api/workspace-staging-batch-smoke";
 import { DatasetBrowser } from "./dataset-browser";
 import { VideoImportPanel } from "./video-import-panel";
 import { WorkspaceBackupPanel } from "./workspace-backup-panel";
@@ -28,6 +29,7 @@ function App() {
       setRuntimeConnected(true);
       if (runtime.verify_workspace) await verifyWorkspaceIpc();
       if (runtime.verify_workspace_create) await verifyWorkspaceCreationIpc();
+      if (runtime.verify_workspace_staging_batch) await verifyWorkspaceStagingBatchIpc();
       if (runtime.verify_workspace_business) await verifyWorkspaceBusinessIpc({
         verifyColor: runtime.verify_workspace_color, verifyWorkflow: runtime.verify_workspace_workflow,
         verifyReportExport: runtime.verify_workspace_report_export,

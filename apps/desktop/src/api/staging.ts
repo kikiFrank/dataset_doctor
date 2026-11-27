@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  ImportOperationRef, StagingCommitRequest, StagingListRequest, StagingPage, StagingReportGetRequest,
-  StagingReportView, StagingState,
+  ArtifactReference, ImportOperationRef, StagingBatchReportBuildRequest, StagingBatchReportView,
+  StagingCommitRequest, StagingListRequest, StagingPage, StagingReportGetRequest, StagingReportView, StagingState,
 } from "./generated/wire-primitives";
 import { context, type OpenWorkspace } from "./workspace";
 import type { StagingCommitDetails } from "../staging-report-view";
@@ -19,6 +19,17 @@ export function getStagingReport(workspace: OpenWorkspace, reportId: string): Pr
     context: context(workspace, crypto.randomUUID()), report_id: reportId,
   };
   return invoke("report_get", { request });
+}
+
+export function prepareStagingBatch(
+  workspace: OpenWorkspace, dataset: string, references: ArtifactReference[], key: string,
+): Promise<StagingBatchReportView> {
+  const request: StagingBatchReportBuildRequest = {
+    context: { ...context(workspace, crypto.randomUUID()), idempotency_key: key },
+    target_dataset_id: dataset,
+    source_report_refs: references,
+  };
+  return invoke("staging_batch_report_build", { request });
 }
 
 export function commitStaging(

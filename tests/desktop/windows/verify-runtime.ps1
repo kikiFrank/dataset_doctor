@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$DesktopExe,
-    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')][string]$Suite = 'Runtime',
+    [ValidateSet('Runtime', 'Workspace', 'WorkspaceCreate', 'WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch')][string]$Suite = 'Runtime',
     [string]$PythonExe,
-    [string]$PackagedWorkerExe
+    [string]$PackagedWorkerExe,
+    [string]$StagingFixturePlan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +58,29 @@ try {
         $start.Arguments += ' --workspace-create-smoke'
         $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
         $expected = 'DESKTOP_WORKSPACE_CREATE_VERIFIED'
+    } elseif ($Suite -eq 'WorkspaceStagingBatch') {
+        $python = (Resolve-Path -LiteralPath $PythonExe).Path
+        if (-not $StagingFixturePlan) { throw 'Pass a staging-batch-ui.json from the video command host.' }
+        $fixturePlan = (Resolve-Path -LiteralPath $StagingFixturePlan).Path
+        $testRuns = Join-Path $repo 'target\desktop-commands\runs'
+        $prefix = $testRuns + '\'
+        if (-not $fixturePlan.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Staging fixture plan must be under the desktop command runs.'
+        }
+        $plan = Get-Content -LiteralPath $fixturePlan -Encoding utf8 -Raw | ConvertFrom-Json
+        $fixtureWorkspace = (Resolve-Path -LiteralPath $plan.workspace).ProviderPath.Replace('\\?\', '')
+        $fixtureVideo = (Resolve-Path -LiteralPath $plan.source_video).ProviderPath.Replace('\\?\', '')
+        $fixtureRun = (Split-Path -Parent $fixturePlan) + '\'
+        if (-not $fixtureWorkspace.StartsWith($fixtureRun, [StringComparison]::OrdinalIgnoreCase) -or
+            -not $fixtureVideo.StartsWith($fixtureRun, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Staging fixture files must belong to the command host run.'
+        }
+        $sourceDigest = (Get-FileHash -LiteralPath $fixtureVideo).Hash
+        $workspace = Join-Path $run 'Staging Batch Workspace'
+        Copy-Item -LiteralPath $fixtureWorkspace -Destination $workspace -Recurse
+        $start.Arguments += ' --workspace-staging-batch-smoke'
+        $start.EnvironmentVariables['DD_DESKTOP_SMOKE_WORKSPACE'] = $workspace
+        $expected = 'DESKTOP_WORKSPACE_STAGING_BATCH_VERIFIED'
     } elseif ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')) {
         $python = (Resolve-Path -LiteralPath $PythonExe).Path
         $business = Join-Path $run 'Synthetic business'
@@ -82,7 +106,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport')) { 55000 } else { 25000 }
+        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceReportExport', 'WorkspaceStagingBatch')) { 55000 } else { 25000 }
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'
@@ -99,7 +123,10 @@ try {
             -not (Test-Path -LiteralPath (Join-Path $workspace 'workspace.db') -PathType Leaf))) {
             throw 'The native application did not publish both Workspace files.'
         }
-        if ($Suite -in @('WorkspaceWorkflow', 'WorkspaceReportExport')) {
+        if ($Suite -eq 'WorkspaceStagingBatch') {
+            & $python -I -B (Join-Path $PSScriptRoot 'verify_staging_batch_fixture.py') $workspace $fixturePlan $sourceDigest
+            if ($LASTEXITCODE -ne 0) { throw 'The Staging batch failed the database and source checks.' }
+        } elseif ($Suite -in @('WorkspaceWorkflow', 'WorkspaceReportExport')) {
             $arguments = @($business)
             if ($Suite -eq 'WorkspaceReportExport') { $arguments += '--exported' }
             & $python -I -B (Join-Path $PSScriptRoot 'verify_workflow_fixture.py') @arguments

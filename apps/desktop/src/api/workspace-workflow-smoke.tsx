@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import { WorkflowPanel } from "../workflow-panel";
 import { closeWorkspace, selectAndOpenWorkspace, type OpenWorkspace } from "./workspace";
 
-async function waitFor<T>(read: () => T | null, host: HTMLElement, description: string): Promise<T> {
+export async function waitFor<T>(read: () => T | null, host: HTMLElement, description: string): Promise<T> {
   const deadline = performance.now() + 20_000;
   do {
     const error = host.querySelector('[role="alert"]')?.textContent;

@@ -4,12 +4,9 @@ import { commitStaging, getStagingReport } from "./api/staging";
 import { getTask } from "./api/task";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { ReportExportActions } from "./report-export-actions";
-import { findingsToAcknowledge, matchesCurrentReport, reportCheckLabel, stagingCommitDetails } from "./staging-report-view";
-
-const checkNames: Record<string, string> = {
-  annotation_geometry: "标注几何",
-  semantic_review: "语义检查",
-};
+import {
+  findingsToAcknowledge, matchesCurrentReport, reportCheckLabel, stagingCheckNames, stagingCommitDetails,
+} from "./staging-report-view";
 
 const reasonMessages: Record<string, string> = {
   NO_ACCEPTED_EVIDENCE: "此样本没有已核验的语义检查结果。",
@@ -79,7 +76,7 @@ export function StagingReportPanel({ workspace, item, acceptanceBlocked, onClose
     {report && <ReportExportActions key={report.report_id} workspace={workspace} reference={report.report_artifact_ref} />}
     {report && <ul>
       {report.checks.map(check => <li key={check.check_id}>
-        <strong>{checkNames[check.check_id] ?? check.check_id}</strong> · {reportCheckLabel(check)}
+        <strong>{stagingCheckNames[check.check_id] ?? check.check_id}</strong> · {reportCheckLabel(check)}
         {" · "}{check.processed_assets} / {check.total_assets} 个样本
         {check.skip_or_failure_reason && <p>
           {reasonMessages[check.skip_or_failure_reason.code] ?? check.skip_or_failure_reason.message}
@@ -103,7 +100,7 @@ export function StagingReportPanel({ workspace, item, acceptanceBlocked, onClose
         }} /> 已确认 {finding.finding_code}
       </label>)}
       {report.unexecuted_checks.map(check => <label key={check}>
-        接收理由（{checkNames[check] ?? check}未执行）
+        接收理由（{stagingCheckNames[check] ?? check}未执行）
         <textarea required value={reasons[check] ?? ""} onChange={event => {
           attemptKey.current = null;
           setReasons({ ...reasons, [check]: event.target.value });

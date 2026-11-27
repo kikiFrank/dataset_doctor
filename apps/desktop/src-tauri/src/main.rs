@@ -20,6 +20,7 @@ struct RuntimeMode {
     smoke_color: bool,
     smoke_workflow: bool,
     smoke_report_export: bool,
+    smoke_staging_batch: bool,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +37,7 @@ struct DesktopReadyResponse {
     verify_workspace_color: bool,
     verify_workspace_workflow: bool,
     verify_workspace_report_export: bool,
+    verify_workspace_staging_batch: bool,
 }
 
 #[tauri::command]
@@ -59,12 +61,14 @@ fn desktop_ready(
         version,
         verify_workspace: runtime.smoke_workspace.is_some()
             && !runtime.smoke_workspace_create
+            && !runtime.smoke_staging_batch
             && !business,
         verify_workspace_create: runtime.smoke_workspace_create,
         verify_workspace_business: business,
         verify_workspace_color: runtime.smoke_color,
         verify_workspace_workflow: runtime.smoke_workflow || runtime.smoke_report_export,
         verify_workspace_report_export: runtime.smoke_report_export,
+        verify_workspace_staging_batch: runtime.smoke_staging_batch,
     })
 }
 
@@ -91,7 +95,7 @@ async fn desktop_workspace_verified(
         }
     }
     if let Some(failure) = failure {
-        if !business {
+        if !business && !runtime.smoke_staging_batch {
             return Err("Business verification mode is inactive".into());
         }
         eprintln!("DESKTOP_WORKSPACE_BUSINESS_FAILED {failure}");
@@ -107,6 +111,8 @@ async fn desktop_workspace_verified(
         "DESKTOP_WORKSPACE_REPORT_EXPORT_VERIFIED"
     } else if runtime.smoke_workflow {
         "DESKTOP_WORKSPACE_WORKFLOW_VERIFIED"
+    } else if runtime.smoke_staging_batch {
+        "DESKTOP_WORKSPACE_STAGING_BATCH_VERIFIED"
     } else if business {
         "DESKTOP_WORKSPACE_BUSINESS_VERIFIED"
     } else if runtime.smoke_workspace_create {
@@ -145,6 +151,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         && std::env::args_os().any(|argument| argument == "--workspace-workflow-smoke");
     let smoke_report_export = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-report-export-smoke");
+    let smoke_staging_batch = cfg!(debug_assertions)
+        && std::env::args_os().any(|argument| argument == "--workspace-staging-batch-smoke");
     let smoke_workspace_open = cfg!(debug_assertions)
         && std::env::args_os().any(|argument| argument == "--workspace-smoke");
     if [
@@ -153,6 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         smoke_color,
         smoke_workflow,
         smoke_report_export,
+        smoke_staging_batch,
         smoke_workspace_open,
     ]
     .into_iter()
@@ -168,6 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         || smoke_color
         || smoke_workflow
         || smoke_report_export
+        || smoke_staging_batch
     {
         let path = PathBuf::from(
             std::env::var_os("DD_DESKTOP_SMOKE_WORKSPACE").ok_or("missing Workspace fixture")?,
@@ -234,6 +244,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             smoke_color,
             smoke_workflow,
             smoke_report_export,
+            smoke_staging_batch,
         })
         .setup(|app| {
             let worker =

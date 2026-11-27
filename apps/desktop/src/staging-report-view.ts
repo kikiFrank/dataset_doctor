@@ -4,6 +4,11 @@ import type {
 
 export type StagingCommitDetails = Omit<StagingCommitRequest, "context">;
 
+export const stagingCheckNames: Record<string, string> = {
+  annotation_geometry: "标注几何",
+  semantic_review: "语义检查",
+};
+
 export function matchesCurrentReport(item: StagingItem, report: StagingReportView): boolean {
   const current = item.current_report_ref;
   const returned = report.report_artifact_ref;
