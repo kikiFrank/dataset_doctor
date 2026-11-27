@@ -18,6 +18,8 @@ Push 和 PR 使用完整 Git diff 选择检查组，手动 workflow_dispatch 运
 
 每个组完成后输出 `PRODUCT_CI_CHECK_PASSED <组>`。本机默认不启动桌面，desktop 在构建和宿主验证后明确返回未完成；只有明确传入 `-LaunchDesktop` 才执行最后的真实冒烟。用户占用桌面期间不要传该参数，也不要将构建或宿主通过记成整个 desktop CI 通过。
 
+按用户新要求，各测试场景采用 [30 秒预算](../testing/test_time_budget.md)，构建和准备单独计时。Cargo runner 在编译后逐用例执行；Python/Node 短批次与每个桌面冒烟均限制整批或整场景，超时回收进程树并失败。所有组需要锁定 Python 作为测试基础设施，不会因此给产品添加 Python 包依赖。耗时 JSONL 随日志保留。
+
 ## 工具与环境
 
 版本继续来自 [Windows 版本锁](../../config/toolchains/windows-x64.json)，工具归档 URL/摘要在 [CI 工具锁](../../config/toolchains/ci-windows-x64.json)。GitHub Actions 使用固定提交 SHA。准备阶段可下载锁定工具和 `--locked` 依赖，验收阶段复用缓存并采用 `--locked --offline` 或对应离线入口。缓存不包含真实媒体和模型凭据，检查阶段不读取工厂数据或调用真实模型 API。下载的归档先核对 SHA-256 再解压。
@@ -29,7 +31,7 @@ GitHub 已公告 Windows runner 的 D 盘将于 2026-11-30 改为 ReFS，因此�
 例如仅检查前端，沿用 README 中锁定 pnpm 的绝对路径。
 
 ```powershell
-& .\scripts\ci\prepare-windows.ps1 -Check typescript -PnpmExe $pnpm
+& .\scripts\ci\prepare-windows.ps1 -Check typescript -PnpmExe $pnpm -PythonExe $python
 & .\scripts\ci\run-windows-check.ps1 -Check typescript
 ```
 

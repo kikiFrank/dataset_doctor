@@ -96,6 +96,7 @@ switch ($Suite) {
     'WorkflowPlan' { $cargoArgs += @('-p', 'dd-infra', '--test', 'workflow_plan') }
     'All' { $cargoArgs += @('-p', 'dd-infra', '-p', 'dd-sqlite-connection-init-tests', '--all-targets') }
 }
+if ($env:DD_CARGO_DEADLINE_CONFIG) { $cargoArgs += @('--config',$env:DD_CARGO_DEADLINE_CONFIG) }
 $cargoArgs += @('--', '--nocapture')
 
 Push-Location -LiteralPath $repo

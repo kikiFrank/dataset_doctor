@@ -9,19 +9,48 @@ Set-Location -LiteralPath $repo
 $out = Join-Path $repo "target/ci/$Check"
 $configuration = Get-Content -LiteralPath (Join-Path $out 'environment.json') -Raw | ConvertFrom-Json
 if ($configuration.check -cne $Check -or $configuration.repo -cne $repo) { throw 'Prepare this check in the current repository first.' }
+$testPython = $configuration.test_python
+$boundedTest = Join-Path $repo 'scripts/testing/bounded_test.py'
+$env:DD_TEST_PYTHON = $testPython
+$env:DD_TEST_DEADLINE_EVIDENCE_DIR = $out
+$env:PATH = (Split-Path -Parent $testPython) + [IO.Path]::PathSeparator + $env:PATH
+$env:DD_CARGO_DEADLINE_CONFIG = Join-Path $out 'cargo-deadline.toml'
+$runner = @($testPython,'-I','-B',$boundedTest,'--kind','rust','--') | ConvertTo-Json -Compress
+# A TOML array keeps Windows paths with spaces intact without changing any
+# existing repository or Cargo-home config.
+[IO.File]::WriteAllText($env:DD_CARGO_DEADLINE_CONFIG, "[target.x86_64-pc-windows-msvc]`nrunner = $runner", [Text.UTF8Encoding]::new($false))
 function Run([string]$Exe, [string[]]$Arguments) {
+    $commandClock = [Diagnostics.Stopwatch]::StartNew()
+    if ([IO.Path]::GetFileName($Exe) -ieq 'cargo.exe') {
+        $Arguments = @('--config',$env:DD_CARGO_DEADLINE_CONFIG) + $Arguments
+    }
     $ErrorActionPreference = 'Continue'
     $global:LASTEXITCODE = $null
     try {
         & $Exe @Arguments 2>&1 | ForEach-Object { $_.ToString() } |
             Tee-Object -FilePath (Join-Path $out 'commands.log') -Append -ErrorAction Stop
     } catch { throw "CI check command could not start or record output: $([IO.Path]::GetFileName($Exe))" }
+    finally {
+        $commandClock.Stop()
+        [ordered]@{
+            executable=[IO.Path]::GetFileName($Exe)
+            phase=$(if ($Exe -eq $testPython) { 'test' } else { 'build_or_command' })
+            elapsed_seconds=$commandClock.Elapsed.TotalSeconds
+            exit_code=$LASTEXITCODE
+        } | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $out 'command-durations.jsonl') -Encoding utf8
+    }
     $code = $LASTEXITCODE
     if ($null -eq $code) { throw 'CI check command did not return an exit code.' }
     if ($code -ne 0) { throw "CI check command exited with code $code" }
 }
 function Script([string]$Path, [string[]]$Arguments) {
     Run 'powershell.exe' (@('-NoProfile','-NonInteractive','-File',(Join-Path $repo $Path)) + $Arguments)
+}
+function Test([string]$Exe, [string[]]$Arguments) {
+    Run $testPython (@('-I','-B',$boundedTest,'--') + @($Exe) + $Arguments)
+}
+function TestScript([string]$Path, [string[]]$Arguments) {
+    Test 'powershell.exe' (@('-NoProfile','-NonInteractive','-File',(Join-Path $repo $Path)) + $Arguments)
 }
 if ($configuration.rust_bin) {
     if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64') {
@@ -49,7 +78,7 @@ try {
         }
         'typescript' {
             Run $configuration.pnpm @('--dir','apps/desktop','run','build')
-            Run $configuration.node @('--experimental-strip-types','--test','tests/desktop/ui/*.test.mjs','tests/ci/*.test.mjs')
+            Test $configuration.node @('--experimental-strip-types','--test','--test-timeout=30000','tests/desktop/ui/*.test.mjs','tests/ci/*.test.mjs')
         }
         'python' {
             $python = Join-Path $repo 'target/dev/worker-venv/Scripts/python.exe'
@@ -60,27 +89,28 @@ try {
             $env:DD_TEST_VIDEO_RUN = $videoRun
             $syntax = @'
 from pathlib import Path
-for root in (Path("services/python-worker/src"), Path("tests/worker")):
-    for source in sorted(root.rglob("*.py")):
-        compile(source.read_bytes(), str(source), "exec")
-print("Worker Python syntax checks passed without generating bytecode")
+for root in (Path('services/python-worker/src'), Path('tests/worker')):
+    for source in sorted(root.rglob('*.py')):
+        compile(source.read_bytes(), str(source), 'exec')
+print('Worker Python syntax checks passed without generating bytecode')
 '@
-            Run $python @('-I','-B','-c',$syntax)
+            Test $python @('-I','-B','-c',$syntax)
+            Test $python @('-I','-B','-m','unittest','discover','-s','tests/testing/windows','-v')
             foreach ($suite in @('image','annotation','dataset','quality','color','execution','cancellation','video')) {
-                Run $python @('-I','-B','-m','unittest','discover','-s',"tests/worker/$suite",'-p','test_*.py','-v')
+                Test $python @('-I','-B','-m','unittest','discover','-s',"tests/worker/$suite",'-p','test_*.py','-v')
             }
         }
         'contracts' {
-            Script 'scripts/contracts/windows/check-json-schema.ps1' @('-PythonExe',$configuration.python,'-UvCacheDir',$configuration.schema_cache)
-            Script 'scripts/contracts/windows/check-protobuf.ps1' @('-ProtocExe',$configuration.protoc,'-GoogleProtoRoot',$configuration.google_proto_root,'-PythonExe',$configuration.python)
+            TestScript 'scripts/contracts/windows/check-json-schema.ps1' @('-PythonExe',$configuration.python,'-UvCacheDir',$configuration.schema_cache)
+            TestScript 'scripts/contracts/windows/check-protobuf.ps1' @('-ProtocExe',$configuration.protoc,'-GoogleProtoRoot',$configuration.google_proto_root,'-PythonExe',$configuration.python)
             Script 'scripts/contracts/windows/check-ui-wire.ps1' @('-RustBin',$configuration.rust_bin,'-NodeExe',$configuration.node)
-            Script 'scripts/contracts/windows/check-worker-rpc.ps1' @('-RustBin',$configuration.rust_bin,'-ProtocExe',$configuration.protoc,'-PythonExe',$configuration.python,'-UvExe',$configuration.uv,'-StubsOnly')
+            TestScript 'scripts/contracts/windows/check-worker-rpc.ps1' @('-RustBin',$configuration.rust_bin,'-ProtocExe',$configuration.protoc,'-PythonExe',$configuration.python,'-UvExe',$configuration.uv,'-StubsOnly')
         }
         'sqlite' {
             foreach ($suite in @('Connection','Migration','AppMigration','WorkspaceOpen','WorkspaceCreate','TaskStore')) {
                 Script 'scripts/storage/windows/check-workspace-sqlite.ps1' @('-RustBin',$configuration.rust_bin,'-Suite',$suite)
             }
-            Script 'tests/ci/verify-sqlite-file-lock-encoding.ps1' @('-RustBin',$configuration.rust_bin)
+            TestScript 'tests/ci/verify-sqlite-file-lock-encoding.ps1' @('-RustBin',$configuration.rust_bin)
         }
         'integration' {
             & ./scripts/contracts/windows/check-worker-rpc.ps1 -RustBin $configuration.rust_bin -ProtocExe $configuration.protoc -PythonExe $configuration.python -UvExe $configuration.uv -VideoFfmpegExe $configuration.ffmpeg -VideoFfprobeExe $configuration.ffprobe -InfraTests @('core_claim_loopback','worker_geometry','worker_failures','workspace_geometry','review_final','review_write_authorization','task_cancellation','task_cancellation_video','workflow_review_runtime') 2>&1 |
@@ -102,8 +132,8 @@ print("Worker Python syntax checks passed without generating bytecode")
                 throw 'Desktop build/host checks passed. Runtime smoke is deferred. Pass -LaunchDesktop only when desktop automation is authorized.'
             }
             $exe = Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc/debug/dd-desktop.exe'
-            Script 'tests/desktop/windows/verify-runtime.ps1' @('-DesktopExe',$exe)
-            Script 'tests/desktop/windows/verify-runtime.ps1' @('-DesktopExe',$exe,'-Suite','WorkspaceCreate')
+            TestScript 'tests/desktop/windows/verify-runtime.ps1' @('-DesktopExe',$exe)
+            TestScript 'tests/desktop/windows/verify-runtime.ps1' @('-DesktopExe',$exe,'-Suite','WorkspaceCreate')
         }
     }
     Write-Output "PRODUCT_CI_CHECK_PASSED $Check"

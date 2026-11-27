@@ -123,7 +123,7 @@ try {
     try {
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        $timeout = if ($Suite -in @('WorkspaceBusiness', 'WorkspaceColor', 'WorkspaceWorkflow', 'WorkspaceWorkflowControls', 'WorkspaceReportExport', 'WorkspaceStagingBatch', 'WorkspaceVideo')) { 55000 } else { 25000 }
+        $timeout = 25000 # Leave time for independent verification inside the 30s scenario budget.
         if (-not $process.WaitForExit($timeout)) {
             $process.Kill()
             throw 'The native desktop did not acknowledge the WebView2 IPC handshake.'

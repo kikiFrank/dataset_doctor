@@ -7,6 +7,7 @@ param(
     [switch]$AllowNetwork
 )
 $ErrorActionPreference = 'Stop'
+$preparationClock = [Diagnostics.Stopwatch]::StartNew()
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 Set-Location -LiteralPath $repo
 $dev = Join-Path $repo 'target/dev'
@@ -51,6 +52,9 @@ $environment = [ordered]@{
     os_version=[Environment]::OSVersion.VersionString
     architecture=$env:PROCESSOR_ARCHITECTURE
 }
+$PythonExe = Tool $PythonExe 'python.exe'
+Version $PythonExe @('-I','-B','-c',"import sys; print('cpython ' + sys.version.split()[0])") $lock.python
+$environment.test_python = $PythonExe
 if ($rust) {
     if (-not $RustBin) {
         if ($AllowNetwork) { Run 'rustup' @('toolchain','install',$lock.rustc,'--profile','minimal','--component','clippy,rustfmt') }
@@ -90,9 +94,7 @@ if ($rust) {
     }
 }
 if ($worker) {
-    $PythonExe = Tool $PythonExe 'python.exe'
     $UvExe = Tool $UvExe 'uv.exe'
-    Version $PythonExe @('-I','-B','-c','import sys; print("cpython " + sys.version.split()[0])') $lock.python
     Version $UvExe @('--version') "uv $($lock.uv)"
     $environment.python = $PythonExe
     $environment.uv = $UvExe
@@ -132,5 +134,7 @@ if ($Check -eq 'contracts') {
     if (-not $AllowNetwork) { $sync += '--offline' }
     Run $UvExe $sync
 }
+$preparationClock.Stop()
+$environment.preparation_seconds = $preparationClock.Elapsed.TotalSeconds
 $environment | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'environment.json') -Encoding utf8
 Write-Output "Prepared $Check prerequisites. Acceptance checks have not run."

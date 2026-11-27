@@ -29,7 +29,7 @@ jobs:
           node-version: '24.19.0'
           package-manager-cache: false
       - name: Verify check selection behavior
-        run: node --test tests/ci/select-checks.test.mjs
+        run: node --test --test-timeout=30000 tests/ci/select-checks.test.mjs
       - id: selection
         name: Select checks from the actual Git diff
         env:
@@ -87,14 +87,13 @@ jobs:
           version: '0.9.26'
           enable-cache: false
       - name: Install locked managed Windows Python
-        if: contains(fromJSON('["python","contracts","integration","desktop"]'), matrix.check)
         working-directory: ${{ env.DD_CI_ROOT }}
         run: |
           $python = ./scripts/ci/prepare-python.ps1
           if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Python bootstrap did not return an interpreter.' }
           "DD_CI_PYTHON=$python" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           Split-Path -Parent $python | Add-Content -LiteralPath $env:GITHUB_PATH -Encoding utf8
-          powershell.exe -NoProfile -NonInteractive -File tests/ci/verify-python-bootstrap.ps1 -UvExe (Get-Command uv.exe).Source
+          & $python -I -B scripts/testing/bounded_test.py -- powershell.exe -NoProfile -NonInteractive -File tests/ci/verify-python-bootstrap.ps1 -UvExe (Get-Command uv.exe).Source
           if ($LASTEXITCODE -ne 0) { throw 'Locked Python bootstrap acceptance failed.' }
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
@@ -126,7 +125,9 @@ jobs:
       - name: Verify missing tools are rejected and test configuration is restored
         if: matrix.check == 'typescript'
         working-directory: ${{ env.DD_CI_ROOT }}
-        run: powershell.exe -NoProfile -NonInteractive -File tests/ci/verify-runner-failure.ps1
+        run: |
+          & $env:DD_CI_PYTHON -I -B scripts/testing/bounded_test.py -- powershell.exe -NoProfile -NonInteractive -File tests/ci/verify-runner-failure.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Negative runner acceptance failed.' }
       - name: Run TypeScript acceptance after the negative runner probe
         if: matrix.check == 'typescript'
         working-directory: ${{ env.DD_CI_ROOT }}
@@ -142,6 +143,8 @@ jobs:
             ${{ env.DD_CI_ROOT }}/target/ci/**/check.log
             ${{ env.DD_CI_ROOT }}/target/ci/**/commands.log
             ${{ env.DD_CI_ROOT }}/target/ci/**/environment.json
+            ${{ env.DD_CI_ROOT }}/target/ci/**/test-durations.jsonl
+            ${{ env.DD_CI_ROOT }}/target/ci/**/command-durations.jsonl
             ${{ env.DD_CI_ROOT }}/target/ci/runner-failure/**/probe.log
             ${{ env.DD_CI_ROOT }}/target/contract-check/**/check.log
             ${{ env.DD_CI_ROOT }}/target/p01-04/logs/*.log

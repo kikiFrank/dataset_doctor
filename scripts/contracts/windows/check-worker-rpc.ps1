@@ -79,15 +79,20 @@ $env:RUSTC = Join-Path $RustBin 'rustc.exe'
 $env:PROTOC = (Resolve-Path -LiteralPath $ProtocExe).Path
 $cargo = Join-Path $RustBin 'cargo.exe'
 $manifest = Join-Path $repo 'Cargo.toml'
+$runnerConfig = @()
+if ($env:DD_CARGO_DEADLINE_CONFIG) { $runnerConfig = @('--config',$env:DD_CARGO_DEADLINE_CONFIG) }
 Write-Output "Python stub drift check passed. Worker RPC evidence: $run"
 if ($InfraTests.Count -eq 0 -or $InfraTests -contains 'worker_failures') {
-    & $env:DD_WORKER_PYTHON -I -B -m unittest discover -s (Join-Path $repo 'tests/worker/execution') -v
+    $unitArgs = @('-I','-B','-m','unittest','discover','-s',(Join-Path $repo 'tests/worker/execution'),'-v')
+    if ($env:DD_CARGO_DEADLINE_CONFIG) {
+        & $env:DD_WORKER_PYTHON -I -B (Join-Path $repo 'scripts/testing/bounded_test.py') -- $env:DD_WORKER_PYTHON @unitArgs
+    } else { & $env:DD_WORKER_PYTHON @unitArgs }
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 if ($InfraTests.Count -eq 0) {
-    & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
+    & $cargo @runnerConfig test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
         ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -125,6 +130,6 @@ if ($InfraTests.Count -gt 0) {
     }
     $tests = @(foreach ($name in $InfraTests) { '--test'; $name })
 }
-& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc @tests -- --nocapture 2>&1 |
+& $cargo @runnerConfig test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc @tests -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log') -Append
 exit $LASTEXITCODE

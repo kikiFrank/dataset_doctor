@@ -17,6 +17,7 @@ $env:RUSTC = Join-Path $RustBin 'rustc.exe'
 $cargo = Join-Path $RustBin 'cargo.exe'
 $cargoArgs = @('--manifest-path', (Join-Path $repo 'Cargo.toml'), '--locked', '--offline',
     '--target', 'x86_64-pc-windows-msvc', '-p', 'dd-ui-contracts')
+if ($env:DD_CARGO_DEADLINE_CONFIG) { $cargoArgs += @('--config',$env:DD_CARGO_DEADLINE_CONFIG) }
 
 & $cargo run @cargoArgs --bin export-ui-contracts -- $candidate
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -35,6 +36,11 @@ $log = Join-Path $out 'check.log'
 & $cargo test @cargoArgs --test ui_wire_primitives 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $NodeExe --test (Join-Path $repo 'tests\contracts\typescript\ui-wire-primitives.test.mjs') 2>&1 |
+$nodeArgs = @('--test','--test-timeout=30000',(Join-Path $repo 'tests\contracts\typescript\ui-wire-primitives.test.mjs'))
+if ($env:DD_TEST_PYTHON) {
+    & $env:DD_TEST_PYTHON -I -B (Join-Path $repo 'scripts/testing/bounded_test.py') -- $NodeExe @nodeArgs 2>&1 |
+        ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+} else { & $NodeExe @nodeArgs 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath $log -Append
+}
 exit $LASTEXITCODE
