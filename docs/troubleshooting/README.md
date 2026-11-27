@@ -6,6 +6,7 @@
 
 - [DD-ISSUE-0001 Worker 计算异常与终态回报](worker-terminal-failures.md)。MVP1.1 开发验收复现的问题，覆盖异常分类、回报幂等及宿主中断恢复。
 - [DD-ISSUE-0002 取消、孤儿进程与工作区所有权](worker-cancellation-and-ownership.md)。实际进程树回收、终态竞争和重开恢复的专项入口。
+- [DD-ISSUE-0003 Windows CI 冷缓存引导](windows-ci-bootstrap.md)。锁定 Python、native pnpm、Schema 缓存及 Git 归档换行的实际边界。
 - Rig PoC 的 CI 依赖弃用警告见 [验证报告](../testing/rig_sdk_validation.md)。
 
 ## 记录模板

@@ -124,7 +124,7 @@ if ($video) {
     $environment.ffprobe = (Resolve-Path -LiteralPath $FfprobeExe).Path
 }
 if ($Check -eq 'contracts') {
-    if (-not $SchemaCache) { $SchemaCache = Join-Path $dev 'schema-uv-cache' }
+    if (-not $SchemaCache) { $SchemaCache = Join-Path $repo 'dist/p01-01/uv-cache' }
     New-Item -ItemType Directory -Path $SchemaCache -Force | Out-Null
     $environment.schema_cache = (Resolve-Path -LiteralPath $SchemaCache).Path
     $env:UV_PROJECT_ENVIRONMENT = Join-Path $repo 'dist/p01-01/venv'

@@ -40,3 +40,7 @@ GitHub 已公告 Windows runner 的 D 盘将于 2026-11-30 改为 ReFS，因此�
 准备 Schema 环境时沿用已有锁中的 `--prerelease disallow`。P00 独立锁仍使用 `target/p00-03/cargo-home`，不改为工作区通用缓存。命令输出通过显式 Tee 保存为 commands.log，避免 PowerShell Transcript 丢失延迟格式化的子进程输出。以上入口与原有专项脚本共享实现，默认 CI 不跳过失败用例，未执行桌面冒烟时不会输出整组通过。
 
 CPython 3.12.12 在 setup-python 的 Windows 构建列表中不可用。远程准备使用锁定 uv 的 `scripts/ci/prepare-python.ps1` 安装指定 managed CPython Windows x64，验证真实版本/位数，再传绝对路径；只在引导期间允许下载，之后恢复原策略。`tests/ci/verify-python-bootstrap.ps1` 可在已有 managed 缓存下离线复验，兼容 Windows PowerShell 5 与 CI PowerShell 7。此路径遵循 [uv 官方 CI 安装方法](https://docs.astral.sh/uv/guides/integration/github/#setting-up-python)。
+
+冷缓存引导须与专项验收边界一致：Schema 缓存默认为 `dist/p01-01/uv-cache`，符合原 Schema 验收的批准目录约束；pnpm action 的 PATH 入口是包装器，准备步骤显式传入其 `node_modules/@pnpm/exe/pnpm.exe`，再由已有版本检查确认 10.18.3，避免依赖机器上的其他 pnpm。
+
+源码归档显式使用 `git -c core.autocrlf=false archive`，因为 Git archive 也会受 runner 的换行转换设置影响。提取后、准备前，在原 checkout 用 `verify-source-archive.mjs` 比较实际归档与 Git blob 字节，保护独立 P00 锁的固定摘要与生成桩。详细复现见 [DD-ISSUE-0003](../troubleshooting/windows-ci-bootstrap.md)。

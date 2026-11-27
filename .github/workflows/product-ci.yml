@@ -71,7 +71,7 @@ jobs:
           if (Test-Path -LiteralPath $root) { throw 'Expected a fresh hosted CI source directory.' }
           New-Item -ItemType Directory -Path $root | Out-Null
           $archive = Join-Path $env:RUNNER_TEMP 'dataset-doctor-source.tar'
-          git archive --format=tar --output=$archive HEAD
+          git -c core.autocrlf=false archive --format=tar --output=$archive HEAD
           if ($LASTEXITCODE -ne 0) { throw 'Could not archive tracked CI sources.' }
           tar.exe -xf $archive -C $root
           if ($LASTEXITCODE -ne 0) { throw 'Could not materialize tracked CI sources.' }
@@ -80,6 +80,8 @@ jobs:
         with:
           node-version: '24.19.0'
           package-manager-cache: false
+      - name: Verify extracted CI source retains exact tracked bytes
+        run: node tests/ci/verify-source-archive.mjs "$env:RUNNER_TEMP/dataset-doctor-source.tar"
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           version: '0.9.26'
@@ -106,13 +108,17 @@ jobs:
             ${{ env.DD_CI_ROOT }}/target/dev/cargo-home/registry
             ${{ env.DD_CI_ROOT }}/target/dev/cargo-home/git
             ${{ env.DD_CI_ROOT }}/target/dev/uv-cache
-            ${{ env.DD_CI_ROOT }}/target/dev/schema-uv-cache
+            ${{ env.DD_CI_ROOT }}/dist/p01-01/uv-cache
             ${{ env.DD_CI_ROOT }}/target/dev/pnpm-store
             ${{ env.DD_CI_ROOT }}/target/dev/ci-tools
             ${{ env.DD_CI_ROOT }}/target/p00-03/cargo-home/registry
       - name: Prepare pinned tools and locked dependency caches
         working-directory: ${{ env.DD_CI_ROOT }}
-        run: ./scripts/ci/prepare-windows.ps1 -Check $env:CI_CHECK -PythonExe $env:DD_CI_PYTHON -AllowNetwork
+        run: |
+          # The action exports node_modules/.bin wrappers. Use the native exe
+          # inside its standalone package, whose version preparation verifies.
+          $pnpm = Join-Path (Split-Path -Parent $env:PNPM_HOME) '@pnpm/exe/pnpm.exe'
+          ./scripts/ci/prepare-windows.ps1 -Check $env:CI_CHECK -PythonExe $env:DD_CI_PYTHON -PnpmExe $pnpm -AllowNetwork
       - name: Run reusable offline acceptance
         if: matrix.check != 'typescript'
         working-directory: ${{ env.DD_CI_ROOT }}
