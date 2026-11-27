@@ -1,6 +1,6 @@
 """Authenticate, admit and complete local Worker executions."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha256
 import json
@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from random import uniform
 import tempfile
-from threading import Lock
+from threading import Event, Lock
 from time import monotonic, sleep
 from uuid import UUID, uuid4
 
@@ -18,6 +18,7 @@ import grpc
 
 from datasetdoctor.v1 import common_pb2, core_execution_pb2, core_execution_pb2_grpc
 from datasetdoctor.v1 import worker_service_pb2 as protocol
+from execution_control import ExecutionCancelled, checkpoint, execution_scope
 
 
 JSON_LIMIT = 16 * 1024 * 1024
@@ -47,6 +48,8 @@ class Execution:
     status: str = "QUEUED"
     manifest: common_pb2.ArtifactRef | None = None
     error_code: str = ""
+    cancellation: Event = field(default_factory=Event)
+    terminal_selected: bool = False
 
 
 class WorkerExecutions:
@@ -61,7 +64,7 @@ class WorkerExecutions:
 
     def active_count(self):
         with self._lock:
-            return sum(item.status in {"QUEUED", "RUNNING"} for item in self._executions.values())
+            return sum(item.status in {"QUEUED", "RUNNING", "CANCELLING"} for item in self._executions.values())
 
     def start(self, request, rpc, operation_domain, compute, source_field):
         context = request.context
@@ -138,6 +141,19 @@ class WorkerExecutions:
                 result_manifest_ref=item.manifest, error_code=item.error_code,
             )
 
+    def cancel(self, lookup, rpc):
+        with self._lock:
+            item = self._executions.get((lookup.task_id, lookup.attempt_id))
+            if item is None:
+                rpc.abort(grpc.StatusCode.NOT_FOUND, "execution not found")
+            if not item.terminal_selected:
+                item.cancellation.set()
+                item.status = "CANCELLING"
+            return protocol.ExecutionCancellationReceipt(
+                requested=item.status in {"CANCELLING", "CANCELLED"},
+                observed_status=item.status,
+            )
+
     def _run(self, request, item, operation_digest, compute):
         event = core_execution_pb2.ReportExecutionRequest(
             context=request.context,
@@ -153,11 +169,18 @@ class WorkerExecutions:
             self._failed(item, "core_report_failed")
             return
         with self._lock:
-            item.status = "RUNNING"
+            if not item.cancellation.is_set():
+                item.status = "RUNNING"
 
         manifest = None
+        cancelled = False
         try:
-            manifest, failure = compute(request)
+            with execution_scope(item.cancellation):
+                manifest, failure = compute(request)
+                checkpoint()
+        except ExecutionCancelled:
+            failure = None
+            cancelled = True
         except InputChanged:
             failure = "input_changed"
         except (ValueError, TypeError, KeyError, IndexError, RecursionError):
@@ -166,7 +189,7 @@ class WorkerExecutions:
             failure = "file_io_failed"
         except Exception:
             failure = "internal_error"
-        if (
+        if not cancelled and (
             (failure is None and not isinstance(manifest, common_pb2.ArtifactRef))
             or (failure is not None and (
                 not isinstance(failure, str) or failure not in FAILURE_CODES
@@ -180,7 +203,12 @@ class WorkerExecutions:
             )
         event.execution_event_id = str(uuid4())
         event.source_event_seq = 2
-        if failure is None:
+        with self._lock:
+            cancelled = cancelled or item.cancellation.is_set()
+            item.terminal_selected = True
+        if cancelled:
+            event.cancelled.SetInParent()
+        elif failure is None:
             event.succeeded.result_manifest_ref.CopyFrom(manifest)
         else:
             event.failed.code = FAILURE_CODES[failure]
@@ -189,7 +217,10 @@ class WorkerExecutions:
         except (grpc.RpcError, ValueError):
             self._failed(item, "core_report_failed")
             return
-        if failure is not None:
+        if cancelled:
+            with self._lock:
+                item.status = "CANCELLED"
+        elif failure is not None:
             self._failed(item, failure)
         else:
             with self._lock:
@@ -203,6 +234,7 @@ class WorkerExecutions:
 
     def _failed(self, item, code):
         with self._lock:
+            item.terminal_selected = True
             item.error_code = code
             item.status = "FAILED"
 
@@ -262,6 +294,7 @@ def verified_path(name):
 
 
 def verified_bytes(locator, limit):
+    checkpoint()
     path = verified_path(locator.path)
     if not path.is_file():
         raise ValueError("expected a regular source file")
@@ -271,6 +304,7 @@ def verified_bytes(locator, limit):
         raise ValueError("source exceeds its byte budget")
     if sha256(contents).hexdigest() != locator.sha256:
         raise InputChanged("source digest no longer matches the granted input")
+    checkpoint()
     return contents
 
 
@@ -298,6 +332,7 @@ def write_json(directory, filename, value):
 
 
 def write_bytes(directory, filename, data):
+    checkpoint()
     with tempfile.NamedTemporaryFile(dir=directory, prefix=".worker-", delete=False) as temporary:
         staged = Path(temporary.name)
         try:

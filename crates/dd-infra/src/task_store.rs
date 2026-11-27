@@ -1,5 +1,8 @@
 //! Persistence for Core-authorized task submissions in the current Workspace.
 
+mod cancellation;
+pub use cancellation::TaskCancellationReceipt;
+
 #[cfg(feature = "execution-rpc")]
 mod result;
 #[cfg(feature = "execution-rpc")]
@@ -326,12 +329,14 @@ impl OpenedWorkspace {
         let statement = match event {
             AttemptEvent::Claimed => "UPDATE tasks SET row_revision=row_revision+1, updated_at_ms=?6,
                  execution_metadata_json=json_set(json_patch(execution_metadata_json, json(?7)), '$.grant_state', 'CLAIMED', '$.claimed_execution_id', ?5)
-                 WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status='DISPATCHING'
+                 WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status IN ('DISPATCHING','CANCELLING')
                        AND json_extract(execution_metadata_json, '$.grant_id')=?4
                        AND json_extract(execution_metadata_json, '$.grant_state')='ISSUED'",
             AttemptEvent::Running(_) => "UPDATE tasks SET row_revision=row_revision+1, updated_at_ms=?6,
-                 status='RUNNING', started_at_ms=?6, execution_metadata_json=json_patch(execution_metadata_json, json(?7))
-                 WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status='DISPATCHING'
+                 status=CASE WHEN status='CANCELLING' THEN status ELSE 'RUNNING' END, started_at_ms=?6, execution_metadata_json=json_patch(execution_metadata_json, json(?7))
+                 WHERE task_id=?1 AND workspace_session_id=?2 AND current_attempt_id=?3 AND status IN ('DISPATCHING','CANCELLING')
+                       AND json_extract(execution_metadata_json, '$.last_source_event_seq') IS NULL
+                       AND started_at_ms IS NULL
                        AND json_extract(execution_metadata_json, '$.grant_id')=?4
                        AND json_extract(execution_metadata_json, '$.grant_state')='CLAIMED'
                        AND json_extract(execution_metadata_json, '$.claimed_execution_id')=?5",
@@ -364,9 +369,10 @@ impl OpenedWorkspace {
             ).optional()?;
             match (event, latest) {
                 (AttemptEvent::Claimed, Some((status, _)))
-                    if matches!(status.as_str(), "DISPATCHING" | "RUNNING") => {}
+                    if matches!(status.as_str(), "DISPATCHING" | "RUNNING" | "CANCELLING") => {}
                 (AttemptEvent::Running(_), Some((status, latest)))
-                    if status == "RUNNING" && (notice.is_none() || notice == latest) => {}
+                    if matches!(status.as_str(), "RUNNING" | "CANCELLING")
+                        && (notice.is_none() || notice == latest) => {}
                 _ => return Err(TaskStoreError::AttemptConflict),
             }
         }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { TaskCancelButton } from "./task-cancel-button";
 import type { AssetSummary, GeometryReportView } from "./api/generated/wire-primitives";
 import { getTask, startGeometry } from "./api/task";
 import { workspaceCommandError } from "./api/workspace";
@@ -19,6 +20,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = fa
   disabled?: boolean;
 }) {
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState("QUEUED");
   const [report, setReport] = useState<GeometryReportView | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [retryQuery, setRetryQuery] = useState(0);
@@ -34,6 +36,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = fa
       try {
         const task = await getTask(workspace, id);
         if (!current) return;
+        setTaskStatus(task.status);
         if (activeStates.has(task.status)) {
           timer = setTimeout(() => void poll(), 500);
           return;
@@ -44,7 +47,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = fa
           setReport(task.geometry_report);
           onEvidence({ taskId: id, report: task.geometry_report });
         } else {
-          setError(errorMessages[task.error_code ?? ""] ?? "检查未完成，可以重新运行。");
+          setError(task.status === "CANCELLED" ? "检查已取消，可以重新运行。" : errorMessages[task.error_code ?? ""] ?? "检查未完成，可以重新运行。");
         }
       } catch (failure) {
         if (current) setError(workspaceCommandError(failure));
@@ -65,6 +68,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = fa
       if (!asset.dataset_id) throw new Error("请选择数据集中的图片。");
       const operation = await startGeometry(workspace, asset.dataset_id, asset.asset_id, key.current);
       setTaskId(operation.task_id);
+      setTaskStatus(operation.status);
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -78,6 +82,7 @@ export function GeometryCheckPanel({ workspace, asset, onEvidence, disabled = fa
         运行标注检查
       </button>
       {(submitting || taskId) && !error && <p role="status">正在检查图像和标注…</p>}
+      {taskId && <TaskCancelButton key={taskId} workspace={workspace} taskId={taskId} status={taskStatus} />}
       {error && <p role="alert">{error}</p>}
       {error && taskId && <button type="button" onClick={() => { setError(null); setRetryQuery((value) => value + 1); }}>重试查询</button>}
       {report && (

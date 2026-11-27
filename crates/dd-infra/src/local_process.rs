@@ -1,5 +1,8 @@
 //! Bootstrap and supervise the local executor processes.
 
+#[cfg(windows)]
+mod windows_job;
+
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -83,6 +86,8 @@ struct Ready {
 
 pub(super) struct LocalProcess {
     child: Child,
+    #[cfg(windows)]
+    job: windows_job::ProcessJob,
     authorization: MetadataValue<Ascii>,
 }
 
@@ -116,6 +121,8 @@ impl LocalProcess {
         #[cfg(windows)]
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
         let mut child = command.spawn()?;
+        #[cfg(windows)]
+        let job = windows_job::ProcessJob::attach(&child)?;
         let mut input = child
             .stdin
             .take()
@@ -154,6 +161,8 @@ impl LocalProcess {
         Ok((
             Self {
                 child,
+                #[cfg(windows)]
+                job,
                 authorization,
             },
             channel,
@@ -187,6 +196,8 @@ impl LocalProcess {
         let status = timeout(RPC_DEADLINE, self.child.wait())
             .await
             .map_err(|_| LocalProcessError::Deadline("shutdown"))??;
+        #[cfg(windows)]
+        self.job.stop().await?;
         if !status.success() {
             return Err(LocalProcessError::Shutdown);
         }
@@ -194,6 +205,8 @@ impl LocalProcess {
     }
 
     pub(super) async fn terminate(mut self) -> Result<(), LocalProcessError> {
+        #[cfg(windows)]
+        self.job.stop().await?;
         if self.child.try_wait()?.is_some() {
             return Ok(());
         }

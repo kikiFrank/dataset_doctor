@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use dd_infra::dataset_import::DatasetImportCoordinator;
 use dd_ui_contracts::dataset_import::{GeometrySubmitRequest, TaskGetRequest};
+use dd_ui_contracts::task::TaskCancelRequest;
 
 use super::{geometry::GeometryRunner, *};
 
@@ -96,12 +97,20 @@ fn desktop_geometry_worker_publishes_findings_and_startup_failure_is_terminal() 
         .start_geometry(Arc::clone(&runner), make_request())
         .unwrap();
     assert_eq!(operation.status, "QUEUED");
-    let result = wait(operation.task_id);
+    let result = wait(operation.task_id.clone());
     assert_eq!(result.status, "SUCCEEDED");
     let report = result.geometry_report.unwrap();
     assert_eq!((report.width, report.height), (2, 1));
     assert_eq!(report.findings[0].code, "bbox_out_of_bounds");
     assert_eq!(report.findings[0].annotation_id, Some(7.into()));
+    let completed = commands
+        .request_task_cancellation(TaskCancelRequest {
+            context: context(),
+            task_id: operation.task_id,
+        })
+        .unwrap();
+    assert!(!completed.requested);
+    assert_eq!(completed.observed_status, "SUCCEEDED");
 
     let failed_entrypoint = run.join("worker-start-failure.py");
     fs::write(&failed_entrypoint, b"raise SystemExit(3)\n").unwrap();
@@ -123,5 +132,58 @@ fn desktop_geometry_worker_publishes_findings_and_startup_failure_is_terminal() 
     assert_eq!(result.status, "INTERRUPTED");
     assert_eq!(result.error_code.as_deref(), Some("WORKER_INTERRUPTED"));
     assert!(result.geometry_report.is_none());
+    let queued = dd_infra::geometry_runtime::GeometryRuntime::admit(
+        &thread,
+        session,
+        dd_infra::geometry_runtime::GeometryAuditRequest {
+            dataset_id,
+            asset_id,
+            max_pixels: 100,
+            request_id: Uuid::new_v4(),
+            idempotency_key: Uuid::new_v4(),
+        },
+    )
+    .unwrap();
+    let task_id = id(queued.task().task_id.to_string());
+    let cancelled = commands
+        .request_task_cancellation(TaskCancelRequest {
+            context: context(),
+            task_id: task_id.clone(),
+        })
+        .unwrap();
+    assert!(cancelled.requested);
+    assert_eq!(cancelled.observed_status, "CANCELLED");
+    let duplicate = commands
+        .request_task_cancellation(TaskCancelRequest {
+            context: context(),
+            task_id: task_id.clone(),
+        })
+        .unwrap();
+    assert_eq!(cancelled.revision, duplicate.revision);
+    assert_eq!(
+        commands
+            .import_task(
+                &imports,
+                TaskGetRequest {
+                    context: context(),
+                    task_id: task_id.clone()
+                }
+            )
+            .unwrap()
+            .status,
+        "CANCELLED"
+    );
+    let mut stale = context();
+    stale.workspace_session_id = id(Uuid::new_v4().to_string());
+    assert_eq!(
+        commands
+            .request_task_cancellation(TaskCancelRequest {
+                context: stale,
+                task_id,
+            })
+            .unwrap_err()
+            .code,
+        "STALE_WORKSPACE_SESSION"
+    );
     thread.close(session).unwrap();
 }

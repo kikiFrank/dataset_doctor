@@ -168,6 +168,12 @@ powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\chec
 
 Rust/TypeScript 公共整数和归属类型的验收使用 `scripts/contracts/windows/check-ui-wire.ps1 -RustBin $rustBin -NodeExe (Get-Command node.exe).Source`。脚本重新生成 TypeScript 声明，检查文件漂移，再用同一组向量运行 Serde 和 Node TypeScript 解析。显式传入 `-Generate` 更新受版本控制的声明。
 
+### 取消计算任务
+
+图片检查、视频探测/取帧/追踪、颜色预览及审核复检显示取消入口。请求受理后等待执行器确认，已完成任务保留原结果；Core 正式文件提交按其协调日志完成。执行器仍在运行或释放资源时，工作区关闭会提示等待。Windows 的作业对象负责异常退出后的进程树清理。
+
+在上方 Worker RPC 命令中选择 `-InfraTests @('task_cancellation','task_cancellation_video')`，并传入已核验的 `-VideoFfmpegExe $ffmpeg -VideoFfprobeExe $ffprobe`，可复跑真实 Core/Worker/SQLite 的排队取消、图片取消、终态竞争、确认丢失重试、视频进程回收和重开。Python 专项先设置 `$env:DD_TEST_FFMPEG=$ffmpeg`、`$env:DD_TEST_FFPROBE=$ffprobe`，执行 `target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/cancellation -v`。页面状态专项为 `node --experimental-strip-types --test tests/desktop/ui/task-cancellation.test.mjs`。原生按钮与实际 IPC 的新增取消流程仍待桌面验收。
+
 ### 备份和恢复工作区
 
 在打开的工作区展开「备份工作区」，选择工作区之外的本机目录并开始备份。成功回执会显示备份包子目录，重新打开工作区可查看最近一条备份结果。备份包包含 SQLite 快照、已登记的外部与工作区资源、标注及正式产物。

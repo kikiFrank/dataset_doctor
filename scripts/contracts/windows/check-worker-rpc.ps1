@@ -86,7 +86,7 @@ if ($InfraTests.Count -eq 0) {
         ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-$tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_failures', '--test', 'worker_process',
+$tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_failures', '--test', 'worker_process', '--test', 'task_cancellation',
     '--test', 'worker_image_quality', '--test', 'workspace_image_quality',
     '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile', '--test', 'workflow_profile',
     '--test', 'workflow_geometry', '--test', 'workflow_report', '--test', 'workflow_local_runner', '--test', 'workflow_list',
@@ -101,7 +101,7 @@ if ($PackagedWorkerExe) {
         '--test', 'packaged_workspace_geometry')
 }
 if ($VideoFfmpegExe) {
-    $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve', '--test', 'worker_tracking')
+    $tests += @('--test', 'worker_video_probe', '--test', 'worker_frame_resolve', '--test', 'worker_tracking', '--test', 'task_cancellation_video')
     if (-not $PackagedWorkerExe) {
         $tests += @('--test', 'workspace_video_probe', '--test', 'workspace_frame_resolve', '--test', 'video_keyframes', '--test', 'video_segments', '--test', 'video_sampling', '--test', 'workspace_video_tracking', '--test', 'video_staging', '--test', 'video_sample_task', '--test', 'video_tracking_sample_task', '--test', 'video_tracking_review', '--test', 'staging_review', '--test', 'staging_report', '--test', 'staging_commit')
         $tests += @('--test', 'staging_batch_commit')

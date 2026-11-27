@@ -263,7 +263,7 @@ FrameRef 结构见视频章节。video_resolve_frame 响应是明确的判别联
 | workflow_pause / workflow_resume | workflow_run_id、expected_revision；resume 另含恢复策略 | WorkflowControlReceipt | pause 停止继续派发，等待当前计算结束后进入 PAUSED；resume 校验输入与计划后继续，INTERRUPTED 时先核对旧执行并重新准入 |
 | workflow_cancel | workflow_run_id、reason? | CancellationReceipt | 停止安排后续节点并请求取消在途任务；不回滚已经确认的文件 |
 | task_get / task_list | task_id / filters、cursor | TaskSnapshot / Page | 包含当前 attempt、错误、结果引用、恢复能力 |
-| task_cancel | task_id、reason? | CancellationReceipt | 返回 requested=true 不等于已经停止 |
+| task_cancel | task_id（随 CommandContext 绑定当前 Workspace 会话） | CancellationReceipt | 返回 requested=true 不等于已经停止；当前桌面入口取消排队任务和支持取消的 Worker 计算，Core 文件提交阶段拒绝此操作 |
 | task_retry | task_id、expected_task_revision、mode=RETRY/RESUME_IF_AVAILABLE | OperationRef | 仅安全失败/中断任务；相同输入重试换 attempt；输入变更须新任务 |
 | repair_color_preview | dataset_id、asset_id、region、operation、base_image_digest | 异步 | 输出候选图片、操作掩膜和冻结参数 |
 | repair_color_apply | candidate_ref、dataset_id、asset_id、base_image_digest、expected_asset_revision | 异步 | 用户批准后 Core 应用，图像摘要变化使相关检查与审核过期 |
@@ -665,6 +665,10 @@ gRPC Streaming 的发送顺序不能代替跨服务全局顺序。Worker 与 Age
 RPC deadline 限制一次调用等待；task_timeout 限制计算；model_request_timeout 限制供应商调用；idle/heartbeat timeout 仅表示失联。四者不能共用一个“超时后删除任务”的逻辑。
 
 计算取消由 TaskManager 发起、执行方响应；Core 文件提交进入短暂的不可中断提交阶段后，先确定提交结果，再处理取消。用户点击取消后先看到 CANCELLING，只有确认停止才显示 CANCELLED。进程意外退出而结果未知使用 INTERRUPTED。
+
+当前 Worker 的 `CancelExecution(ExecutionLookup)` 使用既有认证通道，按 task_id/attempt_id 定位。Core 先持久受理取消，再由当前派发器发送请求；Worker 的执行作用域持有取消标记，在输入读取、计算返回、产物发布、视频帧迭代与模板搜索行检查。FFmpeg/ffprobe 阻塞管道由监视线程终止并 wait 回收，然后才报告新增的 cancelled 终态事件。该事件沿用当前 attempt、序号和单一事件 ID 重试，Core 的终态收据按原机制持久化与重放。取消与终态选择在 Worker 锁内仲裁，已经选定的成功/失败仍可被 Core 从 CANCELLING 接纳，已有终态不可覆盖；内部选择标记不增加公开任务状态。
+
+Windows 监督器在发送 bootstrap 前将执行器加入不可继承的 kill-on-close Job Object。正常结束或强制终止均等待整个作业的活动进程数归零；意外丢失监督器句柄也会终止关联进程树。真实执行器从启动至确认停止持有 Workspace 生命周期租约，期间关闭返回 RESOURCE_BUSY，不释放数据库所有权。重新获得独占锁后，只将遗留的执行器 attempt 标为 INTERRUPTED 并撤销 Grant；排队任务、已接纳终态与 Core 文件协调日志继续使用各自恢复规则。人工审核中的复检中断保留 WAITING_REVIEW 与原报告，提示显式重新确认。当前这些行为已在 Windows 实测，其他平台进程树与安装后验收另行执行。
 
 真实退出应用前停止准入、请求取消/等待、封存可以封存的产物、结束服务并关闭 Workspace；最小化不属于退出。不得在 UI 已切到另一个 Workspace 后让旧回调写入新数据。
 

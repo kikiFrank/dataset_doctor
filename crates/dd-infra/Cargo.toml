@@ -31,8 +31,18 @@ prost = "=0.14.6"
 tokio = { version = "=1.54.1", features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
 tokio-stream = { version = "=0.1.19", features = ["net"] }
 
+[[test]]
+name = "task_cancellation"
+path = "../../tests/integration/rpc/task_cancellation.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
+name = "task_cancellation_video"
+path = "../../tests/integration/rpc/task_cancellation_video.rs"
+required-features = ["execution-rpc"]
+
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [[test]]
 name = "workspace_migration"

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { DisplayLocator, VideoDetail, VideoFrame, VideoSeekPolicy } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
+import { TaskCancelButton } from "./task-cancel-button";
 import { getFrameImageLocator, resolveVideoFrame } from "./api/video";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
@@ -27,6 +28,7 @@ export function VideoFramePanel({ workspace, detail, enabled, verifying, editGua
   const [policy, setPolicy] = useState<VideoSeekPolicy>("NEAREST");
   const [busy, setBusy] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState("QUEUED");
   const [frame, setFrame] = useState<VideoFrame | null>(null);
   const [image, setImage] = useState<DisplayLocator | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export function VideoFramePanel({ workspace, detail, enabled, verifying, editGua
       try {
         const task = await getTask(workspace, id);
         if (!active) return;
+        setTaskStatus(task.status);
         if (pendingStates.has(task.status)) {
           timer = setTimeout(() => void poll(), 500);
           return;
@@ -52,7 +55,7 @@ export function VideoFramePanel({ workspace, detail, enabled, verifying, editGua
         if (task.status === "SUCCEEDED" && task.video_frame) {
           setFrame(task.video_frame);
         } else {
-          setError(errors[task.error_code ?? ""] ?? "无法完成视频帧解析。");
+          setError(task.status === "CANCELLED" ? "视频帧解析已取消。" : errors[task.error_code ?? ""] ?? "无法完成视频帧解析。");
         }
       } catch (failure) {
         if (active) setError(workspaceCommandError(failure));
@@ -93,6 +96,7 @@ export function VideoFramePanel({ workspace, detail, enabled, verifying, editGua
         key.current = null;
       } else {
         setTaskId(result.operation.task_id);
+        setTaskStatus(result.operation.status);
       }
     } catch (failure) {
       setError(workspaceCommandError(failure));
@@ -118,6 +122,7 @@ export function VideoFramePanel({ workspace, detail, enabled, verifying, editGua
       </form>
       {!enabled && <p>视频来源可用且探测成功后可以读取帧。</p>}
       {(busy || taskId) && !error && <p role="status">正在解析视频帧…</p>}
+      {taskId && <TaskCancelButton key={taskId} workspace={workspace} taskId={taskId} status={taskStatus} />}
       {taskId && error && <button type="button" onClick={() => {
         setError(null); setQueryRetry((revision) => revision + 1);
       }}>重试查询</button>}

@@ -75,6 +75,11 @@ class PythonWorkerStub:
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
                 response_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.FromString,
                 _registered_method=True)
+        self.CancelExecution = channel.unary_unary(
+                '/datasetdoctor.v1.PythonWorker/CancelExecution',
+                request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
+                response_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionCancellationReceipt.FromString,
+                _registered_method=True)
         self.Health = channel.unary_unary(
                 '/datasetdoctor.v1.PythonWorker/Health',
                 request_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.HealthRequest.SerializeToString,
@@ -138,6 +143,12 @@ class PythonWorkerServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CancelExecution(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Health(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -192,6 +203,11 @@ def add_PythonWorkerServicer_to_server(servicer, server):
                     servicer.GetExecution,
                     request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.FromString,
                     response_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.SerializeToString,
+            ),
+            'CancelExecution': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelExecution,
+                    request_deserializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.FromString,
+                    response_serializer=datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionCancellationReceipt.SerializeToString,
             ),
             'Health': grpc.unary_unary_rpc_method_handler(
                     servicer.Health,
@@ -420,6 +436,33 @@ class PythonWorker:
             '/datasetdoctor.v1.PythonWorker/GetExecution',
             datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
             datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionSnapshot.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelExecution(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/datasetdoctor.v1.PythonWorker/CancelExecution',
+            datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionLookup.SerializeToString,
+            datasetdoctor_dot_v1_dot_worker__service__pb2.ExecutionCancellationReceipt.FromString,
             options,
             channel_credentials,
             insecure,

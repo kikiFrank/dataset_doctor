@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { TaskCancelButton } from "./task-cancel-button";
 import { VideoLibraryPanel } from "./video-library-panel";
 import type { VideoEditGuard } from "./video-annotation-panel";
 import type { PathGrant, VideoImportView } from "./api/generated/wire-primitives";
@@ -37,13 +38,14 @@ export function VideoImportPanel({ workspace, editGuard }: { workspace: OpenWork
       try {
         const task = await getTask(workspace, operation.task_id);
         if (!active) return;
+        setTaskStatus(task.status);
         if (pending.has(task.status)) {
           timer = setTimeout(() => void poll(), 500);
           return;
         }
         setTaskStatus(task.status);
         setStatus(task.status === "SUCCEEDED" ? "视频已登记，帧索引可用。" : "");
-        if (task.status !== "SUCCEEDED") setError(errors[task.error_code ?? ""] ?? "视频探测未完成。");
+        if (task.status !== "SUCCEEDED") setError(task.status === "CANCELLED" ? "视频探测已取消，可重新选择视频开始新任务。" : errors[task.error_code ?? ""] ?? "视频探测未完成。");
       } catch (failure) {
         if (active) setError(workspaceCommandError(failure));
       }
@@ -105,6 +107,7 @@ export function VideoImportPanel({ workspace, editGuard }: { workspace: OpenWork
           onClick={() => void submit()}>登记并探测</button>
       </>}
       {running && !error && <p role="status">正在探测视频帧…</p>}
+      {running && receipt && <TaskCancelButton key={receipt.operation.task_id} workspace={workspace} taskId={receipt.operation.task_id} status={taskStatus} />}
       {status && <p role="status">{status}</p>}
       <VideoLibraryPanel workspace={workspace} refreshKey={(receipt?.operation.task_id ?? "") + taskStatus}
         editGuard={editGuard} importRunning={running || busy} />

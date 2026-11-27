@@ -43,6 +43,7 @@ pub struct TerminalReceipt {
 enum Outcome {
     Success { path: String, reference: Value },
     Failure(&'static str),
+    Cancelled,
 }
 
 impl OpenedWorkspace {
@@ -58,7 +59,7 @@ impl OpenedWorkspace {
                 AND json_extract(execution_metadata_json,'$.grant_state')='CLAIMED'
                 AND json_extract(execution_metadata_json,'$.claimed_execution_id')=?6
                 AND json_extract(execution_metadata_json,'$.node_spec_fingerprint')=?7
-                AND status IN ('DISPATCHING','RUNNING','CANCELLING','SUCCEEDED','FAILED'))",
+                AND status IN ('DISPATCHING','RUNNING','CANCELLING','SUCCEEDED','FAILED','CANCELLED'))",
             params![
                 execution.task.to_string(),
                 scope.workspace_session.to_string(),
@@ -139,6 +140,15 @@ impl OpenedWorkspace {
         self.record_terminal(scope, event, Outcome::Failure(code), now_ms)
     }
 
+    pub(crate) fn record_cancelled(
+        &mut self,
+        scope: ReportScope,
+        event: (Uuid, u64),
+        now_ms: i64,
+    ) -> Result<TerminalReceipt, TaskStoreError> {
+        self.record_terminal(scope, event, Outcome::Cancelled, now_ms)
+    }
+
     fn record_terminal(
         &mut self,
         scope: ReportScope,
@@ -160,6 +170,10 @@ impl OpenedWorkspace {
                 digest.update(b"datasetdoctor.task.failed.v1\0");
                 digest.update(code.as_bytes());
                 ("FAILED", None, Value::Null, Some(code))
+            }
+            Outcome::Cancelled => {
+                digest.update(b"datasetdoctor.task.cancelled.v1\0");
+                ("CANCELLED", None, Value::Null, None)
             }
         };
         let fingerprint = format!("{:x}", digest.finalize());
@@ -200,8 +214,8 @@ impl OpenedWorkspace {
                 receipt
             }
             (current_status, _, None, last_sequence)
-                if current_status == "RUNNING"
-                    || (status == "SUCCEEDED" && current_status == "CANCELLING")
+                if (current_status == "RUNNING" && status != "CANCELLED")
+                    || current_status == "CANCELLING"
                     || (status == "FAILED" && current_status == "DISPATCHING") =>
             {
                 if last_sequence.is_some_and(|previous| {

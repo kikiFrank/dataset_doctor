@@ -84,6 +84,10 @@ class ExecutionStarted(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class ExecutionCancelled(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class ExecutionSucceeded(_message.Message):
     __slots__ = ("result_manifest_ref",)
     RESULT_MANIFEST_REF_FIELD_NUMBER: _ClassVar[int]
@@ -97,7 +101,7 @@ class ExecutionFailed(_message.Message):
     def __init__(self, code: _Optional[_Union[ExecutionFailureCode, str]] = ...) -> None: ...
 
 class ReportExecutionRequest(_message.Message):
-    __slots__ = ("context", "execution_event_id", "worker_execution_id", "operation_digest", "source_event_seq", "started", "succeeded", "failed")
+    __slots__ = ("context", "execution_event_id", "worker_execution_id", "operation_digest", "source_event_seq", "started", "succeeded", "failed", "cancelled")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_EVENT_ID_FIELD_NUMBER: _ClassVar[int]
     WORKER_EXECUTION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -106,6 +110,7 @@ class ReportExecutionRequest(_message.Message):
     STARTED_FIELD_NUMBER: _ClassVar[int]
     SUCCEEDED_FIELD_NUMBER: _ClassVar[int]
     FAILED_FIELD_NUMBER: _ClassVar[int]
+    CANCELLED_FIELD_NUMBER: _ClassVar[int]
     context: TaskContext
     execution_event_id: str
     worker_execution_id: str
@@ -114,7 +119,8 @@ class ReportExecutionRequest(_message.Message):
     started: ExecutionStarted
     succeeded: ExecutionSucceeded
     failed: ExecutionFailed
-    def __init__(self, context: _Optional[_Union[TaskContext, _Mapping]] = ..., execution_event_id: _Optional[str] = ..., worker_execution_id: _Optional[str] = ..., operation_digest: _Optional[str] = ..., source_event_seq: _Optional[int] = ..., started: _Optional[_Union[ExecutionStarted, _Mapping]] = ..., succeeded: _Optional[_Union[ExecutionSucceeded, _Mapping]] = ..., failed: _Optional[_Union[ExecutionFailed, _Mapping]] = ...) -> None: ...
+    cancelled: ExecutionCancelled
+    def __init__(self, context: _Optional[_Union[TaskContext, _Mapping]] = ..., execution_event_id: _Optional[str] = ..., worker_execution_id: _Optional[str] = ..., operation_digest: _Optional[str] = ..., source_event_seq: _Optional[int] = ..., started: _Optional[_Union[ExecutionStarted, _Mapping]] = ..., succeeded: _Optional[_Union[ExecutionSucceeded, _Mapping]] = ..., failed: _Optional[_Union[ExecutionFailed, _Mapping]] = ..., cancelled: _Optional[_Union[ExecutionCancelled, _Mapping]] = ...) -> None: ...
 
 class TerminalResultReceipt(_message.Message):
     __slots__ = ("accepted_at", "completion_fingerprint", "result_manifest_ref")

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { TaskCancelButton } from "./task-cancel-button";
 import type { WorkflowControlAction, WorkflowReportView, WorkflowStatusView, WorkflowView } from "./api/generated/wire-primitives";
 import { completeWorkflowReview, controlWorkflow, getWorkflow, getWorkflowReport, listWorkflows, startWorkflow } from "./api/workflow";
 import { workflowNeedsPolling } from "./workflow-review-state";
@@ -27,6 +28,7 @@ const runErrors: Record<string, string> = {
   SESSION_ENDED: "此前工作区会话已结束。",
   INPUT_CHANGED: "复检期间输入已变化，请重新审核相关样本。",
   REVIEW_RECHECK_FAILED: "复检或 Final 核验未完成，请检查样本和任务状态后重新确认。",
+  REVIEW_RECHECK_INTERRUPTED: "上次复检已中断，请重新确认后开始新的复检。",
 };
 const recheckStatusNames: Record<string, string> = {
   QUEUED: "等待复检", DISPATCHING: "正在派发", RUNNING: "正在复检",
@@ -221,6 +223,7 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
       {current.review_recheck_pending && <p role="status">正在核验 Final 并运行复检…</p>}
       <ul>{current.review_recheck_tasks.map(task => <li key={task.task_id}>
         样本 {task.asset_id.slice(0, 8)} · {recheckStatusNames[task.status] ?? task.status}
+        <TaskCancelButton workspace={workspace} taskId={task.task_id} status={task.status} />
       </li>)}</ul>
     </section>}
     {running && current && current.geometry_tasks.length > 0 && <p>

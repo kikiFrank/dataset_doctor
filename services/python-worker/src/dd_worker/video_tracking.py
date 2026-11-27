@@ -12,8 +12,10 @@ from PIL import Image, ImageChops
 
 if __package__:
     from .video_decoder import VideoDecoder, VideoIndex
+    from .execution_control import checkpoint
 else:
     from video_decoder import VideoDecoder, VideoIndex
+    from execution_control import checkpoint
 
 
 type Box = tuple[float, float, float, float]
@@ -153,6 +155,7 @@ def track_translation(
     previous = initial.frame_index
     count = 1
     for sample in samples:
+        checkpoint()
         _validate_frame(sample, size, previous)
         previous = sample.frame_index
         count += 1
@@ -249,6 +252,7 @@ def _match_template(
     best_offset = (0, 0)
     divisor = 255 * patch_width * patch_height
     for top in y_range:
+        checkpoint()
         for left in x_range:
             patch = image.crop((left, top, left + patch_width, top + patch_height))
             histogram = ImageChops.difference(template, patch).histogram()

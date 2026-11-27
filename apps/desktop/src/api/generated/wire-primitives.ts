@@ -58,6 +58,12 @@ export type DatasetDetail = { categories: Array<CocoCategory>, dataset_id: UuidT
 
 export type AssetKind = "IMAGE" | "VIDEO";
 
+export type TaskCancelRequest = { context: CommandContext, task_id: UuidText, };
+
+export type CancellationTargetKind = "TASK";
+
+export type CancellationReceipt = { target_kind: CancellationTargetKind, target_id: UuidText, requested: boolean, observed_status: string, revision: DecimalU64, };
+
 export type AssetListRequest = { context: CommandContext, dataset_id?: UuidText, kind?: AssetKind, cursor?: UuidText, page_size: number, };
 
 export type AnnotationState = "UNANNOTATED" | "UNREVIEWED" | "CONFIRMED_POSITIVE" | "CONFIRMED_NEGATIVE" | "STALE";

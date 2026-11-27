@@ -3,6 +3,7 @@ import { applyColor, previewColor } from "./api/color";
 import { getTaskImageLocator } from "./api/dataset";
 import type { AnnotationView, AssetSummary, ColorPreviewView, DisplayLocator } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
+import { TaskCancelButton } from "./task-cancel-button";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { canApproveColor, colorIntent, type ColorForm } from "./color-repair";
 import type { GeometryEvidence } from "./geometry-check-panel";
@@ -44,6 +45,7 @@ export function ColorRepairPanel({
   const [shown, setShown] = useState<Shown | null>(null);
   const [renderedDigest, setRenderedDigest] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [taskStatus, setTaskStatus] = useState("QUEUED");
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const keys = useRef({ preview: { intent: "", key: "" }, apply: { artifact: "", key: "" } });
@@ -79,6 +81,7 @@ export function ColorRepairPanel({
       try {
         const task = await getTask(workspace, request.id);
         if (!current) return;
+        setTaskStatus(task.status);
         if (activeStates.has(task.status)) {
           timer = setTimeout(() => void poll(), 500);
           return;
@@ -98,7 +101,7 @@ export function ColorRepairPanel({
         } else if (task.status === "SUCCEEDED" && request.kind === "apply" && task.color_apply) {
           onChanged();
         } else {
-          setError(failures[task.error_code ?? ""] ?? "颜色任务未完成，请核对图像和参数。");
+          setError(task.status === "CANCELLED" ? "颜色预览已取消，原图保持不变。" : failures[task.error_code ?? ""] ?? "颜色任务未完成，请核对图像和参数。");
         }
         setPending(null);
       } catch (failure) {
@@ -129,6 +132,7 @@ export function ColorRepairPanel({
       setConfirm(false);
       const operation = await previewColor(workspace, { ...scope, ...config }, keys.current.preview.key);
       setPending({ id: operation.task_id, kind: "preview", intent: fingerprint });
+      setTaskStatus(operation.status);
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -222,6 +226,7 @@ export function ColorRepairPanel({
       </>}
     </>}
     {pending && !error && <p role="status">{applying ? "正在应用颜色候选…" : "正在生成颜色候选…"}</p>}
+    {pending?.kind === "preview" && <TaskCancelButton key={pending.id} workspace={workspace} taskId={pending.id} status={taskStatus} />}
     {error && <p role="alert">{error}</p>}
     {pending && error && <button type="button" onClick={() => { setError(null); setRetry(value => value + 1); }}>重试查询</button>}
   </section>;

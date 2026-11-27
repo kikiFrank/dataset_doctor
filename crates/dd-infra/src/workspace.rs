@@ -15,6 +15,7 @@ use crate::json::{ContractError, JsonContracts, JsonProfile};
 use crate::sqlite::{WorkspaceMigrationError, open_existing_workspace_database};
 
 mod create;
+mod recovery;
 pub use create::create_workspace;
 
 const FILE_NAME: &str = ".datasetdoctor.lock";
@@ -277,8 +278,9 @@ fn finish_open(
     root: PathBuf,
     lock: WorkspaceLock,
     marker: MarkerIdentity,
-    connection: Connection,
+    mut connection: Connection,
 ) -> Result<OpenedWorkspace, WorkspaceOpenError> {
+    recovery::settle_abandoned_executions(&mut connection).map_err(WorkspaceOpenError::Database)?;
     let offline_asset_count = connection
         .query_row(
             "SELECT count(*) FROM main.assets WHERE availability = 'OFFLINE'",

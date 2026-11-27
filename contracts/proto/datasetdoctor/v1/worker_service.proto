@@ -219,6 +219,11 @@ message ExecutionSnapshot {
   string error_code = 4;
 }
 
+message ExecutionCancellationReceipt {
+  bool requested = 1;
+  string observed_status = 2;
+}
+
 service PythonWorker {
   rpc StartProfileDataset(DatasetProfileRequest) returns (ExecutionHandle);
   rpc StartImageQualityInspection(StartImageQualityInspectionRequest) returns (ExecutionHandle);
@@ -228,6 +233,7 @@ service PythonWorker {
   rpc StartFrameResolve(FrameResolveRequest) returns (ExecutionHandle);
   rpc StartTracking(VideoTrackingRequest) returns (ExecutionHandle);
   rpc GetExecution(ExecutionLookup) returns (ExecutionSnapshot);
+  rpc CancelExecution(ExecutionLookup) returns (ExecutionCancellationReceipt);
   rpc Health(HealthRequest) returns (HealthSnapshot);
   rpc Shutdown(ShutdownRequest) returns (ShutdownReceipt);
 }

@@ -373,3 +373,11 @@ class ExecutionSnapshot(_message.Message):
     result_manifest_ref: _common_pb2.ArtifactRef
     error_code: str
     def __init__(self, handle: _Optional[_Union[_core_execution_pb2.ExecutionHandle, _Mapping]] = ..., status: _Optional[str] = ..., result_manifest_ref: _Optional[_Union[_common_pb2.ArtifactRef, _Mapping]] = ..., error_code: _Optional[str] = ...) -> None: ...
+
+class ExecutionCancellationReceipt(_message.Message):
+    __slots__ = ("requested", "observed_status")
+    REQUESTED_FIELD_NUMBER: _ClassVar[int]
+    OBSERVED_STATUS_FIELD_NUMBER: _ClassVar[int]
+    requested: bool
+    observed_status: str
+    def __init__(self, requested: _Optional[bool] = ..., observed_status: _Optional[str] = ...) -> None: ...

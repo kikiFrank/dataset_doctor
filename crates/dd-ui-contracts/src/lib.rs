@@ -7,6 +7,7 @@ pub mod dataset_export;
 pub mod dataset_import;
 pub mod report_export;
 pub mod staging;
+pub mod task;
 pub mod video;
 pub mod workflow;
 pub mod workspace;
@@ -174,6 +175,9 @@ pub fn wire_primitives_typescript() -> String {
         dataset::DatasetGetRequest::decl(&config),
         dataset::DatasetDetail::decl(&config),
         dataset::AssetKind::decl(&config),
+        task::TaskCancelRequest::decl(&config),
+        task::CancellationTargetKind::decl(&config),
+        task::CancellationReceipt::decl(&config),
         dataset::AssetListRequest::decl(&config),
         dataset::AnnotationState::decl(&config),
         dataset::AssetSummary::decl(&config),

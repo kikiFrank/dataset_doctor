@@ -31,6 +31,7 @@ pub(crate) mod report_export;
 pub(crate) mod review;
 pub(crate) mod review_commit;
 pub(crate) mod staging;
+pub(crate) mod task;
 pub(crate) mod video;
 pub(crate) mod video_annotations;
 pub(crate) mod video_frames;
@@ -489,6 +490,10 @@ impl Commands {
                 ("NOT_FOUND", "当前工作区中没有此任务。")
             }
             WorkspaceThreadError::Busy => ("RESOURCE_BUSY", "工作区请求队列已满。"),
+            WorkspaceThreadError::ExecutorsActive => (
+                "RESOURCE_BUSY",
+                "工作区任务仍在执行或释放资源，请等待完成或取消任务后再关闭。",
+            ),
             _ => ("INTERNAL", "工作区服务不可用。"),
         };
         self.error(code, message)

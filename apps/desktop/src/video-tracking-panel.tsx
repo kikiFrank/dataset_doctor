@@ -3,6 +3,7 @@ import type {
   CocoCategory, DatasetSamplingMode, VideoFrame, VideoSegment, VideoTrackingView,
 } from "./api/generated/wire-primitives";
 import { getTask } from "./api/task";
+import { TaskCancelButton } from "./task-cancel-button";
 import { submitVideoTracking } from "./api/video";
 import { workspaceCommandError, type OpenWorkspace } from "./api/workspace";
 import { matchingTrackingReceipt, trackingObservationsAtFrame, trackingSamplingConfig } from "./video-annotation";
@@ -38,6 +39,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
   const [interval, setIntervalValue] = useState("1");
   const [busy, setBusy] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState("QUEUED");
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const request = useRef({ fingerprint: "", key: "" });
@@ -52,6 +54,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
       try {
         const task = await getTask(workspace, id);
         if (!current) return;
+        setTaskStatus(task.status);
         if (active.has(task.status)) {
           timer = setTimeout(() => void read(), 500);
           return;
@@ -59,7 +62,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
         setTaskId(null);
         request.current = { fingerprint: "", key: "" };
         if (task.status === "SUCCEEDED" && task.video_tracking) onReceipt(task.video_tracking);
-        else setError(errors[task.error_code ?? ""] ?? "追踪未完成，请核对片段和视频来源。");
+        else setError(task.status === "CANCELLED" ? "追踪已取消，可以重新提交。" : errors[task.error_code ?? ""] ?? "追踪未完成，请核对片段和视频来源。");
       } catch (failure) {
         if (current) setError(workspaceCommandError(failure));
       }
@@ -84,6 +87,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
       }
       const operation = await submitVideoTracking(workspace, fields, request.current.key);
       setTaskId(operation.task_id);
+      setTaskStatus(operation.status);
     } catch (failure) {
       setError(workspaceCommandError(failure));
     } finally {
@@ -120,6 +124,7 @@ export function VideoTrackingPanel({ workspace, segments, frame, categories, sch
       </fieldset>
     </form>
     {taskId && !error && <p role="status">正在对选定实际帧运行追踪…</p>}
+    {taskId && <TaskCancelButton key={taskId} workspace={workspace} taskId={taskId} status={taskStatus} />}
     {error && <p role="alert">{error}</p>}
     {taskId && error && <button type="button" onClick={() => { setError(null); setRetry(value => value + 1); }}>重试查询</button>}
     {receipt && !current && <p>当前片段或类别与已保存结果的范围不一致，请重新追踪。</p>}

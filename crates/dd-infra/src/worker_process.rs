@@ -39,6 +39,16 @@ pub struct WorkerProcess {
 }
 
 impl WorkerProcess {
+    pub async fn cancel_execution(
+        &mut self,
+        lookup: ExecutionLookup,
+    ) -> Result<dd_protocol::v1::ExecutionCancellationReceipt, WorkerProcessError> {
+        self.client
+            .cancel_execution(self.process.request(lookup))
+            .await
+            .map(|reply| reply.into_inner())
+            .map_err(WorkerProcessError::Rpc)
+    }
     pub(crate) async fn launch_program(
         program: WorkerProgram,
         executor_session: Uuid,

@@ -162,6 +162,12 @@ class Worker(service.PythonWorkerServicer):
         self._stop.set()
         return protocol.ShutdownReceipt(accepted=True)
 
+    def CancelExecution(self, request, context):
+        self._authorize(context)
+        if self._executions is None:
+            context.abort(grpc.StatusCode.NOT_FOUND, "execution not found")
+        return self._executions.cancel(request, context)
+
 
 def main():
     try:

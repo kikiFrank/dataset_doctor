@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Sender, SyncSender, TrySendError};
 #[cfg(feature = "execution-rpc")]
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -47,6 +47,7 @@ pub enum WorkspaceThreadError {
     WorkflowDatabase(rusqlite::Error),
     Backup(WorkspacePackageError),
     Busy,
+    ExecutorsActive,
     Stopped,
 }
 
@@ -64,6 +65,10 @@ impl Display for WorkspaceThreadError {
             }
             Self::Backup(error) => Display::fmt(error, formatter),
             Self::Busy => write!(formatter, "Workspace request queue is full"),
+            Self::ExecutorsActive => write!(
+                formatter,
+                "Wait for or cancel active Workspace executions before closing"
+            ),
             Self::Stopped => write!(formatter, "Workspace thread has stopped"),
         }
     }
@@ -111,6 +116,20 @@ pub struct WorkspaceThread {
     owner: Option<JoinHandle<()>>,
     #[cfg(feature = "execution-rpc")]
     final_operations: Mutex<()>,
+    #[cfg(feature = "execution-rpc")]
+    live_executors: Arc<Mutex<usize>>,
+}
+
+#[cfg(feature = "execution-rpc")]
+pub(crate) struct WorkspaceExecutorLease(Arc<Mutex<usize>>);
+
+#[cfg(feature = "execution-rpc")]
+impl Drop for WorkspaceExecutorLease {
+    fn drop(&mut self) {
+        if let Ok(mut count) = self.0.lock() {
+            *count -= 1;
+        }
+    }
 }
 
 impl WorkspaceThread {
@@ -188,6 +207,8 @@ impl WorkspaceThread {
             owner: Some(owner),
             #[cfg(feature = "execution-rpc")]
             final_operations: Mutex::new(()),
+            #[cfg(feature = "execution-rpc")]
+            live_executors: Arc::new(Mutex::new(0)),
         })
     }
 
@@ -446,9 +467,50 @@ impl WorkspaceThread {
 
     pub fn close(&self, expected_session_id: Uuid) -> Result<(), WorkspaceThreadError> {
         #[cfg(feature = "execution-rpc")]
+        let executors = self
+            .live_executors
+            .lock()
+            .map_err(|_| WorkspaceThreadError::Stopped)?;
+        #[cfg(feature = "execution-rpc")]
+        if *executors != 0 {
+            return Err(WorkspaceThreadError::ExecutorsActive);
+        }
+        #[cfg(feature = "execution-rpc")]
         let _guard = self.lock_final_operations()?;
         self.request(|reply| Request::Close(expected_session_id, reply))?
             .map_err(WorkspaceThreadError::Access)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn retain_executor(
+        &self,
+        session: Uuid,
+    ) -> Result<WorkspaceExecutorLease, WorkspaceThreadError> {
+        let mut count = self
+            .live_executors
+            .lock()
+            .map_err(|_| WorkspaceThreadError::Stopped)?;
+        if !self
+            .current()?
+            .is_some_and(|current| current.workspace_session_id == session)
+        {
+            return Err(WorkspaceThreadError::Access(
+                WorkspaceAccessError::StaleSession,
+            ));
+        }
+        *count += 1;
+        Ok(WorkspaceExecutorLease(Arc::clone(&self.live_executors)))
+    }
+
+    pub fn cancel_task(
+        &self,
+        session: Uuid,
+        task: Uuid,
+        now_ms: i64,
+    ) -> Result<crate::task_store::TaskCancellationReceipt, WorkspaceThreadError> {
+        self.task(session, move |workspace| {
+            workspace.cancel_task(task, now_ms)
+        })
     }
 
     #[cfg(feature = "execution-rpc")]
@@ -625,6 +687,18 @@ impl WorkspaceThread {
     ) -> Result<TerminalReceipt, WorkspaceThreadError> {
         self.task(scope.workspace_session, move |workspace| {
             workspace.record_failure(scope, event, code, now_ms)
+        })
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn record_cancelled(
+        &self,
+        scope: ReportScope,
+        event: (Uuid, u64),
+        now_ms: i64,
+    ) -> Result<TerminalReceipt, WorkspaceThreadError> {
+        self.task(scope.workspace_session, move |workspace| {
+            workspace.record_cancelled(scope, event, now_ms)
         })
     }
 

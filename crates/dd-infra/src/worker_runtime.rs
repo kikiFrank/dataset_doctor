@@ -111,6 +111,7 @@ pub(crate) struct WorkerRuntime {
     worker: WorkerProcess,
     stop_core: oneshot::Sender<()>,
     core_task: JoinHandle<Result<(), tonic::transport::Error>>,
+    _lease: crate::workspace_thread::WorkspaceExecutorLease,
 }
 
 pub(crate) struct WorkerJob {
@@ -341,13 +342,14 @@ impl WorkerRuntime {
         capability: &str,
     ) -> Result<Self, WorkerRuntimeError> {
         let storage = Arc::clone(&workspace);
-        let (session, root) = tokio::task::spawn_blocking(move || {
+        let (session, root, lease) = tokio::task::spawn_blocking(move || {
+            let lease = storage.retain_executor(expected_session)?;
             let session = storage
                 .current()?
                 .filter(|current| current.workspace_session_id == expected_session)
                 .ok_or(WorkerRuntimeError::StaleWorkspace)?;
             let root = storage.storage_root(expected_session)?;
-            Ok::<_, WorkerRuntimeError>((session, root))
+            Ok::<_, WorkerRuntimeError>((session, root, lease))
         })
         .await
         .map_err(|_| WorkerRuntimeError::CoreStopped)??;
@@ -400,6 +402,7 @@ impl WorkerRuntime {
             worker,
             stop_core,
             core_task,
+            _lease: lease,
         })
     }
 
@@ -489,6 +492,14 @@ impl WorkerRuntime {
             .await?;
         timeout(deadline, async {
             loop {
+                if self.outcome(task).await?.status == "CANCELLING" {
+                    self.worker
+                        .cancel_execution(ExecutionLookup {
+                            task_id: handle.task_id.clone(),
+                            attempt_id: handle.attempt_id.clone(),
+                        })
+                        .await?;
+                }
                 let snapshot = self
                     .worker
                     .execution(ExecutionLookup {
@@ -496,8 +507,11 @@ impl WorkerRuntime {
                         attempt_id: handle.attempt_id.clone(),
                     })
                     .await?;
-                if matches!(snapshot.status.as_str(), "SUCCEEDED" | "FAILED") {
-                    break Ok::<_, WorkerProcessError>(());
+                if matches!(
+                    snapshot.status.as_str(),
+                    "SUCCEEDED" | "FAILED" | "CANCELLED"
+                ) {
+                    break Ok::<_, WorkerRuntimeError>(());
                 }
                 sleep(Duration::from_millis(40)).await;
             }
@@ -505,7 +519,7 @@ impl WorkerRuntime {
         .await
         .map_err(|_| WorkerRuntimeError::Deadline)??;
         let result = self.outcome(task).await?;
-        if !matches!(result.status.as_str(), "SUCCEEDED" | "FAILED") {
+        if !matches!(result.status.as_str(), "SUCCEEDED" | "FAILED" | "CANCELLED") {
             return Err(WorkerRuntimeError::ResultUnconfirmed);
         }
         Ok(result)

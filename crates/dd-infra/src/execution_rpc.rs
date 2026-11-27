@@ -216,6 +216,16 @@ impl CoreExecutionControl for CoreClaimService {
                             result_manifest_ref: Some(reference),
                         }))
                     }
+                    Event::Cancelled(_) => {
+                        let receipt = workspace
+                            .record_cancelled(scope, (event_id, source_event_seq), utc_now_ms()?)
+                            .map_err(storage_status)?;
+                        Ok(Some(TerminalResultReceipt {
+                            accepted_at: receipt.accepted_at,
+                            completion_fingerprint: receipt.completion_fingerprint,
+                            result_manifest_ref: None,
+                        }))
+                    }
                     Event::Failed(failure) => {
                         let code = ExecutionFailureCode::try_from(failure.code)
                             .ok()

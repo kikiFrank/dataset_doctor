@@ -7,12 +7,15 @@ import json
 from math import isfinite
 from pathlib import Path
 import subprocess
-from threading import Event, Timer
+from threading import Event, Thread
+from time import monotonic
 
 if __package__:
     from .image_inspection import ImageInspectionError, inspect_image
+    from .execution_control import cancellation_event, checkpoint
 else:
     from image_inspection import ImageInspectionError, inspect_image
+    from execution_control import cancellation_event, checkpoint
 
 
 INPUT_OPTIONS = (
@@ -180,6 +183,8 @@ class VideoDecoder:
         return DisplayFrame(frame.get("pts"), width, height, frame.get("pict_type"))
 
     def _capture(self, executable: Path, args: list[str], limit: int) -> bytes:
+        checkpoint()
+        cancellation = cancellation_event()
         try:
             with subprocess.Popen(
                 [str(executable), "-hide_banner", "-loglevel", "error", *args],
@@ -189,28 +194,38 @@ class VideoDecoder:
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             ) as process:
                 expired = Event()
+                stopped = Event()
 
-                def stop_on_timeout():
-                    if process.poll() is None:
-                        expired.set()
-                        process.kill()
+                def monitor():
+                    deadline = monotonic() + self.timeout_seconds
+                    while not stopped.wait(0.025):
+                        if cancellation is not None and cancellation.is_set():
+                            if process.poll() is None:
+                                process.kill()
+                            return
+                        if monotonic() >= deadline:
+                            if process.poll() is None:
+                                expired.set()
+                                process.kill()
+                            return
 
-                timer = Timer(self.timeout_seconds, stop_on_timeout)
-                timer.start()
+                watcher = Thread(target=monitor, name="video-stop-monitor")
+                watcher.start()
                 try:
                     output = process.stdout.read(limit + 1)
                     if len(output) > limit:
                         process.kill()
                         raise VideoDecodeError("output_limit_exceeded")
                     code = process.wait()
+                    checkpoint()
                     if expired.is_set():
                         raise VideoDecodeError("decode_timed_out")
                     if code != 0 or not output:
                         raise VideoDecodeError("decode_failed")
                     return output
                 finally:
-                    timer.cancel()
-                    timer.join()
+                    stopped.set()
+                    watcher.join()
                     if process.poll() is None:
                         process.kill()
         except OSError as error:

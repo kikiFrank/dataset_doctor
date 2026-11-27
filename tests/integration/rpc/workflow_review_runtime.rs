@@ -174,6 +174,100 @@ async fn reviewed_case(
 }
 
 #[tokio::test]
+async fn reopening_an_abandoned_review_attempt_preserves_final_and_allows_an_explicit_retry() {
+    let (fixture, runtime, request, _, _) = reviewed_case("InterruptedReviewRecheck").await;
+    let session = fixture.session;
+    let run = request.workflow_run_id;
+    drop(
+        runtime
+            .prepare_review_completion(session, request.clone())
+            .unwrap(),
+    );
+    let db = Connection::open(fixture.root.join("workspace.db")).unwrap();
+    let (task, fingerprint): (String, String) = db.query_row(
+        "SELECT task_id,input_fingerprint FROM tasks WHERE workflow_run_id=?1 AND node_id GLOB 'final_annotation/recheck/*'",
+        [run.to_string()], |row| Ok((row.get(0)?, row.get(1)?)),
+    ).unwrap();
+    let task = Uuid::parse_str(&task).unwrap();
+    // Persist the same authorized dispatch boundary at which the previous
+    // supervisor can crash, without inventing an accepted Worker terminal.
+    fixture
+        .workspace
+        .record_dispatch(
+            dd_core::execution_grant::GrantScope {
+                workspace_session: session,
+                task,
+                attempt: Uuid::new_v4(),
+                executor_session: Uuid::new_v4(),
+                input_fingerprint: std::array::from_fn(|index| {
+                    u8::from_str_radix(&fingerprint[index * 2..index * 2 + 2], 16).unwrap()
+                }),
+                operation_digest: [0x21; 32],
+                reservation: Uuid::new_v4(),
+            },
+            Uuid::new_v4(),
+            [0x31; 32],
+            now(),
+        )
+        .unwrap();
+    fixture.workspace.cancel_task(session, task, now()).unwrap();
+    let final_bytes = fs::read(fixture.source.join("signal.json")).unwrap();
+    let previous_report = fixture.store.get(session, run).unwrap().report_task_id;
+    fixture.workspace.close(session).unwrap();
+    let grant = fixture
+        .workspace
+        .grant_selected_directory(fixture.root.clone())
+        .unwrap();
+    let reopened = fixture
+        .workspace
+        .open(grant.grant_id)
+        .unwrap()
+        .workspace_session_id;
+    let current = fixture.store.get(reopened, run).unwrap();
+    assert_eq!(current.status, WorkflowStatus::WaitingReview);
+    assert_eq!(
+        current.error_code.as_deref(),
+        Some("REVIEW_RECHECK_INTERRUPTED")
+    );
+    assert!(!current.review_recheck_pending);
+    assert_eq!(current.report_task_id, previous_report);
+    assert_eq!(
+        fixture
+            .workspace
+            .task_outcome(reopened, task)
+            .unwrap()
+            .status,
+        "INTERRUPTED"
+    );
+    let retry = WorkflowRecheckRequest {
+        expected_row_revision: current.row_revision,
+        request_id: Uuid::new_v4(),
+        idempotency_key: Uuid::new_v4(),
+        ..request
+    };
+    runtime
+        .complete_after_review(reopened, retry)
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture.store.get(reopened, run).unwrap().status,
+        WorkflowStatus::Completed
+    );
+    assert_eq!(
+        fixture
+            .workspace
+            .task_outcome(reopened, task)
+            .unwrap()
+            .status,
+        "INTERRUPTED"
+    );
+    assert_eq!(
+        fs::read(fixture.source.join("signal.json")).unwrap(),
+        final_bytes
+    );
+}
+
+#[tokio::test]
 async fn review_completion_runs_one_real_recheck_and_replays_without_new_tasks() {
     let (fixture, runtime, request, final_operation_id, original_geometry) =
         reviewed_case("Workflow Recheck Dispatch").await;

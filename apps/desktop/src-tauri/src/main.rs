@@ -328,6 +328,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::dataset_import::dataset_import_inspect,
             workspace_commands::dataset_import::dataset_import_external,
             workspace_commands::dataset_import::task_get,
+            workspace_commands::task::task_cancel,
             workspace_commands::geometry::annotation_geometry_submit,
             workspace_commands::workflow::workflow_start,
             workspace_commands::workflow::workflow_get,
