@@ -2,7 +2,7 @@ import { acknowledgeWorkspaceVerification } from "./runtime";
 import { getAnnotation, getDisplayLocator, listAssets, listDatasets } from "./dataset";
 import { confirmImport, inspectImport, pickImportDirectory } from "./dataset-import";
 import { exportDataset, selectExportDirectory } from "./dataset-export";
-import { openReview, saveReviewDraft, submitReviewCommit } from "./review";
+import { authorizeReviewWrite, openReview, saveReviewDraft, submitReviewCommit } from "./review";
 import { getTask, startGeometry } from "./task";
 import { closeWorkspace, selectAndCreateWorkspace, selectAndOpenWorkspace, workspaceCommandError } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -86,7 +86,10 @@ export async function verifyWorkspaceBusinessIpc({ verifyColor, verifyWorkflow, 
       width: geometry.width, height: geometry.height,
     }, editor.categories, boxes);
     const draft = await saveReviewDraft(workspace, editor.review, check.task_id, null, fixed);
-    const committed = await submitReviewCommit(workspace, editor.review, draft, false, crypto.randomUUID());
+    const writeGrant = editor.annotation_write_access.authorization_required
+      ? await authorizeReviewWrite(workspace, editor.review) : null;
+    if (editor.annotation_write_access.authorization_required && !writeGrant) throw new Error("Annotation write authorization was cancelled");
+    const committed = await submitReviewCommit(workspace, editor.review, draft, false, crypto.randomUUID(), writeGrant?.grant_id);
     await completed(workspace, committed.task_id);
     const final = await getAnnotation(workspace, asset);
     if (final.annotation_state !== "CONFIRMED_POSITIVE" || final.formal_coco?.annotations[0].bbox[0] !== 30) {

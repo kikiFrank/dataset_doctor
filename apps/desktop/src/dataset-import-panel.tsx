@@ -112,6 +112,7 @@ export function DatasetImportPanel(
       void submit(preview !== null);
     }}>
       <h3>导入图片与标注</h3>
+      <p>导入后可以保存工作区草稿，Final 写回需要单独的目录授权。</p>
       <label htmlFor="import-name">新数据集名称</label>
       <input id="import-name" required maxLength={128} value={name} disabled={disabled} onChange={(event) => {
         setName(event.target.value);

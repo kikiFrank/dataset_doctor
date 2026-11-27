@@ -127,8 +127,11 @@ async fn reviewed_case(
         )
         .unwrap();
     let finals = ReviewFinalService::new(Arc::clone(owner)).unwrap();
+    let grant = finals
+        .authorize_write(session, review.review_id, fixture.source.clone())
+        .unwrap();
     let final_operation = finals
-        .prepare(
+        .prepare_with_write_grant(
             session,
             ReviewFinalRequest {
                 review_id: review.review_id,
@@ -140,6 +143,7 @@ async fn reviewed_case(
                 idempotency_key: Uuid::new_v4(),
                 confirmed_negative: false,
             },
+            grant.grant_id,
             now(),
         )
         .unwrap();

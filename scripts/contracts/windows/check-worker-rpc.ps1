@@ -8,7 +8,8 @@ param(
     [string]$CocoReaderPythonExe,
     [string]$PackagedWorkerExe,
     [string]$VideoFfmpegExe,
-    [string]$VideoFfprobeExe
+    [string]$VideoFfprobeExe,
+    [string[]]$InfraTests = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,13 +75,17 @@ $env:PROTOC = (Resolve-Path -LiteralPath $ProtocExe).Path
 $cargo = Join-Path $RustBin 'cargo.exe'
 $manifest = Join-Path $repo 'Cargo.toml'
 Write-Output "Python stub drift check passed. Worker RPC evidence: $run"
-& $env:DD_WORKER_PYTHON -I -B -m unittest discover -s (Join-Path $repo 'tests/worker/execution') -v
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($InfraTests.Count -eq 0 -or $InfraTests -contains 'worker_failures') {
+    & $env:DD_WORKER_PYTHON -I -B -m unittest discover -s (Join-Path $repo 'tests/worker/execution') -v
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
-& $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
-    ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($InfraTests.Count -eq 0) {
+    & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
+        ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_failures', '--test', 'worker_process',
     '--test', 'worker_image_quality', '--test', 'workspace_image_quality',
     '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile', '--test', 'workflow_profile',
@@ -89,7 +94,7 @@ $tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test
     '--test', 'workflow_geometry_resume', '--test', 'workflow_review_gate', '--test', 'workflow_review_runtime',
     '--test', 'report_export',
     '--test', 'worker_color_preview', '--test', 'workspace_color_preview', '--test', 'workspace_color_apply',
-    '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final',
+    '--test', 'workspace_geometry', '--test', 'review_draft', '--test', 'review_final', '--test', 'review_write_authorization',
     '--test', 'workspace_backup_task')
 if ($PackagedWorkerExe) {
     $tests = @('--test', 'worker_color_preview', '--test', 'worker_dataset_profile', '--test', 'worker_image_quality',
@@ -105,6 +110,15 @@ if ($VideoFfmpegExe) {
 if ($CocoReaderPythonExe) {
     $env:DD_COCO_READER_PYTHON = (Resolve-Path -LiteralPath $CocoReaderPythonExe).Path
     $tests += @('--test', 'coco_export')
+}
+if ($InfraTests.Count -gt 0) {
+    $available = @($tests | Where-Object { $_ -ne '--test' })
+    foreach ($name in $InfraTests) {
+        if ($available -notcontains $name) {
+            throw "Infrastructure test '$name' is unavailable with the supplied Worker and video options."
+        }
+    }
+    $tests = @(foreach ($name in $InfraTests) { '--test'; $name })
 }
 & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc @tests -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log') -Append

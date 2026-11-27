@@ -64,7 +64,16 @@ async fn final_preparation_requires_explicit_approval_and_replays_after_reopen()
         ReviewStatus::Open
     );
     request.confirmed_negative = true;
-    let accepted = final_reviews.prepare(session, request.clone(), 15).unwrap();
+    let grant = final_reviews
+        .authorize_write(
+            session,
+            opened.review_id,
+            formal.parent().unwrap().to_owned(),
+        )
+        .unwrap();
+    let accepted = final_reviews
+        .prepare_with_write_grant(session, request.clone(), grant.grant_id, 15)
+        .unwrap();
     assert_eq!(accepted.state, FinalOperationState::Prepared);
     assert_eq!(
         owner.get_review(session, opened.review_id).unwrap().status,
@@ -313,8 +322,15 @@ fn prepare_negative(fixture: &ReviewFixture) -> (ReviewFinalService, FinalOperat
             13,
         )
         .unwrap();
+    let grant = coordinator
+        .authorize_write(
+            fixture.session,
+            fixture.opened.review_id,
+            fixture.formal.parent().unwrap().to_owned(),
+        )
+        .unwrap();
     let operation = coordinator
-        .prepare(
+        .prepare_with_write_grant(
             fixture.session,
             ReviewFinalRequest {
                 review_id: fixture.opened.review_id,
@@ -326,6 +342,7 @@ fn prepare_negative(fixture: &ReviewFixture) -> (ReviewFinalService, FinalOperat
                 idempotency_key: Uuid::new_v4(),
                 confirmed_negative: true,
             },
+            grant.grant_id,
             14,
         )
         .unwrap();

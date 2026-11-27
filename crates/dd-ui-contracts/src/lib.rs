@@ -294,6 +294,8 @@ pub fn wire_primitives_typescript() -> String {
         annotation::DraftReceipt::decl(&config),
         annotation::ReviewDraftView::decl(&config),
         annotation::ReviewEditorView::decl(&config),
+        annotation::ReviewWriteAccessView::decl(&config),
+        annotation::ReviewWriteAuthorizeRequest::decl(&config),
         annotation::MediaPurpose::decl(&config),
         annotation::MediaGetLocatorRequest::decl(&config),
         annotation::DisplayLocator::decl(&config),

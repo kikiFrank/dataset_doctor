@@ -84,6 +84,12 @@ impl ReviewFinalService {
             &manifest.new_annotation_digest,
             MAX_ANNOTATION,
         )?;
+        if let Some(root) = &manifest.authorized_write_root
+            && !manifest.target_path.starts_with(&pending.root)
+            && (root.canonicalize()? != *root || !manifest.target_path.starts_with(root))
+        {
+            return Err(ReviewFinalError::WriteAuthorizationRequired);
+        }
         if let Some(entry) = &manifest.track_map {
             if entry.reference.artifact_id != operation {
                 return Err(ReviewFinalError::InvalidOperation);

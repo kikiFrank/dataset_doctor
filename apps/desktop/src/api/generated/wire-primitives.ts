@@ -290,13 +290,17 @@ export type ReviewSaveDraftRequest = { context: CommandContext, review_id: UuidT
 
 export type ReviewCancelRequest = { context: CommandContext, review_id: UuidText, expected_revision: DecimalU64, };
 
-export type ReviewCommitRequest = { context: CommandContext, review_id: UuidText, expected_review_revision: DecimalU64, base_image_digest: string, base_annotation_digest: string | null, draft_digest: string, confirmed_negative: boolean, };
+export type ReviewCommitRequest = { annotation_write_grant_id?: UuidText, context: CommandContext, review_id: UuidText, expected_review_revision: DecimalU64, base_image_digest: string, base_annotation_digest: string | null, draft_digest: string, confirmed_negative: boolean, };
 
 export type DraftReceipt = { review_id: UuidText, draft_revision: DecimalU64, draft_digest: string, review_revision: DecimalU64, };
 
 export type ReviewDraftView = { receipt: DraftReceipt, source_task_id: UuidText, coco_document: CocoDocument, track_selections?: Array<ReviewTrackSelection>, };
 
-export type ReviewEditorView = { review: ReviewSession, categories: Array<CocoCategory>, draft: ReviewDraftView | null, initial_track_selections?: Array<ReviewTrackSelection>, };
+export type ReviewEditorView = { annotation_write_access: ReviewWriteAccessView, review: ReviewSession, categories: Array<CocoCategory>, draft: ReviewDraftView | null, initial_track_selections?: Array<ReviewTrackSelection>, };
+
+export type ReviewWriteAccessView = { authorization_required: boolean, read_only: boolean, };
+
+export type ReviewWriteAuthorizeRequest = { context: CommandContext, review_id: UuidText, };
 
 export type MediaPurpose = "DISPLAY";
 

@@ -517,7 +517,7 @@ workspace_registry 是入口索引；真正打开时仍验证目标 Workspace �
 
 1. 验证 request、session、目标 Asset、当前 row_revision、基线图片/标注/类别摘要、授权路径及审核状态。
 2. 以 operation_kind 和 idempotency_key 查询 file_operations，并比对 request_fingerprint。已完成返回原结果；同 key 不同意图返回冲突；未完成恢复原操作，不另起第二次覆盖。
-3. 在受控临时位置准备新 JSON、必要的正式 track map 和操作 manifest。manifest 记录每个目标的旧摘要、新摘要、临时文件、预期 SQL 变更和产物身份。
+3. 在受控临时位置准备新 JSON、必要的正式 track map 和操作 manifest。manifest 记录每个目标的旧摘要、新摘要、临时文件、预期 SQL 变更和产物身份。新的外部标注操作先消费独立写授权并实际探测权限与文件占用，失败不登记操作意图；其 manifest v1 可选字段 authorized_write_root 将授权根目录冻结在摘要中，应用时重验规范路径，拒绝目录联接重定向。旧的已受理操作允许缺省该字段，继续按原受保护清单恢复。恢复后文件位于当前 Workspace 受管目录时使用当前工作区写权限。只读/拒绝写入映射 PERMISSION_DENIED，Windows 共享锁映射 FILE_BUSY。
 4. 临时内容验证通过后，持久化 PREPARED 意图；Core 获取相关资源的提交锁并再次检查基线。
 5. 逐个替换目标文件。单图文件用完整文件替换避免留下半截正文；多文件操作逐项记录进度，不宣称整体文件系统事务。
 6. 校验新摘要，执行一个 SQL 事务：更新登记摘要和正式依赖、确认审核、更新成员关系，并将操作记为 COMMITTED。

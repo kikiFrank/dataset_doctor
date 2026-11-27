@@ -204,7 +204,8 @@ asset_list 保留 dataset_id 指定数据集图片的已有请求。Workspace �
 | review_open | asset_id、base_image_digest、base_annotation_digest? | ReviewSession | 同一 Asset 仅一个活动审核；重复请求返回当前会话或明确占用 |
 | review_save_draft | review_id、expected_review_revision、expected_draft_revision、coco_document、track_selections? | DraftReceipt | 验证几何、类别、图像和已选轨迹关联，保存审核草稿 |
 | review_candidates_submit | review_id、model_profile_id、check_scope、candidate_policy | 异步 | 创建视觉审核任务；绑定基础图像与标签摘要；不保证新候选更优 |
-| review_commit | review_id、expected_review_revision、draft_digest、base_image_digest、base_annotation_digest?、confirmed_negative | 异步 | 用户批准入口；Core 提交最终 JSON；成功后清理活动 Human/AI 草稿与候选，保留报告/证据按保留策略 |
+| review_write_authorize | review_id | 同步原生目录选择 | Core 核对登记标注与选择目录、实际写权限和占用，返回当前会话、短期、单次的 REVIEW_COMMIT 授权；读取授权不能替代 |
+| review_commit | review_id、expected_review_revision、draft_digest、base_image_digest、base_annotation_digest?、confirmed_negative、annotation_write_grant_id? | 异步 | 用户批准入口；外部标注的新提交须消费独立写授权，受管 Workspace 内文件沿用工作区写权限；已受理操作按原幂等身份恢复。Core 提交最终 JSON；成功后清理活动 Human/AI 草稿与候选，保留报告/证据按保留策略 |
 | review_cancel | review_id、expected_revision | ReviewSession | 丢弃活动审核草稿，不改当前正式文件 |
 | media_get_locator | asset_id 或 artifact_id、purpose=DISPLAY | DisplayLocator | 返回限范围、可到期的本地展示定位符；不返回 API Key 或任意可写路径 |
 

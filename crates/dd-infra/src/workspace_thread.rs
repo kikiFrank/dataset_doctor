@@ -248,6 +248,24 @@ impl WorkspaceThread {
     }
 
     #[cfg(feature = "execution-rpc")]
+    pub(crate) fn grant_annotation_directory(
+        &self,
+        session: Uuid,
+        selected: PathBuf,
+    ) -> Result<WorkspacePathGrant, WorkspaceThreadError> {
+        self.grant_output_directory(session, WorkspacePathPurpose::AnnotationWrite, selected)
+    }
+
+    #[cfg(feature = "execution-rpc")]
+    pub(crate) fn consume_annotation_directory(
+        &self,
+        session: Uuid,
+        grant: Uuid,
+    ) -> Result<PathBuf, WorkspaceThreadError> {
+        self.consume_path(session, WorkspacePathPurpose::AnnotationWrite, grant)
+    }
+
+    #[cfg(feature = "execution-rpc")]
     pub fn grant_backup_directory(
         &self,
         session: Uuid,

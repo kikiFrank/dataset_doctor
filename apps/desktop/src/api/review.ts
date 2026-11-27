@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AnnotationView, CocoDocument, DraftReceipt, ImportOperationRef, ReviewCancelRequest, ReviewCommitRequest,
   ReviewEditorView, ReviewOpenRequest, ReviewSaveDraftRequest, ReviewSession, ReviewTrackSelection,
+  PathGrant, ReviewWriteAuthorizeRequest,
 } from "./generated/wire-primitives";
 import { context } from "./workspace";
 import type { OpenWorkspace } from "./workspace";
@@ -44,8 +45,10 @@ export function cancelReview(workspace: OpenWorkspace, review: ReviewSession): P
 
 export function submitReviewCommit(
   workspace: OpenWorkspace, review: ReviewSession, draft: DraftReceipt, negative: boolean, idempotencyKey: string,
+  annotationWriteGrantId?: string,
 ): Promise<ImportOperationRef> {
   const request: ReviewCommitRequest = {
+    annotation_write_grant_id: annotationWriteGrantId,
     context: { ...context(workspace, crypto.randomUUID()), idempotency_key: idempotencyKey },
     review_id: review.review_id,
     expected_review_revision: draft.review_revision,
@@ -55,4 +58,11 @@ export function submitReviewCommit(
     confirmed_negative: negative,
   };
   return invoke("review_commit", { request });
+}
+
+export function authorizeReviewWrite(workspace: OpenWorkspace, review: ReviewSession): Promise<PathGrant | null> {
+  const request: ReviewWriteAuthorizeRequest = {
+    context: context(workspace, crypto.randomUUID()), review_id: review.review_id,
+  };
+  return invoke("review_write_authorize", { request });
 }

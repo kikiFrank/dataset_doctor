@@ -160,6 +160,8 @@ $env:UV_PROJECT_ENVIRONMENT = Join-Path (Get-Location).Path 'target\dev\worker-v
 powershell.exe -NoProfile -NonInteractive -File .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv
 ```
 
+按当前改动选择专项时，在同一 x64 VS Developer PowerShell 中调用 `& .\scripts\contracts\windows\check-worker-rpc.ps1 -RustBin $rustBin -ProtocExe $protoc -PythonExe $py312 -UvExe $uv -InfraTests @('review_write_authorization','review_final')`。脚本仍准备锁定离线环境、检查 Python 生成物并创建独立夹具目录，只执行所选集成目标；不传 InfraTests 保留完整验收入口。外部 Final 还需页面授权逻辑 `node --experimental-strip-types --test tests/desktop/ui/annotation-write.test.mjs` 与直接受影响的宿主/契约验证，未受影响模块复用已有证据。
+
 入口在离线缓存中同步 Python 和构建 Rust。临时重生成 Python 桩并检查受版本控制的文件无漂移。集成测试验证本机 loopback 鉴权、正常退出、ArtifactRef 跨语言往返和 `ClaimGrant` 持久化重放。另一个测试启动真实 Worker，通过专用 `StartAnnotationGeometryAudit` 检查合成 PNG 和逐图 COCO，核对发现、产物摘要和原文件。配置 Core loopback 连接后，Worker 报告 `annotation_geometry.v1` 能力。工具输出和用例日志位于 `target/contract-check/worker-rpc/`。
 
 已同步 Worker 环境后，`target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/image -v` 可验收实际 PNG/JPEG 解码、EXIF 方向、源字节摘要、损坏输入和像素限制。

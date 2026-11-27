@@ -106,6 +106,7 @@ struct ActiveWorkspace<H> {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum WorkspacePathPurpose {
     Import,
+    AnnotationWrite,
     Export,
     VideoImport,
     Backup,

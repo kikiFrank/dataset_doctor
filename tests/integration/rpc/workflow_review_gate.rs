@@ -144,8 +144,11 @@ async fn workflow_completes_only_after_explicit_final_current_recheck_and_gap_ac
         )
         .unwrap();
     let finals = ReviewFinalService::new(Arc::clone(owner)).unwrap();
+    let grant = finals
+        .authorize_write(session, open.review_id, fixture.source.clone())
+        .unwrap();
     let prepared = finals
-        .prepare(
+        .prepare_with_write_grant(
             session,
             ReviewFinalRequest {
                 review_id: open.review_id,
@@ -157,6 +160,7 @@ async fn workflow_completes_only_after_explicit_final_current_recheck_and_gap_ac
                 idempotency_key: Uuid::new_v4(),
                 confirmed_negative: false,
             },
+            grant.grant_id,
             now(),
         )
         .unwrap();

@@ -142,8 +142,11 @@ fn desktop_completion_dispatches_the_reviewed_final_and_exposes_its_durable_task
         )
         .unwrap();
     let finals = ReviewFinalService::new(Arc::clone(&owner)).unwrap();
+    let grant = finals
+        .authorize_write(session, review.review_id, source.clone())
+        .unwrap();
     let final_operation = finals
-        .prepare(
+        .prepare_with_write_grant(
             session,
             ReviewFinalRequest {
                 review_id: review.review_id,
@@ -155,6 +158,7 @@ fn desktop_completion_dispatches_the_reviewed_final_and_exposes_its_durable_task
                 idempotency_key: Uuid::new_v4(),
                 confirmed_negative: false,
             },
+            grant.grant_id,
             now(),
         )
         .unwrap();

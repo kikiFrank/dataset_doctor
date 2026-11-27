@@ -158,8 +158,11 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
                 13,
             )
             .unwrap();
+        let grant = finals
+            .authorize_write(session, review.review_id, source.clone())
+            .unwrap();
         let operation = finals
-            .prepare(
+            .prepare_with_write_grant(
                 session,
                 ReviewFinalRequest {
                     review_id: review.review_id,
@@ -171,6 +174,7 @@ async fn approved_finals_export_to_the_actual_coco_reader_with_local_ids_reassig
                     idempotency_key: Uuid::new_v4(),
                     confirmed_negative: negative,
                 },
+                grant.grant_id,
                 14,
             )
             .unwrap();

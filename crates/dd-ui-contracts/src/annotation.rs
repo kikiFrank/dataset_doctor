@@ -123,6 +123,9 @@ pub struct ReviewCancelRequest {
 
 #[derive(Deserialize, TS)]
 pub struct ReviewCommitRequest {
+    #[serde(default)]
+    #[ts(optional)]
+    pub annotation_write_grant_id: Option<UuidText>,
     pub context: CommandContext,
     pub review_id: UuidText,
     pub expected_review_revision: DecimalU64,
@@ -152,12 +155,26 @@ pub struct ReviewDraftView {
 
 #[derive(Debug, Serialize, TS)]
 pub struct ReviewEditorView {
+    pub annotation_write_access: ReviewWriteAccessView,
     pub review: ReviewSession,
     pub categories: Vec<CocoCategory>,
     pub draft: Option<ReviewDraftView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub initial_track_selections: Option<Vec<ReviewTrackSelection>>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct ReviewWriteAccessView {
+    pub authorization_required: bool,
+    pub read_only: bool,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewWriteAuthorizeRequest {
+    pub context: CommandContext,
+    pub review_id: UuidText,
 }
 
 #[derive(Deserialize, TS)]

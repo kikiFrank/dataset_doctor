@@ -1,7 +1,9 @@
 //! Explicit approval and durable intent for publishing a reviewed COCO file.
 
 mod apply;
+mod authorization;
 mod tasks;
+pub use authorization::ReviewWriteAccess;
 pub use tasks::FinalTaskSnapshot;
 
 use std::collections::BTreeSet;
@@ -61,6 +63,8 @@ pub struct FinalOperation {
 
 #[derive(Debug)]
 pub enum ReviewFinalError {
+    WriteAuthorizationRequired,
+    FileBusy,
     Storage(WorkspaceThreadError),
     Draft(ReviewDraftError),
     Approval(ReviewValidationError),
@@ -74,6 +78,10 @@ pub enum ReviewFinalError {
 impl Display for ReviewFinalError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::WriteAuthorizationRequired => {
+                formatter.write_str("Explicit annotation write authorization is required")
+            }
+            Self::FileBusy => formatter.write_str("Annotation file is in use"),
             Self::Storage(error) => Display::fmt(error, formatter),
             Self::Draft(error) => Display::fmt(error, formatter),
             Self::Approval(error) => Display::fmt(error, formatter),
@@ -92,7 +100,12 @@ impl Error for ReviewFinalError {}
 
 impl From<io::Error> for ReviewFinalError {
     fn from(error: io::Error) -> Self {
-        Self::Io(error)
+        // Win32 sharing and byte-range lock violations have no stable ErrorKind mapping.
+        if cfg!(windows) && matches!(error.raw_os_error(), Some(32) | Some(33)) {
+            Self::FileBusy
+        } else {
+            Self::Io(error)
+        }
     }
 }
 
@@ -122,6 +135,8 @@ struct FinalManifest {
     confirmed_negative: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     track_map: Option<TrackMapEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    authorized_write_root: Option<PathBuf>,
 }
 
 struct FinalTarget {
@@ -146,6 +161,26 @@ impl ReviewFinalService {
         &self,
         session: Uuid,
         request: ReviewFinalRequest,
+        now_ms: i64,
+    ) -> Result<FinalOperation, ReviewFinalError> {
+        self.prepare_with_authorization(session, request, None, now_ms)
+    }
+
+    pub fn prepare_with_write_grant(
+        &self,
+        session: Uuid,
+        request: ReviewFinalRequest,
+        annotation_write_grant_id: Uuid,
+        now_ms: i64,
+    ) -> Result<FinalOperation, ReviewFinalError> {
+        self.prepare_with_authorization(session, request, Some(annotation_write_grant_id), now_ms)
+    }
+
+    fn prepare_with_authorization(
+        &self,
+        session: Uuid,
+        request: ReviewFinalRequest,
+        annotation_write_grant_id: Option<Uuid>,
         now_ms: i64,
     ) -> Result<FinalOperation, ReviewFinalError> {
         let _guard = self
@@ -246,6 +281,21 @@ impl ReviewFinalService {
                 .into(),
             _ => return Err(ReviewFinalError::InvalidOperation),
         };
+        let authorized_write_root = if annotation.starts_with(&target.root) {
+            None
+        } else {
+            let grant =
+                annotation_write_grant_id.ok_or(ReviewFinalError::WriteAuthorizationRequired)?;
+            let root = self
+                .owner
+                .consume_annotation_directory(session, grant)
+                .map_err(ReviewFinalError::Storage)?;
+            if !annotation.starts_with(&root) || root.canonicalize()? != root {
+                return Err(ReviewFinalError::WriteAuthorizationRequired);
+            }
+            Some(root)
+        };
+        authorization::probe_write(&annotation)?;
         let operation_id = Uuid::new_v4();
         let prefix = format!("artifacts/file-operations/{operation_id}");
         let payload_path = format!("{prefix}/annotation.json");
@@ -282,6 +332,7 @@ impl ReviewFinalService {
             local_image_id,
             confirmed_negative: request.confirmed_negative,
             track_map,
+            authorized_write_root,
         };
         let manifest_path = format!("{prefix}/operation.json");
         let manifest_bytes = serde_json::to_vec(&manifest).map_err(ReviewFinalError::Json)?;

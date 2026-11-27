@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { cancelReview, openReview, saveReviewDraft, submitReviewCommit } from "./api/review";
+import { authorizeReviewWrite, cancelReview, openReview, saveReviewDraft, submitReviewCommit } from "./api/review";
+import { annotationWriteGrantId, annotationWriteReady } from "./annotation-write-state";
 import { getTask } from "./api/task";
 import type {
   AnnotationView, AssetSummary, CocoCategory, CocoImage, DisplayLocator, DraftReceipt, ReviewSession, TrackObservationView,
+  PathGrant, ReviewWriteAccessView,
 } from "./api/generated/wire-primitives";
 import { workspaceCommandError } from "./api/workspace";
 import type { OpenWorkspace } from "./api/workspace";
@@ -12,6 +14,7 @@ import { adoptTrackingBox, makeDraft, nextBoxId, seedBoxes, trackSelections } fr
 import type { BoxCoordinates, EditableBox } from "./review-document";
 
 type Editor = {
+  writeAccess: ReviewWriteAccessView;
   review: ReviewSession;
   categories: CocoCategory[];
   image: CocoImage;
@@ -43,10 +46,14 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
   const [negative, setNegative] = useState(false);
   const [approval, setApproval] = useState<{ key: string; negative: boolean } | null>(null);
   const [commitTask, setCommitTask] = useState<string | null>(null);
+  const [writeGrant, setWriteGrant] = useState<PathGrant | null>(null);
   const [queryRetry, setQueryRetry] = useState(0);
   const dirty = editor !== null && editor.boxes !== editor.savedBoxes;
   const blocked = dirty || busy || commitTask !== null;
   const editingLocked = busy || approval !== null || externalBlocked;
+  const writeReady = editor !== null && annotationWriteReady(editor.writeAccess, writeGrant);
+
+  useEffect(() => { setWriteGrant(null); }, [workspace.workspace_session_id, asset.asset_id]);
 
   useEffect(() => {
     onBlocked(blocked);
@@ -68,12 +75,14 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
         }
         setCommitTask(null);
         if (task.status === "SUCCEEDED") {
+          setWriteGrant(null);
           setApproval(null);
           setEditor(null);
           onChanged();
         } else if (task.error_code === "FINAL_RESUME_REQUIRED") {
           setError("提交需要恢复。可以重试或重新打开工作区。");
         } else {
+          setWriteGrant(null);
           setApproval(null);
           setEditor(null);
           setError("样本已变化，无法发布 Final。请刷新样本并处理冲突。");
@@ -111,6 +120,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
       if (!proof) throw new Error("请先运行标注检查，取得当前图像尺寸。");
       const boxes = seedBoxes(source, loaded.categories, draft?.track_selections ?? loaded.initial_track_selections);
       setEditor({
+        writeAccess: loaded.annotation_write_access,
         review: loaded.review,
         categories: loaded.categories,
         ...proof,
@@ -119,6 +129,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
         savedBoxes: boxes,
       });
       setSelected(boxes.length ? 0 : null);
+      setWriteGrant(null);
       setNegative(false);
     } catch (failure) {
       setError(workspaceCommandError(failure));
@@ -176,19 +187,47 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
     }
   }
 
+  async function authorizeWrite() {
+    if (!editor || editingLocked) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const grant = await authorizeReviewWrite(workspace, editor.review);
+      if (grant) setWriteGrant(grant);
+    } catch (failure) {
+      setWriteGrant(null);
+      setError(workspaceCommandError(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function commit() {
     if (!editor?.receipt || dirty || busy || commitTask || externalBlocked) return;
     const empty = editor.boxes.length === 0;
     if (empty && !negative && !approval) return;
+    let grantId: string | undefined;
+    try {
+      grantId = approval ? writeGrant?.grant_id : annotationWriteGrantId(editor.writeAccess, writeGrant);
+    } catch (failure) {
+      setWriteGrant(null);
+      setError(workspaceCommandError(failure));
+      return;
+    }
     const decision = approval ?? { key: crypto.randomUUID(), negative: empty && negative };
     setApproval(decision);
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const task = await submitReviewCommit(workspace, editor.review, editor.receipt, decision.negative, decision.key);
+      const task = await submitReviewCommit(workspace, editor.review, editor.receipt, decision.negative, decision.key, grantId);
       setCommitTask(task.task_id);
     } catch (failure) {
+      if (failure && typeof failure === "object" && "code" in failure
+        && (failure.code === "PERMISSION_DENIED" || failure.code === "FILE_BUSY")) {
+        setApproval(null);
+        setWriteGrant(null);
+      }
       setError(workspaceCommandError(failure));
     } finally {
       setBusy(false);
@@ -202,6 +241,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
     setError(null);
     try {
       await cancelReview(workspace, review);
+      setWriteGrant(null);
       setEditor(null);
       setConfirmCancel(false);
       onChanged();
@@ -288,6 +328,12 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
             </div>
           </div>
           <div className="review-actions">
+            {!writeReady && !approval && <p role="status">
+              {editor.writeAccess.read_only ? "标注文件只读，调整权限后可重新授权。" : "正式标注写入待授权。"}
+            </p>}
+            {!approval && (!writeReady || editor.writeAccess.authorization_required) && <button type="button"
+              disabled={editingLocked} onClick={() => void authorizeWrite()}>授权标注写入</button>}
+            {writeGrant && writeReady && <p>本次授权目录 {writeGrant.display_path}</p>}
             <button type="button" disabled={editingLocked || (!dirty && editor.receipt !== null)} onClick={() => void save()}>保存草稿</button>
             {dirty && <button type="button" disabled={editingLocked} onClick={() => {
               setEditor({ ...editor, boxes: editor.savedBoxes });
@@ -299,7 +345,7 @@ export function ReviewPanel({ workspace, asset, annotation, media, evidence, onB
                 onChange={(event) => setNegative(event.target.checked)} /> 确认这张图是负样本</label>
             )}
             {editor.receipt && !dirty && <button type="button"
-              disabled={externalBlocked || busy || commitTask !== null || (!approval && editor.boxes.length === 0 && !negative)}
+              disabled={externalBlocked || busy || commitTask !== null || (!approval && !writeReady) || (!approval && editor.boxes.length === 0 && !negative)}
               onClick={() => void commit()}>{approval && !commitTask ? "重试提交" : "确认并写入 Final"}</button>}
           </div>
           {dirty && <p role="status">有未保存的修改。请保存草稿或放弃修改后切换样本或关闭工作区。</p>}

@@ -230,10 +230,24 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         })
         .unwrap();
     let key = id(Uuid::new_v4());
+    assert!(editor.annotation_write_access.authorization_required);
+    let write_grant = commands
+        .authorize_review_write(
+            context(current_session),
+            editor.review.review_id.clone(),
+            formal_path.parent().unwrap().to_owned(),
+        )
+        .unwrap();
+    assert!(
+        write_grant
+            .allowed_operations
+            .contains(&"REVIEW_COMMIT".into())
+    );
     let commit = |confirmed_negative| {
         let mut context = context(current_session);
         context.idempotency_key = Some(key.clone());
         ReviewCommitRequest {
+            annotation_write_grant_id: Some(write_grant.grant_id.clone()),
             context,
             review_id: editor.review.review_id.clone(),
             expected_review_revision: draft.review_revision,
@@ -248,6 +262,9 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         "FAILED_PRECONDITION"
     );
     assert_eq!(fs::read(&formal_path).unwrap(), formal);
+    let mut ungranted = commit(true);
+    ungranted.annotation_write_grant_id = None;
+    assert_eq!(commands.commit_review(ungranted).unwrap_err().code, "PERMISSION_DENIED");
     let accepted = commands.commit_review(commit(true)).unwrap();
     assert_eq!(accepted.status, "QUEUED");
     let deadline = Instant::now() + Duration::from_secs(20);

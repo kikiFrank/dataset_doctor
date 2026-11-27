@@ -99,6 +99,16 @@ impl Commands {
             })
             .transpose()?;
         Ok(ReviewEditorView {
+            annotation_write_access: {
+                let access = self
+                    .finals()?
+                    .write_access(session, editor.review.review_id)
+                    .map_err(|error| self.final_error(error))?;
+                dd_ui_contracts::annotation::ReviewWriteAccessView {
+                    authorization_required: access.authorization_required,
+                    read_only: access.read_only,
+                }
+            },
             review: self.review_view(editor.review)?,
             categories: editor
                 .categories

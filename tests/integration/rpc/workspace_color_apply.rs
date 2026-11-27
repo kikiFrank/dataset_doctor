@@ -50,8 +50,15 @@ async fn explicitly_approved_color_apply_recovers_exact_bytes_and_invalidates_pr
         )
         .unwrap();
     let finalizer = ReviewFinalService::new(Arc::clone(owner)).unwrap();
+    let grant = finalizer
+        .authorize_write(
+            session,
+            fixture.opened.review_id,
+            fixture.formal.parent().unwrap().to_owned(),
+        )
+        .unwrap();
     let final_op = finalizer
-        .prepare(
+        .prepare_with_write_grant(
             session,
             ReviewFinalRequest {
                 review_id: saved.review_id,
@@ -63,6 +70,7 @@ async fn explicitly_approved_color_apply_recovers_exact_bytes_and_invalidates_pr
                 idempotency_key: Uuid::new_v4(),
                 confirmed_negative: false,
             },
+            grant.grant_id,
             21,
         )
         .unwrap();
