@@ -173,7 +173,7 @@
 | P07 几何批次恢复 | `732d73b`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_geometry_resume` 的 Core 和本地调度两项已通过。真实 Worker 只派发剩余原任务，核对两项 attempt 各一次及跨会话归属。已封存结果损坏与待派发参数改变拒绝，保留源文件及已接受结果字节。包含旧画像、几何、报告和暂停的受影响回归共 10 项通过，证据 `target/dev/logs/p07-workflow-geometry-resume-{red,core-green-runtime-red,green}.log`。 |
 | P07 暂停恢复桌面命令 | `732d73b`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-desktop workspace_commands::workflow_control_tests -- --nocapture` 1 项通过。实际宿主暂停已登记任务、重开、拒绝旧会话和旧修订重放、恢复原画像并等待实际报告。Tauri 命令注册与 Rust 生成 TypeScript 接口，日志 `target/dev/logs/p07-workflow-control-host-{red,green,wire}.log`。累计宿主 15 项、实际 COCO 读取器、Core、Agent、Worker 及存储均通过。 |
 | P07 WebView2 暂停与继续 | `732d73b`。Windows `tests/desktop/windows/verify-runtime.ps1 -DesktopExe $exe -Suite WorkspaceWorkflowControls -PythonExe $readerPython` 通过。真实 Tauri 入队后在调试夹具固定派发边界，页面点击暂停、重开，继续原任务至实际几何报告。独立 SQLite 核验同一画像的一次 attempt、会话切换、源摘要和 WAITING_REVIEW。红绿及最终复验 `target/dev/logs/p07-webview-workflow-control-{red,green,verified}.log`，证据 `target/desktop-smoke/runs/5fb649df12634d16a941a78a521b44c6/Synthetic business/workflow-evidence.json`。八套既有标准 WebView2、四套搬移布局和 Node 15 项通过，日志 `target/dev/logs/p07-workflow-geometry-control-{regression,node}.log`。活动计算期间的等待和原生鼠标验收待补。 |
-| P07 Core 人工审核完成 | 本页所在提交。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_review_gate --test workflow_report --test report_export` 3 项通过。真实越界报告后的明确 Final 与当前几何复检可完成体检。缺 Final、旧几何证据、缺项未确认和文件变更均拒绝。注入 SQLite 故障保留原等待状态及报告。重开后的幂等重放、原报告与完成报告的逐字节 JSON 导出、完整性与外键均通过。红绿和生成契约见 `target/dev/logs/p07-workflow-review-gate-{red,green,verified,wire}.log`。Windows 累计通过 Core 15 项、Agent、Worker RPC 62 项、SQLite 与存储 81 项、桌面宿主 15 项、实际 COCO 读取器、离线桌面构建及 13 套 WebView2（含 4 套搬移布局）。`node --experimental-strip-types --test 'tests/desktop/ui/*.test.mjs'` 另通过 15 项。复跑入口见 README，日志 `target/dev/logs/p07-workflow-review-gate-{regression,node}.log` 和 `target/dev/logs/desktop-workflow-review-gate-build.log`。 |
+| P07 Core 人工审核完成 | `205eea4`。Windows `cargo test --locked --offline --target x86_64-pc-windows-msvc -p dd-infra --features execution-rpc --test workflow_review_gate --test workflow_report --test report_export` 3 项通过。真实越界报告后的明确 Final 与当前几何复检可完成体检。缺 Final、旧几何证据、缺项未确认和文件变更均拒绝。注入 SQLite 故障保留原等待状态及报告。重开后的幂等重放、原报告与完成报告的逐字节 JSON 导出、完整性与外键均通过。红绿和生成契约见 `target/dev/logs/p07-workflow-review-gate-{red,green,verified,wire}.log`。Windows 累计通过 Core 15 项、Agent、Worker RPC 62 项、SQLite 与存储 81 项、桌面宿主 15 项、实际 COCO 读取器、离线桌面构建及 13 套 WebView2（含 4 套搬移布局）。`node --experimental-strip-types --test 'tests/desktop/ui/*.test.mjs'` 另通过 15 项。复跑入口见 README，日志 `target/dev/logs/p07-workflow-review-gate-{regression,node}.log` 和 `target/dev/logs/desktop-workflow-review-gate-build.log`。 |
 | 独立 Rig SDK | 使用独立锁文件在 `target/dev/cargo-home` 执行 `cargo fetch --manifest-path tests/rig-poc/Cargo.toml --locked --target x86_64-pc-windows-msvc`，之后相同 target 运行 `cargo test --manifest-path tests/rig-poc/Cargo.toml --locked --offline --all-targets`。Windows 本轮 10 项通过，日志 `target/dev/logs/rig-test.log`。 |
 
 上述验证的参数示例见 [README](../../README.md)。Rig 的其他平台历史结果见 [Rig SDK 报告](../testing/rig_sdk_validation.md)。
@@ -198,8 +198,8 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 
 | 工单 | 当前状态与验收余项 |
 | --- | --- |
-| P0-01 Worker 异常与终态 | 本节所在提交。Windows 异常边界 6 项及真实 Worker/Core/SQLite 故障集成通过，覆盖 RuntimeError、真实结果文件冲突、失败回包丢失、持续 UNAVAILABLE 和 Worker 进程退出。重开后的状态、一次 attempt、源字节、完整性和外键均核实。新增兼容失败枚举 INTERNAL_ERROR=7，生成物漂移检查通过。累计 RPC 63 项、Core 15 项、存储 81 项、桌面命令宿主 15 项、真实 COCO 读取器、Rust/TS 契约、Node 15 项及离线桌面构建通过。Python 六个场景目录共 26 项通过。原生桌面与安装后验收延后。 |
-| P0-02 Final 自动复检 | 下一项，保留本地测试草稿，待注册红测与实现。 |
+| P0-01 Worker 异常与终态 | `8360d56`。Windows 异常边界 6 项及真实 Worker/Core/SQLite 故障集成通过，覆盖 RuntimeError、真实结果文件冲突、失败回包丢失、持续 UNAVAILABLE 和 Worker 进程退出。重开后的状态、一次 attempt、源字节、完整性和外键均核实。新增兼容失败枚举 INTERNAL_ERROR=7，生成物漂移检查通过。累计 RPC 63 项、Core 15 项、存储 81 项、桌面命令宿主 15 项、真实 COCO 读取器、Rust/TS 契约、Node 15 项及离线桌面构建通过。Python 六个场景目录共 26 项通过。原生桌面与安装后验收延后。 |
+| P0-02 Final 自动复检 | 本节所在提交。Windows 真实 Worker/SQLite 的 4 项调度测试通过，覆盖明确 Final 后自动复检、排队重开与并发重放、SQLite 故障回滚、源变化拒绝、复检失败保持待审核，以及重开后显式新请求恢复并保留旧失败批次。最终与原人工关卡、报告生成和导出共 7 项通过，日志 `target/dev/logs/mvp11-workflow-recheck-final.log`。初始缺入口红测和失败后新请求被误拒的红测分别为 `mvp11-workflow-recheck-red.log`、`mvp11-workflow-recheck-retry-red.log`。前一版已执行的累计 66 项见 `mvp11-workflow-recheck-regression.log`，最终增量按用户的新要求仅复验直接影响范围。Tauri 和前端工单接续，运行中强制关闭工作区的生命周期联动随 P0-04 验收。 |
 | P0-03 外部目录写授权 | 待开发，读取授权与写入授权按计划分别验证。 |
 | P0-04 取消与中断 | 待开发，Worker 意外退出后的部分恢复已有历史证据，完整单任务取消待补。 |
 | P0-05 产品 CI | 待开发与实际 CI 验收。 |
@@ -209,7 +209,7 @@ P0-01 复跑入口为 README 中的 Windows `check-worker-rpc.ps1`（带真实 F
 
 ## 本轮接续检查点
 
-- 规划检查点 `205eea4` 已同步。2026-11-27 按用户的 MVP1.1 计划恢复开发，P0-01 命令行验收与受影响回归通过，接续 P0-02。本地调度审核完成测试草稿仍待注册并实跑红测。活动计算期间暂停等待、可选模型、图像质量聚合和正式安装仍待开发或验证。
+- 规划检查点 `205eea4` 已同步。P0-01 已本地提交 `8360d56`。P0-02 本地调度与直接影响回归通过，下一条按执行计划进入 Final Workflow 的 Tauri 命令工单，先写宿主红测，补 DTO、受理、任务状态查询及最终报告读取，再接前端。原生桌面控制继续按用户要求延后。2026-11-27 用户更新了测试策略，按改动影响选择当前功能、直接依赖和必要回归，未受影响模块沿用已有证据，已同步开发守则。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。

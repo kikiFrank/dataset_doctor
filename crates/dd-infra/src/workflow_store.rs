@@ -24,7 +24,7 @@ pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
 #[cfg(feature = "execution-rpc")]
 pub use local_runner::{
     LocalHealthcheckAcceptance, LocalHealthcheckJob, LocalHealthcheckRequest,
-    LocalHealthcheckRuntime,
+    LocalHealthcheckRuntime, WorkflowRecheckJob, WorkflowRecheckRequest,
 };
 #[cfg(feature = "execution-rpc")]
 pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};

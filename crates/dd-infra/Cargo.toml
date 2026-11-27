@@ -332,6 +332,11 @@ path = "../../tests/integration/rpc/workflow_review_gate.rs"
 required-features = ["execution-rpc"]
 
 [[test]]
+name = "workflow_review_runtime"
+path = "../../tests/integration/rpc/workflow_review_runtime.rs"
+required-features = ["execution-rpc"]
+
+[[test]]
 name = "workflow_list"
 path = "../../tests/integration/rpc/workflow_list.rs"
 required-features = ["execution-rpc"]

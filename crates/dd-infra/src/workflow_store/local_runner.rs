@@ -1,7 +1,9 @@
 //! Run the registered local health check from a Workspace Dataset.
 
 mod input;
+mod recheck;
 mod resume;
+pub use recheck::{WorkflowRecheckJob, WorkflowRecheckRequest};
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -49,6 +51,7 @@ pub struct LocalHealthcheckJob {
 pub struct LocalHealthcheckRuntime {
     store: Arc<WorkflowStore>,
     program: WorkerProgram,
+    review_dispatch: tokio::sync::Mutex<()>,
 }
 
 impl LocalHealthcheckRuntime {
@@ -77,6 +80,7 @@ impl LocalHealthcheckRuntime {
         Ok(Self {
             store: Arc::new(WorkflowStore::new(owner)?),
             program,
+            review_dispatch: tokio::sync::Mutex::new(()),
         })
     }
 

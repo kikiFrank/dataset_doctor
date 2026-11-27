@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::{WorkflowError, WorkflowReviewEvidence, database, verify_error};
 use crate::artifact_reference::ArtifactReference;
+use crate::dataset_query::RegisteredImage;
 use crate::geometry_runtime::read_bound_geometry_report;
 use crate::sqlite::row_uuid;
 use crate::staging_report::build_geometry_check;
@@ -19,7 +20,7 @@ struct FinalReceipt {
 }
 
 #[derive(Serialize)]
-pub(super) struct VerifiedReview {
+pub(in crate::workflow_store) struct VerifiedReview {
     asset_id: Uuid,
     final_operation_id: Uuid,
     final_review_id: Uuid,
@@ -30,7 +31,7 @@ pub(super) struct VerifiedReview {
     geometry_input_fingerprint: String,
 }
 
-pub(super) fn verify(
+pub(in crate::workflow_store) fn verify(
     owner: &WorkspaceThread,
     session: Uuid,
     dataset: Uuid,
@@ -38,6 +39,79 @@ pub(super) fn verify(
     entry: &WorkflowReviewEvidence,
     now_ms: i64,
 ) -> Result<VerifiedReview, WorkflowError> {
+    let (image, review, receipt, completed_at_ms) =
+        verify_final(owner, session, dataset, original_report, entry)?;
+    let geometry = read_bound_geometry_report(owner, session, entry.geometry_task_id, &image)
+        .map_err(verify_error)?;
+    if geometry.started_at_ms < completed_at_ms || geometry.finished_at_ms > now_ms {
+        return Err(WorkflowError::InputChanged);
+    }
+    let geometry_ref = geometry.reference.clone();
+    let geometry_input_fingerprint = geometry.input_fingerprint.clone();
+    let assessment = build_geometry_check(entry.asset_id, geometry).map_err(verify_error)?;
+    if assessment.execution_status != "COMPLETED"
+        || assessment.processed_assets != 1
+        || assessment
+            .findings
+            .iter()
+            .any(|finding| finding.severity != "INFO")
+    {
+        return Err(WorkflowError::UpstreamNotReady);
+    }
+    Ok(VerifiedReview {
+        asset_id: entry.asset_id,
+        final_operation_id: entry.final_operation_id,
+        final_review_id: review,
+        annotation_digest: receipt.annotation_digest,
+        confirmed_negative: receipt.confirmed_negative,
+        geometry_task_id: entry.geometry_task_id,
+        geometry_ref,
+        geometry_input_fingerprint,
+    })
+}
+
+pub(in crate::workflow_store) fn current_final(
+    owner: &WorkspaceThread,
+    session: Uuid,
+    dataset: Uuid,
+    original_report: Uuid,
+    asset: Uuid,
+) -> Result<(WorkflowReviewEvidence, String), WorkflowError> {
+    let operation = owner
+        .workspace_action(session, move |owner| {
+            owner
+                .connection
+                .query_row(
+                    "SELECT f.operation_id FROM dataset_assets m
+             JOIN file_operations f ON f.review_id=m.final_review_id
+               AND f.dataset_id=m.dataset_id AND f.asset_id=m.asset_id
+             WHERE m.dataset_id=?1 AND m.asset_id=?2 AND f.status='COMMITTED'
+               AND f.operation_kind='REVIEW_COMMIT'
+             ORDER BY f.completed_at_ms DESC LIMIT 1",
+                    params![dataset.to_string(), asset.to_string()],
+                    |row| row_uuid(row, 0),
+                )
+                .optional()
+                .map_err(database)
+        })
+        .map_err(WorkflowError::Storage)?
+        .ok_or(WorkflowError::UpstreamNotReady)?;
+    let evidence = WorkflowReviewEvidence {
+        asset_id: asset,
+        final_operation_id: operation,
+        geometry_task_id: Uuid::nil(),
+    };
+    let (_, _, receipt, _) = verify_final(owner, session, dataset, original_report, &evidence)?;
+    Ok((evidence, receipt.annotation_digest))
+}
+
+fn verify_final(
+    owner: &WorkspaceThread,
+    session: Uuid,
+    dataset: Uuid,
+    original_report: Uuid,
+    entry: &WorkflowReviewEvidence,
+) -> Result<(RegisteredImage, Uuid, FinalReceipt, i64), WorkflowError> {
     let asset = entry.asset_id;
     let operation = entry.final_operation_id;
     let image = owner
@@ -75,31 +149,5 @@ pub(super) fn verify(
     {
         return Err(WorkflowError::InputChanged);
     }
-    let geometry = read_bound_geometry_report(owner, session, entry.geometry_task_id, &image)
-        .map_err(verify_error)?;
-    if geometry.started_at_ms < completed_at_ms || geometry.finished_at_ms > now_ms {
-        return Err(WorkflowError::InputChanged);
-    }
-    let geometry_ref = geometry.reference.clone();
-    let geometry_input_fingerprint = geometry.input_fingerprint.clone();
-    let assessment = build_geometry_check(asset, geometry).map_err(verify_error)?;
-    if assessment.execution_status != "COMPLETED"
-        || assessment.processed_assets != 1
-        || assessment
-            .findings
-            .iter()
-            .any(|finding| finding.severity != "INFO")
-    {
-        return Err(WorkflowError::UpstreamNotReady);
-    }
-    Ok(VerifiedReview {
-        asset_id: asset,
-        final_operation_id: operation,
-        final_review_id: review,
-        annotation_digest: receipt.annotation_digest,
-        confirmed_negative: receipt.confirmed_negative,
-        geometry_task_id: entry.geometry_task_id,
-        geometry_ref,
-        geometry_input_fingerprint,
-    })
+    Ok((image, review, receipt, completed_at_ms))
 }

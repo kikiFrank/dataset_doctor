@@ -1,12 +1,12 @@
 //! Complete the human gate with current Final and post-review geometry evidence.
 
-mod evidence;
+pub(super) mod evidence;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -34,14 +34,14 @@ pub struct WorkflowReviewRequest {
     pub idempotency_key: Uuid,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WorkflowReviewEvidence {
     pub asset_id: Uuid,
     pub final_operation_id: Uuid,
     pub geometry_task_id: Uuid,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WorkflowReviewCheckAcknowledgment {
     pub check_id: String,
     pub reason: String,
@@ -200,7 +200,7 @@ impl WorkflowStore {
     }
 }
 
-fn normalize(request: &mut WorkflowReviewRequest) {
+pub(super) fn normalize(request: &mut WorkflowReviewRequest) {
     request
         .evidence
         .sort_unstable_by_key(|entry| entry.asset_id);
@@ -212,7 +212,7 @@ fn normalize(request: &mut WorkflowReviewRequest) {
         .sort_unstable_by(|a, b| a.check_id.cmp(&b.check_id));
 }
 
-fn validate_coverage(
+pub(super) fn validate_coverage(
     report: &WorkflowReport,
     request: &WorkflowReviewRequest,
 ) -> Result<(), WorkflowError> {
