@@ -80,7 +80,7 @@ print("Worker Python syntax checks passed without generating bytecode")
             foreach ($suite in @('Connection','Migration','AppMigration','WorkspaceOpen','WorkspaceCreate','TaskStore')) {
                 Script 'scripts/storage/windows/check-workspace-sqlite.ps1' @('-RustBin',$configuration.rust_bin,'-Suite',$suite)
             }
-            Script 'scripts/storage/windows/check-sqlite-file-lock.ps1' @('-CargoExe',$cargo,'-RustcExe',$env:RUSTC,'-OfflineCargoHome',(Join-Path $repo 'target/p00-03/cargo-home'))
+            Script 'tests/ci/verify-sqlite-file-lock-encoding.ps1' @('-RustBin',$configuration.rust_bin)
         }
         'integration' {
             & ./scripts/contracts/windows/check-worker-rpc.ps1 -RustBin $configuration.rust_bin -ProtocExe $configuration.protoc -PythonExe $configuration.python -UvExe $configuration.uv -VideoFfmpegExe $configuration.ffmpeg -VideoFfprobeExe $configuration.ffprobe -InfraTests @('core_claim_loopback','worker_geometry','worker_failures','workspace_geometry','review_final','review_write_authorization','task_cancellation','task_cancellation_video','workflow_review_runtime') 2>&1 |

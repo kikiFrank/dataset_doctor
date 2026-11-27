@@ -44,3 +44,5 @@ CPython 3.12.12 在 setup-python 的 Windows 构建列表中不可用。远程�
 冷缓存引导须与专项验收边界一致：Schema 缓存默认为 `dist/p01-01/uv-cache`，符合原 Schema 验收的批准目录约束；pnpm action 的 PATH 入口是包装器，准备步骤显式传入其 `node_modules/@pnpm/exe/pnpm.exe`，再由已有版本检查确认 10.18.3，避免依赖机器上的其他 pnpm。
 
 源码归档显式使用 `git -c core.autocrlf=false archive`，因为 Git archive 也会受 runner 的换行转换设置影响。提取后、准备前，在原 checkout 用 `verify-source-archive.mjs` 比较实际归档与 Git blob 字节，保护独立 P00 锁的固定摘要与生成桩。详细复现见 [DD-ISSUE-0003](../troubleshooting/windows-ci-bootstrap.md)。
+
+SQLite 组通过 `tests/ci/verify-sqlite-file-lock-encoding.ps1` 执行原独立 P00 验收：强制模拟托管 UTF-8 BOM 控制台，再由薄调用器临时使用无 BOM stdin 并恢复编码，避免改变 broker 的精确握手。该入口仍实际核验锁摘要、bundled SQLite、NTFS/WAL 和两进程锁，不替换或跳过 P00。
