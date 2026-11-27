@@ -275,3 +275,11 @@ MVP1.1 尚未满足阶段退出条件。产品 CI（含每场景 30 秒预算）
 复跑命令为 `scripts/ci/prepare-windows.ps1 -Check <组> ...` 后执行 `scripts/ci/run-windows-check.ps1 -Check <组>`；仅在获准使用桌面的机器传 `-LaunchDesktop`。详见产品 CI 与测试预算文档。7 项限时器自身测试、直接影响的 Rust/TS 契约、RPC/存储及原 P00 本机红绿日志为 `target/dev/logs/test-deadline-*.log`。七份实际远程日志与汇总已在本机忽略目录保留一份 `target/ci/remote/45994705843/`；Actions 上传七组日志和耗时证据保留七天。
 
 下一条可执行任务需用户安排本机桌面：按功能独立验收系统选择器/图片导入，画布绘制、选择、移动、删除与缩放坐标，写授权/草稿/Final/复检/COCO 读取，取消/停止/关闭反馈，以及视频、颜色和备份恢复。每项准备起始状态后独立执行并记录不超过 30 秒；整体业务链与单项证据分别保留。CLI 合成夹具已准备于 `target/desktop-business/runs/7d9d8bf6eee241c1b5797a9ba10fcfcf/native-plan.json`（图片、逐图 JSON、2 秒视频及空目标目录），状态 PREPARED_NOT_DESKTOP_TESTED。未使用或上传私有 Andon/S1 数据。当前不提前实现 MVP1.2，不创建 PR、不合并 main，不进行 Linux 验收。
+
+## 本机原生验收中断检查点
+
+用户安排桌面后，已启动本机 Windows 开发版 `dd-desktop.exe`。从发起启动到观察到可见主窗口显示「桌面运行时已连接 · 0.1.0」用时 9.756 秒。此场景只验收可见窗口和 Tauri 连接。
+
+已填写合成工作区名称 `Native30 acceptance`，首次通过无障碍元素索引点击创建按钮后，9.867 秒内的窗口枚举及观察均未看到目录选择器。本轮桌面操作随后中断。中断后通过文件系统确认本轮合成 `Workspace` 目录仍为空。目录创建及图片导入未验收，现有观察不足以认定产品的选择器出现故障。
+
+接续时先观察当前窗口与模态框，再用真实坐标点击可见的「选择目录并创建」，独立计时并确认 `workspace.json`、`workspace.db` 与 SQLite 完整性。复用上述合成夹具。余下原生用例沿用上一小节，不重复已经通过的远程矩阵。
