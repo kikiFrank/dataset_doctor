@@ -4,7 +4,8 @@
 
 ## 当前记录
 
-当前尚无生产应用故障记录；Rig PoC 的 CI 依赖弃用警告见 [验证报告](../testing/rig_sdk_validation.md)。按实际问题逐步增加主题文档，不预先建立空分类文件。
+- [DD-ISSUE-0001 Worker 计算异常与终态回报](worker-terminal-failures.md)。MVP1.1 开发验收复现的问题，覆盖异常分类、回报幂等及宿主中断恢复。
+- Rig PoC 的 CI 依赖弃用警告见 [验证报告](../testing/rig_sdk_validation.md)。
 
 ## 记录模板
 

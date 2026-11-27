@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 import json
+import logging
 from math import isfinite
 import os
 from pathlib import Path
@@ -29,7 +30,10 @@ FAILURE_CODES = {
     "decode_failed": core_execution_pb2.EXECUTION_FAILURE_CODE_DECODE_FAILED,
     "pixel_limit_exceeded": core_execution_pb2.EXECUTION_FAILURE_CODE_PIXEL_LIMIT_EXCEEDED,
     "unsupported_format": core_execution_pb2.EXECUTION_FAILURE_CODE_UNSUPPORTED_FORMAT,
+    "internal_error": core_execution_pb2.EXECUTION_FAILURE_CODE_INTERNAL_ERROR,
 }
+
+LOGGER = logging.getLogger(__name__)
 
 
 class InputChanged(ValueError):
@@ -151,7 +155,29 @@ class WorkerExecutions:
         with self._lock:
             item.status = "RUNNING"
 
-        manifest, failure = compute(request)
+        manifest = None
+        try:
+            manifest, failure = compute(request)
+        except InputChanged:
+            failure = "input_changed"
+        except (ValueError, TypeError, KeyError, IndexError, RecursionError):
+            failure = "invalid_input"
+        except OSError:
+            failure = "file_io_failed"
+        except Exception:
+            failure = "internal_error"
+        if (
+            (failure is None and not isinstance(manifest, common_pb2.ArtifactRef))
+            or (failure is not None and (
+                not isinstance(failure, str) or failure not in FAILURE_CODES
+            ))
+        ):
+            failure = "internal_error"
+        if failure == "internal_error":
+            LOGGER.error(
+                "Worker internal_error task=%s attempt=%s execution=%s",
+                item.handle.task_id, item.handle.attempt_id, item.handle.worker_execution_id,
+            )
         event.execution_event_id = str(uuid4())
         event.source_event_seq = 2
         if failure is None:

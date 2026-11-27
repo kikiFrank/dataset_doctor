@@ -74,12 +74,14 @@ $env:PROTOC = (Resolve-Path -LiteralPath $ProtocExe).Path
 $cargo = Join-Path $RustBin 'cargo.exe'
 $manifest = Join-Path $repo 'Cargo.toml'
 Write-Output "Python stub drift check passed. Worker RPC evidence: $run"
+& $env:DD_WORKER_PYTHON -I -B -m unittest discover -s (Join-Path $repo 'tests/worker/execution') -v
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 & $cargo test --manifest-path $manifest --locked --offline --target x86_64-pc-windows-msvc -p dd-protocol --test worker_loopback -- --nocapture 2>&1 |
     ForEach-Object { $_.ToString() } | Tee-Object -FilePath (Join-Path $run 'check.log')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_process',
+$tests = @('--test', 'core_claim_loopback', '--test', 'worker_geometry', '--test', 'worker_failures', '--test', 'worker_process',
     '--test', 'worker_image_quality', '--test', 'workspace_image_quality',
     '--test', 'worker_dataset_profile', '--test', 'workspace_dataset_profile', '--test', 'workflow_profile',
     '--test', 'workflow_geometry', '--test', 'workflow_report', '--test', 'workflow_local_runner', '--test', 'workflow_list',

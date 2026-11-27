@@ -445,6 +445,7 @@ sequenceDiagram
 2. Agent 接到授权后可直调 Worker，不经过 Core 中转全部图像数据。
 3. Worker 必须 ClaimGrant；Core 检查该 attempt 仍当前、运行会话有效、参数指纹一致、该授权未被不同执行占用。
 4. Worker 内部按 task_id+attempt_id 去重；重复 Start 返回同一 ExecutionHandle。无法确定旧执行是否存在时先查 GetExecution，不启动第二份。
+   Worker 的计算异常边界将输入变化、无效输入、文件错误分别映射到现有失败码，未预期异常使用新增的 `ExecutionFailureCode.INTERNAL_ERROR=7`。记录仅包含错误码与 Task、Attempt、WorkerExecution 标识。Started 和终态均先取得 Core 接纳，每次有界重试沿用相同事件 ID、序号与内容。回报耗尽时 Worker 返回 `core_report_failed`，宿主确认 Worker 已终止后将未获 Core 终态的任务标为 INTERRUPTED。已由 Core 接纳的 FAILED 或 SUCCEEDED 保持其终态。该增补保留既有枚举编号。
 5. Worker 写入自己的任务临时文件，完成后原子命名并提交产物清单；业务层只接纳清单已封存的文件。
 6. Core 用 current_attempt_id、Workspace 会话、输入指纹和节点规范指纹校验终态，并按当前任务状态进行条件更新。旧 attempt 的晚到“成功”不能覆盖新尝试。
 7. 若整体计划 revision 变化但此节点规范、输入和授权未变，Core 可接受仍被当前计划引用的在途任务；被替换节点的旧结果仅作历史运行产物，不进入新计划。

@@ -16,6 +16,7 @@ class ExecutionFailureCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EXECUTION_FAILURE_CODE_DECODE_FAILED: _ClassVar[ExecutionFailureCode]
     EXECUTION_FAILURE_CODE_PIXEL_LIMIT_EXCEEDED: _ClassVar[ExecutionFailureCode]
     EXECUTION_FAILURE_CODE_UNSUPPORTED_FORMAT: _ClassVar[ExecutionFailureCode]
+    EXECUTION_FAILURE_CODE_INTERNAL_ERROR: _ClassVar[ExecutionFailureCode]
 EXECUTION_FAILURE_CODE_UNSPECIFIED: ExecutionFailureCode
 EXECUTION_FAILURE_CODE_INPUT_CHANGED: ExecutionFailureCode
 EXECUTION_FAILURE_CODE_INVALID_INPUT: ExecutionFailureCode
@@ -23,6 +24,7 @@ EXECUTION_FAILURE_CODE_FILE_IO_FAILED: ExecutionFailureCode
 EXECUTION_FAILURE_CODE_DECODE_FAILED: ExecutionFailureCode
 EXECUTION_FAILURE_CODE_PIXEL_LIMIT_EXCEEDED: ExecutionFailureCode
 EXECUTION_FAILURE_CODE_UNSUPPORTED_FORMAT: ExecutionFailureCode
+EXECUTION_FAILURE_CODE_INTERNAL_ERROR: ExecutionFailureCode
 
 class TaskContext(_message.Message):
     __slots__ = ("workspace_id", "workspace_session_id", "workflow_run_id", "node_id", "task_id", "attempt_id", "executor_session_id", "input_fingerprint", "node_spec_fingerprint", "grant_id")

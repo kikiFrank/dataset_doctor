@@ -18,6 +18,8 @@
 
 ## 已有验收
 
+2026-11-27 已按用户提供的 MVP1.1 执行计划恢复开发，基线为 `205eea4`。当前顺序为 Worker 失败终态、Final 自动复检及桌面接入、外部目录写授权、任务取消中断和产品 CI。用户正在使用桌面，原生桌面控制与操作验收延后。历史结果仍按各行所列提交和日志区分。
+
 | 范围 | 证据与复跑入口 |
 | --- | --- |
 | P00 工具发现 | `12eab1a`。Windows PowerShell 5.1 运行 `scripts/check-toolchain.ps1`，核实工具发现与版本。 |
@@ -190,9 +192,24 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 
 累计存储测试曾因并发执行同一 target 下的测试和重链接而报 Windows LNK1104，日志 target/p01-04/logs/255c8d03e4c1499ba334c424ade93f94.log。等待原测试进程退出后重跑通过。后续对同一 Cargo target 的测试编译与执行按轮顺序运行。
 
+## MVP1.1 执行状态
+
+2026-11-27 用户指定的执行计划以 `205eea4` 为审查基线。继续使用原工作区和当前开发分支，原生桌面控制延后。
+
+| 工单 | 当前状态与验收余项 |
+| --- | --- |
+| P0-01 Worker 异常与终态 | 本节所在提交。Windows 异常边界 6 项及真实 Worker/Core/SQLite 故障集成通过，覆盖 RuntimeError、真实结果文件冲突、失败回包丢失、持续 UNAVAILABLE 和 Worker 进程退出。重开后的状态、一次 attempt、源字节、完整性和外键均核实。新增兼容失败枚举 INTERNAL_ERROR=7，生成物漂移检查通过。累计 RPC 63 项、Core 15 项、存储 81 项、桌面命令宿主 15 项、真实 COCO 读取器、Rust/TS 契约、Node 15 项及离线桌面构建通过。Python 六个场景目录共 26 项通过。原生桌面与安装后验收延后。 |
+| P0-02 Final 自动复检 | 下一项，保留本地测试草稿，待注册红测与实现。 |
+| P0-03 外部目录写授权 | 待开发，读取授权与写入授权按计划分别验证。 |
+| P0-04 取消与中断 | 待开发，Worker 意外退出后的部分恢复已有历史证据，完整单任务取消待补。 |
+| P0-05 产品 CI | 待开发与实际 CI 验收。 |
+| P1-01 原生桌面 | 按用户当前要求延后，待用户再次授权桌面控制。 |
+
+P0-01 复跑入口为 README 中的 Windows `check-worker-rpc.ps1`（带真实 FFmpeg、ffprobe 和 COCO 读取器参数）、`check-workspace-sqlite.ps1`、`check-command-handlers.ps1`、`check-ui-wire.ps1` 和 `build-desktop.ps1`。异常边界独立入口为 `target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/execution -v`。红测 `target/dev/logs/mvp11-worker-failures-red.log`，专项绿测 `mvp11-worker-failures-{green,final,integration}.log`，累计 `mvp11-worker-{rpc-regression,headless-regression-final,python-regression,node-regression}.log`，路径均在 `target/dev/logs/`。首轮存储脚本受到当前 PowerShell 清理环境变量的差异影响而退出，保留 `mvp11-worker-headless-regression.log`，改用已验证的 `powershell.exe -NoProfile -NonInteractive -File` 入口后完整复跑通过。故障根因与长期回归见 [DD-ISSUE-0001](../troubleshooting/worker-terminal-failures.md)。正式发行的 Worker 重打包与安装验收仍待执行。
+
 ## 本轮接续检查点
 
-- 2026-11-27 按用户要求在本轮回归通过后暂停开发，提交并同步当前开发分支作为规划检查点。恢复后从本地调度的审核完成请求开始，验证触发真实复检和重放复用同一任务，再接 Tauri 与页面。相关测试草稿保留在本地，仍待注册并实跑红测。活动计算期间暂停等待、可选模型、图像质量聚合和正式安装仍待开发或验证。
+- 规划检查点 `205eea4` 已同步。2026-11-27 按用户的 MVP1.1 计划恢复开发，P0-01 命令行验收与受影响回归通过，接续 P0-02。本地调度审核完成测试草稿仍待注册并实跑红测。活动计算期间暂停等待、可选模型、图像质量聚合和正式安装仍待开发或验证。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。
