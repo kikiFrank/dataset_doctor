@@ -38,3 +38,5 @@ GitHub 已公告 Windows runner 的 D 盘将于 2026-11-30 改为 ReFS，因此�
 准备记录与主日志位于 `target/ci/<组>/`。原有专项脚本继续保留各自日志入口。Actions 只上传明确列出的合成验收日志与环境 JSON，保留七天，不上传通用 target 树、缓存、原媒体或本地私用夹具。不得将尚未推送、未启动或失败的 Actions 描述为通过。
 
 准备 Schema 环境时沿用已有锁中的 `--prerelease disallow`。P00 独立锁仍使用 `target/p00-03/cargo-home`，不改为工作区通用缓存。命令输出通过显式 Tee 保存为 commands.log，避免 PowerShell Transcript 丢失延迟格式化的子进程输出。以上入口与原有专项脚本共享实现，默认 CI 不跳过失败用例，未执行桌面冒烟时不会输出整组通过。
+
+CPython 3.12.12 在 setup-python 的 Windows 构建列表中不可用。远程准备使用锁定 uv 的 `scripts/ci/prepare-python.ps1` 安装指定 managed CPython Windows x64，验证真实版本/位数，再传绝对路径；只在引导期间允许下载，之后恢复原策略。`tests/ci/verify-python-bootstrap.ps1` 可在已有 managed 缓存下离线复验，兼容 Windows PowerShell 5 与 CI PowerShell 7。此路径遵循 [uv 官方 CI 安装方法](https://docs.astral.sh/uv/guides/integration/github/#setting-up-python)。
