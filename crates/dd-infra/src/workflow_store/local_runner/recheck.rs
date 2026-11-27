@@ -77,7 +77,24 @@ impl LocalHealthcheckRuntime {
     ) -> Result<WorkflowReport, WorkflowError> {
         let _dispatch = self.review_dispatch.lock().await;
         let session = job.session;
-        if !job.jobs.is_empty() {
+        let owner = Arc::clone(&self.store.owner);
+        let jobs = tokio::task::spawn_blocking(move || {
+            let mut pending = Vec::new();
+            for candidate in job.jobs {
+                let outcome = owner
+                    .task_outcome(session, candidate.task().task_id)
+                    .map_err(WorkflowError::Storage)?;
+                match outcome.status.as_str() {
+                    "SUCCEEDED" => (),
+                    "QUEUED" => pending.push(candidate),
+                    _ => return Err(WorkflowError::UpstreamNotReady),
+                }
+            }
+            Ok(pending)
+        })
+        .await
+        .map_err(execution)??;
+        if !jobs.is_empty() {
             let mut worker = GeometryRuntime::launch_with_program(
                 Arc::clone(&self.store.owner),
                 session,
@@ -85,7 +102,7 @@ impl LocalHealthcheckRuntime {
             )
             .await
             .map_err(execution)?;
-            for pending in job.jobs {
+            for pending in jobs {
                 let task = pending.task().task_id;
                 match worker.audit_admitted(pending).await {
                     Ok(outcome) if outcome.status == "SUCCEEDED" => (),
@@ -295,6 +312,9 @@ impl WorkflowStore {
                         entry,
                         now_ms().map_err(execution)?,
                     )?;
+                    continue;
+                }
+                if matches!(task.status.as_str(), "DISPATCHING" | "RUNNING") {
                     continue;
                 }
                 if task.status != "QUEUED" {

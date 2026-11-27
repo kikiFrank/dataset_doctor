@@ -185,6 +185,9 @@ async fn review_completion_runs_one_real_recheck_and_replays_without_new_tasks()
         )
         .unwrap()
     };
+    let duplicate = runtime
+        .prepare_review_completion(session, request.clone())
+        .unwrap();
     let finished = runtime
         .complete_after_review(session, request.clone())
         .await
@@ -202,6 +205,22 @@ async fn review_completion_runs_one_real_recheck_and_replays_without_new_tasks()
     let recheck = associated["geometry_task_id"].as_str().unwrap();
     assert_ne!(recheck, original_geometry.to_string());
     assert_eq!(count(), 2);
+    let offline = LocalHealthcheckRuntime::new(
+        Arc::clone(owner),
+        fixture
+            .interpreter
+            .with_file_name("unavailable-worker-python.exe"),
+        fixture.entrypoint.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        offline
+            .run_review_completion(duplicate)
+            .await
+            .unwrap()
+            .reference,
+        finished.reference
+    );
     assert_eq!(
         db.query_row(
             "SELECT status,attempt_no FROM tasks WHERE task_id=?1",

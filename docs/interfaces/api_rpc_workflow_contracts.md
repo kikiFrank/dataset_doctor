@@ -257,6 +257,7 @@ FrameRef 结构见视频章节。video_resolve_frame 响应是明确的判别联
 |---|---|---|---|
 | workflow_plan_preview | dataset_id 或 staging_scope、template_id、goal、policy_overrides | 异步 | 生成待查看计划与覆盖说明；不应用修复；可选入口，不强制每次先点预览 |
 | workflow_start | scope、template_id、plan_ref?、input_fingerprint?、policy_overrides | 异步 | Core 校验已注册模板和授权范围；合法计划在策略内执行；人工提交仍单独批准 |
+| workflow_complete_review | workflow_run_id、expected_revision、expected_report、acknowledged_incomplete_checks、幂等上下文 | WorkflowView | 先核验明确 Final 和缺项理由并持久受理真实复检，再后台执行。workflow_get/list 的 review_recheck_tasks 查询当前批次权威状态，report_get 读取完成报告；已完成重放直接返回当前视图。 |
 | workflow_get / workflow_list | workflow_run_id / query | WorkflowSnapshot / Page | 包含固定关卡、节点、关联任务、等待人工事项 |
 | workflow_pause / workflow_resume | workflow_run_id、expected_revision；resume 另含恢复策略 | WorkflowControlReceipt | pause 停止继续派发，等待当前计算结束后进入 PAUSED；resume 校验输入与计划后继续，INTERRUPTED 时先核对旧执行并重新准入 |
 | workflow_cancel | workflow_run_id、reason? | CancellationReceipt | 停止安排后续节点并请求取消在途任务；不回滚已经确认的文件 |

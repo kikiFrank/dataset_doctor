@@ -198,6 +198,8 @@ pub fn wire_primitives_typescript() -> String {
         workflow::WorkflowDatasetScope::decl(&config),
         workflow::WorkflowPolicyOverrides::decl(&config),
         workflow::WorkflowGetRequest::decl(&config),
+        workflow::WorkflowCompleteReviewRequest::decl(&config),
+        workflow::WorkflowReviewCheckAcknowledgment::decl(&config),
         workflow::WorkflowPauseRequest::decl(&config),
         workflow::WorkflowResumeRequest::decl(&config),
         workflow::WorkflowResumeStrategy::decl(&config),

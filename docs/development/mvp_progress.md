@@ -199,8 +199,9 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 | 工单 | 当前状态与验收余项 |
 | --- | --- |
 | P0-01 Worker 异常与终态 | `8360d56`。Windows 异常边界 6 项及真实 Worker/Core/SQLite 故障集成通过，覆盖 RuntimeError、真实结果文件冲突、失败回包丢失、持续 UNAVAILABLE 和 Worker 进程退出。重开后的状态、一次 attempt、源字节、完整性和外键均核实。新增兼容失败枚举 INTERNAL_ERROR=7，生成物漂移检查通过。累计 RPC 63 项、Core 15 项、存储 81 项、桌面命令宿主 15 项、真实 COCO 读取器、Rust/TS 契约、Node 15 项及离线桌面构建通过。Python 六个场景目录共 26 项通过。原生桌面与安装后验收延后。 |
-| P0-02 Final 自动复检 | 本节所在提交。Windows 真实 Worker/SQLite 的 4 项调度测试通过，覆盖明确 Final 后自动复检、排队重开与并发重放、SQLite 故障回滚、源变化拒绝、复检失败保持待审核，以及重开后显式新请求恢复并保留旧失败批次。最终与原人工关卡、报告生成和导出共 7 项通过，日志 `target/dev/logs/mvp11-workflow-recheck-final.log`。初始缺入口红测和失败后新请求被误拒的红测分别为 `mvp11-workflow-recheck-red.log`、`mvp11-workflow-recheck-retry-red.log`。前一版已执行的累计 66 项见 `mvp11-workflow-recheck-regression.log`，最终增量按用户的新要求仅复验直接影响范围。Tauri 和前端工单接续，运行中强制关闭工作区的生命周期联动随 P0-04 验收。 |
+| P0-02 Final 自动复检 | `1d386a2`。Windows 真实 Worker/SQLite 的 4 项调度测试通过，覆盖明确 Final 后自动复检、排队重开与并发重放、SQLite 故障回滚、源变化拒绝、复检失败保持待审核，以及重开后显式新请求恢复并保留旧失败批次。最终与原人工关卡、报告生成和导出共 7 项通过，日志 `target/dev/logs/mvp11-workflow-recheck-final.log`。初始缺入口红测和失败后新请求被误拒的红测分别为 `mvp11-workflow-recheck-red.log`、`mvp11-workflow-recheck-retry-red.log`。前一版已执行的累计 66 项见 `mvp11-workflow-recheck-regression.log`，最终增量按用户的新要求仅复验直接影响范围。Tauri 和前端工单接续，运行中强制关闭工作区的生命周期联动随 P0-04 验收。 |
 | P0-03 外部目录写授权 | 待开发，读取授权与写入授权按计划分别验证。 |
+| P0-02 Tauri 审核完成命令 | 本节所在提交。新增版本化 DTO 和 workflow_complete_review 注册，受理返回复检任务引用，workflow_get/list 暴露当前批次状态。Windows 命令宿主 1 项通过，覆盖无 Final 和缺项拒绝、实际 Worker、重复提交、完成报告、旧会话拒绝及重开幂等。复检调度 4 项直接回归通过。重复请求的延迟派发先核对 Core 终态，已完成任务在 Worker 不可用时仍可重放，无新增计算进程。红绿见 `target/dev/logs/mvp11-workflow-review-host-{red,green,final}.log` 和 `mvp11-workflow-duplicate-worker-{red,green}.log`。Rust/TS 生成契约及 22 项 Node 契约通过，前端类型与 Vite 构建通过，日志 `mvp11-workflow-review-{wire,typescript-build}.log`。可见页面、IPC 实操和原生选择器仍延后。 |
 | P0-04 取消与中断 | 待开发，Worker 意外退出后的部分恢复已有历史证据，完整单任务取消待补。 |
 | P0-05 产品 CI | 待开发与实际 CI 验收。 |
 | P1-01 原生桌面 | 按用户当前要求延后，待用户再次授权桌面控制。 |
@@ -209,7 +210,7 @@ P0-01 复跑入口为 README 中的 Windows `check-worker-rpc.ps1`（带真实 F
 
 ## 本轮接续检查点
 
-- 规划检查点 `205eea4` 已同步。P0-01 已本地提交 `8360d56`。P0-02 本地调度与直接影响回归通过，下一条按执行计划进入 Final Workflow 的 Tauri 命令工单，先写宿主红测，补 DTO、受理、任务状态查询及最终报告读取，再接前端。原生桌面控制继续按用户要求延后。2026-11-27 用户更新了测试策略，按改动影响选择当前功能、直接依赖和必要回归，未受影响模块沿用已有证据，已同步开发守则。
+- 规划检查点 `205eea4` 已同步。P0-01 已本地提交 `8360d56`，P0-02 调度提交 `1d386a2`。Tauri 受理、查询与宿主验收通过，下一条按执行计划进入 Final Workflow 前端工单，补确认、缺项理由、复检等待和失败反馈，并验证后端拒绝完成时的可查询错误。原生桌面控制继续按用户要求延后。2026-11-27 用户更新了测试策略，按改动影响选择当前功能、直接依赖和必要回归，未受影响模块沿用已有证据，已同步开发守则。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。

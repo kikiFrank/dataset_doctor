@@ -3,15 +3,15 @@ use std::sync::Arc;
 use dd_infra::worker_process::WorkerProgram;
 use dd_infra::workflow_store::{
     LocalHealthcheckAcceptance, LocalHealthcheckRequest, LocalHealthcheckRuntime, PlanSource,
-    WorkflowError, WorkflowResumeRequest as ResumeBinding, WorkflowSnapshot, WorkflowStatus,
-    WorkflowStore,
+    WorkflowError, WorkflowRecheckRequest, WorkflowResumeRequest as ResumeBinding,
+    WorkflowSnapshot, WorkflowStatus, WorkflowStore,
 };
 use dd_ui_contracts::workflow::{
-    WorkflowControlAction, WorkflowControlReceipt, WorkflowGeometryTaskView, WorkflowGetRequest,
-    WorkflowListRequest, WorkflowPageView, WorkflowPauseRequest, WorkflowPlanSourceView,
-    WorkflowReportGetRequest, WorkflowReportScopeView, WorkflowReportView, WorkflowResumeRequest,
-    WorkflowResumeStrategy, WorkflowStartRequest, WorkflowStatusView, WorkflowTaskView,
-    WorkflowView,
+    WorkflowCompleteReviewRequest, WorkflowControlAction, WorkflowControlReceipt,
+    WorkflowGeometryTaskView, WorkflowGetRequest, WorkflowListRequest, WorkflowPageView,
+    WorkflowPauseRequest, WorkflowPlanSourceView, WorkflowReportGetRequest,
+    WorkflowReportScopeView, WorkflowReportView, WorkflowResumeRequest, WorkflowResumeStrategy,
+    WorkflowStartRequest, WorkflowStatusView, WorkflowTaskView, WorkflowView,
 };
 use dd_ui_contracts::workspace::AppError;
 use tauri::State;
@@ -69,6 +69,25 @@ pub async fn workflow_get(
 }
 
 #[tauri::command]
+pub async fn workflow_complete_review(
+    request: WorkflowCompleteReviewRequest,
+    thread: State<'_, Arc<WorkspaceThread>>,
+    runtime: State<'_, Option<Arc<LocalHealthcheckRuntime>>>,
+) -> Result<WorkflowView, AppError> {
+    let runtime = runtime.inner().clone();
+    run(
+        thread,
+        request.context.request_id.clone(),
+        move |commands| {
+            let runtime = runtime
+                .ok_or_else(|| commands.error("WORKER_UNAVAILABLE", "本机 Worker 未就绪。"))?;
+            commands.complete_workflow_review(runtime, request)
+        },
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn workflow_pause(
     request: WorkflowPauseRequest,
     thread: State<'_, Arc<WorkspaceThread>>,
@@ -114,6 +133,52 @@ pub async fn workflow_list(
 }
 
 impl Commands {
+    pub(super) fn complete_workflow_review(
+        &self,
+        runtime: Arc<LocalHealthcheckRuntime>,
+        request: WorkflowCompleteReviewRequest,
+    ) -> Result<WorkflowView, AppError> {
+        let (session, request_id, idempotency_key) = self.import_identity(request.context)?;
+        let run = self.parse_uuid(request.workflow_run_id)?;
+        let expected_report = serde_json::from_value(
+            serde_json::to_value(request.expected_report)
+                .map_err(|_| self.error("INVALID_ARGUMENT", "报告引用无效。"))?,
+        )
+        .map_err(|_| self.error("INVALID_ARGUMENT", "报告引用无效。"))?;
+        let job = runtime
+            .prepare_review_completion(
+                session,
+                WorkflowRecheckRequest {
+                    workflow_run_id: run,
+                    expected_row_revision: request.expected_revision.into(),
+                    expected_report,
+                    request_id,
+                    idempotency_key,
+                    acknowledged_incomplete_checks: request
+                        .acknowledged_incomplete_checks
+                        .into_iter()
+                        .map(
+                            |entry| dd_infra::workflow_store::WorkflowReviewCheckAcknowledgment {
+                                check_id: entry.check_id,
+                                reason: entry.reason,
+                            },
+                        )
+                        .collect(),
+                },
+            )
+            .map_err(|error| self.workflow_error(error))?;
+        let snapshot = self
+            .workflow_store()?
+            .get(session, run)
+            .map_err(|error| self.workflow_error(error))?;
+        if snapshot.status != WorkflowStatus::Completed {
+            tauri::async_runtime::spawn(async move {
+                let _ = runtime.run_review_completion(job).await;
+            });
+        }
+        self.workflow_view(snapshot)
+    }
+
     pub(super) fn start_workflow(
         &self,
         runtime: Arc<LocalHealthcheckRuntime>,
@@ -318,6 +383,17 @@ impl Commands {
                 })
                 .collect::<Result<_, AppError>>()?,
             report_task_id: snapshot.report_task_id.map(id).transpose()?,
+            review_recheck_tasks: snapshot
+                .review_recheck_tasks
+                .into_iter()
+                .map(|task| {
+                    Ok(WorkflowGeometryTaskView {
+                        asset_id: id(task.asset_id)?,
+                        task_id: id(task.task_id)?,
+                        status: task.status,
+                    })
+                })
+                .collect::<Result<_, AppError>>()?,
             error_code: snapshot.error_code,
         })
     }

@@ -117,6 +117,7 @@ pub struct WorkflowSnapshot {
     pub adjustments: Vec<AdjustmentRecord>,
     pub profile_task: Option<WorkflowTaskSnapshot>,
     pub geometry_tasks: Vec<WorkflowGeometryTask>,
+    pub review_recheck_tasks: Vec<WorkflowGeometryTask>,
     pub report_task_id: Option<Uuid>,
     pub error_code: Option<String>,
 }
@@ -265,6 +266,7 @@ struct RowData {
     profile_task: Option<WorkflowTaskSnapshot>,
     node_states_json: String,
     geometry_tasks: Vec<WorkflowGeometryTask>,
+    review_recheck_tasks: Vec<WorkflowGeometryTask>,
     report_task_id: Option<Uuid>,
     error_code: Option<String>,
 }
@@ -530,6 +532,7 @@ impl WorkflowStore {
             adjustments: plan.adjustments,
             profile_task: row.profile_task,
             geometry_tasks: row.geometry_tasks,
+            review_recheck_tasks: row.review_recheck_tasks,
             report_task_id: row.report_task_id,
             error_code: row.error_code,
         })
@@ -616,6 +619,20 @@ impl WorkflowStore {
                 ).map_err(database)?;
                 row.geometry_tasks = statement.query_map(
                     params![run.to_string(), format!("{GEOMETRY_NODE}/*"), GEOMETRY_NODE.len() as i64 + 2],
+                    |task| Ok(WorkflowGeometryTask {
+                        task_id: row_uuid(task, 0)?, status: task.get(1)?, asset_id: row_uuid(task, 2)?,
+                    }),
+                ).map_err(database)?.collect::<rusqlite::Result<Vec<_>>>().map_err(database)?;
+                let mut statement = owner.connection.prepare(
+                    "SELECT t.task_id,t.status,json_extract(e.value,'$.asset_id')
+                     FROM json_each(?2,'$.control.review_recheck.evidence') e
+                     JOIN tasks t ON t.task_id=json_extract(e.value,'$.geometry_task_id')
+                     WHERE t.workflow_run_id=?1 AND t.operation_kind='ANNOTATION_GEOMETRY'
+                       AND t.node_id='final_annotation/recheck/' || json_extract(e.value,'$.asset_id')
+                     ORDER BY t.node_id",
+                ).map_err(database)?;
+                row.review_recheck_tasks = statement.query_map(
+                    params![run.to_string(), row.node_states_json],
                     |task| Ok(WorkflowGeometryTask {
                         task_id: row_uuid(task, 0)?, status: task.get(1)?, asset_id: row_uuid(task, 2)?,
                     }),
@@ -868,6 +885,7 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<RowData> {
         profile_task,
         node_states_json: row.get(11)?,
         geometry_tasks: Vec::new(),
+        review_recheck_tasks: Vec::new(),
         report_task_id: row
             .get::<_, Option<String>>(12)?
             .as_deref()

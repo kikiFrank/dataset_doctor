@@ -333,6 +333,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             workspace_commands::workflow::workflow_get,
             workspace_commands::workflow::workflow_pause,
             workspace_commands::workflow::workflow_resume,
+            workspace_commands::workflow::workflow_complete_review,
             workspace_commands::workflow::workflow_list,
             workspace_commands::color::repair_color_preview,
             workspace_commands::color::repair_color_apply,

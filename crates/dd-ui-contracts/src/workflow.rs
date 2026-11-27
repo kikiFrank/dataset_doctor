@@ -39,6 +39,23 @@ pub struct WorkflowGetRequest {
 
 #[derive(Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct WorkflowCompleteReviewRequest {
+    pub context: CommandContext,
+    pub workflow_run_id: UuidText,
+    pub expected_revision: DecimalU64,
+    pub expected_report: ArtifactReference,
+    pub acknowledged_incomplete_checks: Vec<WorkflowReviewCheckAcknowledgment>,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowReviewCheckAcknowledgment {
+    pub check_id: String,
+    pub reason: String,
+}
+
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowPauseRequest {
     pub context: CommandContext,
     pub workflow_run_id: UuidText,
@@ -103,6 +120,7 @@ pub struct WorkflowView {
     pub plan_source: Option<WorkflowPlanSourceView>,
     pub profile_task: Option<WorkflowTaskView>,
     pub geometry_tasks: Vec<WorkflowGeometryTaskView>,
+    pub review_recheck_tasks: Vec<WorkflowGeometryTaskView>,
     pub report_task_id: Option<UuidText>,
     pub error_code: Option<String>,
 }

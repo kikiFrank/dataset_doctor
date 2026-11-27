@@ -106,6 +106,10 @@ export type WorkflowPolicyOverrides = { sample_limit?: number, };
 
 export type WorkflowGetRequest = { context: CommandContext, workflow_run_id: UuidText, };
 
+export type WorkflowCompleteReviewRequest = { context: CommandContext, workflow_run_id: UuidText, expected_revision: DecimalU64, expected_report: ArtifactReference, acknowledged_incomplete_checks: Array<WorkflowReviewCheckAcknowledgment>, };
+
+export type WorkflowReviewCheckAcknowledgment = { check_id: string, reason: string, };
+
 export type WorkflowPauseRequest = { context: CommandContext, workflow_run_id: UuidText, expected_revision: DecimalU64, };
 
 export type WorkflowResumeRequest = { context: CommandContext, workflow_run_id: UuidText, expected_revision: DecimalU64, strategy: WorkflowResumeStrategy, };
@@ -120,7 +124,7 @@ export type WorkflowListRequest = { context: CommandContext, dataset_id: UuidTex
 
 export type WorkflowPageView = { items: Array<WorkflowView>, next_cursor: UuidText | null, };
 
-export type WorkflowView = { workflow_run_id: UuidText, planning_task_id: UuidText, status: WorkflowStatusView, row_revision: DecimalU64, plan_revision: DecimalU64 | null, input_fingerprint: string | null, plan_source: WorkflowPlanSourceView | null, profile_task: WorkflowTaskView | null, geometry_tasks: Array<WorkflowGeometryTaskView>, report_task_id: UuidText | null, error_code: string | null, };
+export type WorkflowView = { workflow_run_id: UuidText, planning_task_id: UuidText, status: WorkflowStatusView, row_revision: DecimalU64, plan_revision: DecimalU64 | null, input_fingerprint: string | null, plan_source: WorkflowPlanSourceView | null, profile_task: WorkflowTaskView | null, geometry_tasks: Array<WorkflowGeometryTaskView>, review_recheck_tasks: Array<WorkflowGeometryTaskView>, report_task_id: UuidText | null, error_code: string | null, };
 
 export type WorkflowStatusView = "DRAFT" | "READY" | "RUNNING" | "PAUSED" | "INTERRUPTED" | "WAITING_REVIEW" | "COMPLETED" | "FAILED";
 
