@@ -35,6 +35,11 @@ const recheckStatusNames: Record<string, string> = {
   SUCCEEDED: "几何检查已完成", FAILED: "复检失败", INTERRUPTED: "复检已中断",
   CANCELLING: "正在停止", CANCELLED: "复检已取消",
 };
+const taskStatusNames: Record<string, string> = {
+  QUEUED: "等待执行", DISPATCHING: "正在派发", RUNNING: "正在执行",
+  SUCCEEDED: "已完成", FAILED: "失败", INTERRUPTED: "已中断",
+  CANCELLING: "等待停止", CANCELLED: "已取消",
+};
 
 function mergeWorkflow(records: WorkflowView[] | null, update: WorkflowView): WorkflowView[] {
   return records?.map(item => item.workflow_run_id === update.workflow_run_id
@@ -218,6 +223,10 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
     </button>}
     {waitingForPause && <p role="status">等待当前计算结束后暂停。</p>}
     {current?.error_code && <p role="alert">{runErrors[current.error_code] ?? current.error_code}</p>}
+    {current?.profile_task && <p>
+      数据画像任务 · {taskStatusNames[current.profile_task.status] ?? current.profile_task.status}
+      <TaskCancelButton key={current.profile_task.task_id} workspace={workspace} taskId={current.profile_task.task_id} status={current.profile_task.status} />
+    </p>}
     {current && current.review_recheck_tasks.length > 0 && <section aria-label="审核后复检">
       <h5>审核后复检</h5>
       {current.review_recheck_pending && <p role="status">正在核验 Final 并运行复检…</p>}
@@ -226,9 +235,13 @@ export function WorkflowPanel({ workspace, datasetId }: { workspace: OpenWorkspa
         <TaskCancelButton workspace={workspace} taskId={task.task_id} status={task.status} />
       </li>)}</ul>
     </section>}
-    {running && current && current.geometry_tasks.length > 0 && <p>
-      标注几何 {current.geometry_tasks.filter(task => task.status === "SUCCEEDED").length} / {current.geometry_tasks.length}
-    </p>}
+    {current && current.geometry_tasks.length > 0 && <section aria-label="初次标注检查任务">
+      <p>标注几何 {current.geometry_tasks.filter(task => task.status === "SUCCEEDED").length} / {current.geometry_tasks.length}</p>
+      <ul>{current.geometry_tasks.map(task => <li key={task.task_id}>
+        样本 {task.asset_id.slice(0, 8)} · {taskStatusNames[task.status] ?? task.status}
+        <TaskCancelButton workspace={workspace} taskId={task.task_id} status={task.status} />
+      </li>)}</ul>
+    </section>}
     {error && <>
       <p role="alert">{error}</p>
       <button type="button" onClick={() => { setError(null); setRefresh(value => value + 1); }}>刷新体检记录</button>

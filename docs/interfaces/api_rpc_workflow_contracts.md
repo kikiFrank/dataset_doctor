@@ -482,6 +482,7 @@ stateDiagram-v2
     RUNNING --> CANCELLING: 请求取消
     CANCELLING --> CANCELLED: 确认停止
     CANCELLING --> SUCCEEDED: 取消前已完成且结果已确认
+    CANCELLING --> FAILED: 失败终态已选定且获 Core 接纳
     DISPATCHING --> INTERRUPTED: 执行状态丢失
     RUNNING --> INTERRUPTED: 执行进程中断
     CANCELLING --> INTERRUPTED: 无法确认停止结果

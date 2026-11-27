@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
     [Parameter(Mandatory = $true)][string]$UvExe,
     [switch]$Generate,
+    [switch]$StubsOnly,
     [string]$CocoReaderPythonExe,
     [string]$PackagedWorkerExe,
     [string]$VideoFfmpegExe,
@@ -66,6 +67,10 @@ foreach ($file in $stagedFiles) {
     if ((Get-FileHash -LiteralPath $file.FullName).Hash -cne (Get-FileHash -LiteralPath $target).Hash) {
         throw "Python Protobuf stub drift: $relative"
     }
+}
+if ($StubsOnly) {
+    Write-Output "Python Protobuf stub drift check passed. Evidence: $run"
+    exit 0
 }
 
 $env:CARGO_HOME = (Resolve-Path -LiteralPath (Join-Path $dev 'cargo-home')).Path

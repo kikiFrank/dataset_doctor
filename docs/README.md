@@ -10,7 +10,7 @@
 | interfaces | [API、RPC、Workflow 和 Tool](interfaces/api_rpc_workflow_contracts.md) |
 | data | [数据契约与 SQLite](data/data_contracts_and_sqlite.md) |
 | configuration | [配置契约](configuration/configuration_contracts.md) |
-| development | [开发工作守则](development/coding_guidelines.md)、[L3 实现规范与任务](development/implementation_spec_and_tasks.md)、[MVP 开发进度](development/mvp_progress.md) |
+| development | [开发工作守则](development/coding_guidelines.md)、[L3 实现规范与任务](development/implementation_spec_and_tasks.md)、[MVP 开发进度](development/mvp_progress.md)、[产品 CI 与专项复跑](development/product_ci.md) |
 | testing | [验收与平台验证](testing/acceptance_and_platform_validation.md)、[Rig PoC 报告](testing/rig_sdk_validation.md) |
 | deployment | [跨平台交付](deployment/platform_delivery.md) |
 | troubleshooting | [长期问题记录](troubleshooting/README.md) |

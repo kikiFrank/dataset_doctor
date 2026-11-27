@@ -141,7 +141,7 @@ fn canonical_json(output: &mut Vec<u8>, value: &Value) -> Result<(), InputFinger
     match value {
         Value::Object(fields) => {
             let mut fields: Vec<_> = fields.iter().collect();
-            fields.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+            fields.sort_unstable_by_key(|(key, _)| *key);
             output.push(b'{');
             for (index, (key, value)) in fields.into_iter().enumerate() {
                 if index > 0 {

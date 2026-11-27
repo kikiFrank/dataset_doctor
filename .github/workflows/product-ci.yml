@@ -1,0 +1,139 @@
+name: Product Windows acceptance
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select:
+    name: Select affected checks
+    runs-on: windows-2025
+    timeout-minutes: 10
+    outputs:
+      checks: ${{ steps.selection.outputs.checks }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - name: Verify check selection behavior
+        run: node --test tests/ci/select-checks.test.mjs
+      - id: selection
+        name: Select checks from the actual Git diff
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_FULL_CHECK: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/ci/select-checks.mjs
+
+  acceptance:
+    name: Windows / ${{ matrix.check }}
+    needs: select
+    if: needs.select.outputs.checks != '[]'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        check: ${{ fromJSON(needs.select.outputs.checks) }}
+    env:
+      CI_CHECK: ${{ matrix.check }}
+      CARGO_BUILD_JOBS: '4'
+      CARGO_TERM_COLOR: never
+      UV_NO_PYTHON_DOWNLOADS: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Materialize tracked CI sources on the system NTFS volume
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $volume = Get-Volume -DriveLetter $env:SystemDrive.TrimEnd(':')
+          if ($volume.FileSystemType -ne 'NTFS') { throw 'Windows storage acceptance requires NTFS.' }
+          $root = Join-Path $env:SystemDrive 'dataset-doctor-ci'
+          if (Test-Path -LiteralPath $root) { throw 'Expected a fresh hosted CI source directory.' }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $archive = Join-Path $env:RUNNER_TEMP 'dataset-doctor-source.tar'
+          git archive --format=tar --output=$archive HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Could not archive tracked CI sources.' }
+          tar.exe -xf $archive -C $root
+          if ($LASTEXITCODE -ne 0) { throw 'Could not materialize tracked CI sources.' }
+          "DD_CI_ROOT=$root" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.19.0'
+          package-manager-cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.12'
+          architecture: x64
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.9.26'
+          enable-cache: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: '10.18.3'
+          standalone: true
+          run_install: false
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: windows-2025-${{ matrix.check }}-${{ hashFiles('Cargo.lock', '**/uv.lock', 'apps/desktop/pnpm-lock.yaml', 'config/toolchains/*.json') }}
+          path: |
+            ${{ env.DD_CI_ROOT }}/target/dev/cargo-home/registry
+            ${{ env.DD_CI_ROOT }}/target/dev/cargo-home/git
+            ${{ env.DD_CI_ROOT }}/target/dev/uv-cache
+            ${{ env.DD_CI_ROOT }}/target/dev/schema-uv-cache
+            ${{ env.DD_CI_ROOT }}/target/dev/pnpm-store
+            ${{ env.DD_CI_ROOT }}/target/dev/ci-tools
+            ${{ env.DD_CI_ROOT }}/target/p00-03/cargo-home/registry
+      - name: Prepare pinned tools and locked dependency caches
+        working-directory: ${{ env.DD_CI_ROOT }}
+        run: ./scripts/ci/prepare-windows.ps1 -Check $env:CI_CHECK -AllowNetwork
+      - name: Run reusable offline acceptance
+        if: matrix.check != 'typescript'
+        working-directory: ${{ env.DD_CI_ROOT }}
+        run: ./scripts/ci/run-windows-check.ps1 -Check $env:CI_CHECK -LaunchDesktop
+      - name: Verify missing tools are rejected and test configuration is restored
+        if: matrix.check == 'typescript'
+        working-directory: ${{ env.DD_CI_ROOT }}
+        run: powershell.exe -NoProfile -NonInteractive -File tests/ci/verify-runner-failure.ps1
+      - name: Run TypeScript acceptance after the negative runner probe
+        if: matrix.check == 'typescript'
+        working-directory: ${{ env.DD_CI_ROOT }}
+        run: ./scripts/ci/run-windows-check.ps1 -Check $env:CI_CHECK
+      - name: Preserve synthetic acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: product-windows-${{ matrix.check }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ env.DD_CI_ROOT }}/target/ci/**/check.log
+            ${{ env.DD_CI_ROOT }}/target/ci/**/commands.log
+            ${{ env.DD_CI_ROOT }}/target/ci/**/environment.json
+            ${{ env.DD_CI_ROOT }}/target/ci/runner-failure/**/probe.log
+            ${{ env.DD_CI_ROOT }}/target/contract-check/**/check.log
+            ${{ env.DD_CI_ROOT }}/target/p01-04/logs/*.log
+            ${{ env.DD_CI_ROOT }}/target/p00-03/logs/*.log
+            ${{ env.DD_CI_ROOT }}/target/desktop-smoke/runs/**/verify.log
+            ${{ env.DD_CI_ROOT }}/target/desktop-commands/runs/**/check.log
+            ${{ env.DD_CI_ROOT }}/dist/p01-01/logs/*.log

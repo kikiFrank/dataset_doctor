@@ -142,10 +142,10 @@ impl AssetSummary {
         if !matches!(validity, Some(Ok(true))) {
             self.annotation_state = AssetAnnotationState::Stale;
         }
-        if let Some(Err(error)) = validity {
-            if error.kind() == io::ErrorKind::NotFound {
-                self.availability = "OFFLINE".into();
-            }
+        if let Some(Err(error)) = validity
+            && error.kind() == io::ErrorKind::NotFound
+        {
+            self.availability = "OFFLINE".into();
         }
     }
 }

@@ -86,8 +86,10 @@ async fn rig_deadline_and_malformed_output_do_not_implicitly_retry() {
         .unwrap();
     assert_eq!(seen["model"], "test-model");
 
-    let (endpoint, observed) =
-        provider(ProviderReply::Answer(r#"{"sample_limit":4,"shell":"unexpected"}"#)).await;
+    let (endpoint, observed) = provider(ProviderReply::Answer(
+        r#"{"sample_limit":4,"shell":"unexpected"}"#,
+    ))
+    .await;
     let client = AgentModelClient::new_openai_chat(
         profile,
         endpoint,
@@ -157,7 +159,11 @@ async fn provider(reply: ProviderReply) -> (String, JoinHandle<Value>) {
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
             response.len()
         );
-        stream.get_mut().write_all(message.as_bytes()).await.unwrap();
+        stream
+            .get_mut()
+            .write_all(message.as_bytes())
+            .await
+            .unwrap();
         body
     });
     (endpoint, handle)

@@ -159,8 +159,8 @@ async fn workflow_start_links_one_real_profile_task_and_keeps_its_result_across_
             .unwrap()
     };
     let (first, second) = std::thread::scope(|scope| {
-        let first = scope.spawn(&start);
-        let second = scope.spawn(&start);
+        let first = scope.spawn(start);
+        let second = scope.spawn(start);
         (first.join().unwrap(), second.join().unwrap())
     });
     assert_ne!(first.job.is_some(), second.job.is_some());

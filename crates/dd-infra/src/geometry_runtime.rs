@@ -135,7 +135,7 @@ impl GeometryRuntime {
             return Err(GeometryRuntimeError::StaleWorkspace);
         }
         if prepared.task.workspace_session != session {
-            return Ok(self.runtime.outcome(prepared.task.task_id).await?);
+            return self.runtime.outcome(prepared.task.task_id).await;
         }
         self.runtime
             .execute(

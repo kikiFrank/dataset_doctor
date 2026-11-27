@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 #[path = "video_fixture.rs"]
-mod video_fixture;
+pub(crate) mod video_fixture;
 
 pub struct Fixture {
     pub root: PathBuf,

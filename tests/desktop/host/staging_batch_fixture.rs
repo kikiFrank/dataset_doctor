@@ -6,9 +6,7 @@ use std::path::PathBuf;
 use dd_infra::staging::{StagingQuery, StagingState};
 use serde_json::json;
 
-#[path = "../../integration/rpc/support/staged_sample.rs"]
-#[allow(dead_code)]
-mod staged_sample;
+use super::shared_video_fixture as staged_sample;
 
 #[test]
 fn desktop_creates_real_staging_batch_ui_fixture() {

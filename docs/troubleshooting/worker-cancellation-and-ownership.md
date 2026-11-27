@@ -11,3 +11,5 @@ FFmpeg 的 stdout 读取原先只等待超时，协作标记无法中断它。�
 直接视频回归曾发现新增 COMPLETING 状态破坏旧客户端的终态轮询。已经改为内部选择标记，公开状态继续保持 RUNNING/CANCELLING，直到 Core 接纳终态。诊断日志 `mvp11-task-cancel-boundaries.log`，修复后的对应回归 `mvp11-task-cancel-verified.log`。另一次进程夹具在 PID 文件创建但尚未写完时读取到空内容，夹具改为同目录临时文件原子发布，进程句柄始终在断言失败时回收该次合成后代。
 
 可复跑入口见 [README 取消计算任务](../../README.md#取消计算任务)。真实集成 `task_cancellation` 与 `task_cancellation_video` 覆盖重复取消、已完成任务保护、成功/失败晚到竞争、确认丢失、Worker 崩溃、子进程停止、重开、单次 attempt、源字节、完整性和外键。最终恢复回归 `mvp11-task-cancel-recovery-regression.log`，直接关联命令宿主 `mvp11-task-cancel-{host-final,workflow-host}.log`。不以这些 CLI 结果代替原生桌面和安装后验收。
+
+产品 CI 的关键存储复跑补出了旧 TaskStore 验收的假设差异。打开工作区现在会自动恢复已失去监督器的所有 attempt，所以打开后再手动恢复旧会话应返回 0。原先的手动恢复隔离断言完整保留在独立测试中，继续确认只恢复指定会话的 2 项、保留其他会话与排队任务；崩溃重开测试另行确认全部遗留执行器停止、时间戳与撤销 Grant，且不重新派发排队任务。相关 5 项通过，证据 `target/dev/logs/mvp11-product-ci-task-store-recovery.log`。

@@ -183,7 +183,7 @@ impl ImageQualityRuntime {
             return Err(ImageQualityError::StaleWorkspace);
         }
         if job.task.workspace_session != session {
-            return Ok(self.runtime.outcome(job.task.task_id).await?);
+            return self.runtime.outcome(job.task.task_id).await;
         }
         self.runtime.execute(job.worker_job, DEADLINE).await
     }

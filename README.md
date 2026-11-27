@@ -9,6 +9,7 @@ L1/L2 确立方案Ⅰ，L3 定义实现与验收。Windows 桌面壳已可离线
 - [前端 HTML 原型](docs/modules/frontend/prototype/index.html)
 - [实施任务与验收](docs/development/implementation_spec_and_tasks.md)
 - [MVP 开发进度与验收证据](docs/development/mvp_progress.md)
+- [Windows 产品 CI 与按改动选择测试](docs/development/product_ci.md)
 - [Rig SDK 测试报告](docs/testing/rig_sdk_validation.md)
 
 ## Windows x64 桌面壳构建与启动

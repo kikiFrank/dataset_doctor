@@ -157,7 +157,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
         context: context(session),
         review_id: editor.review.review_id.clone(),
         source_task_id: operation.task_id.clone(),
-        expected_review_revision: editor.review.row_revision.clone(),
+        expected_review_revision: editor.review.row_revision,
         expected_draft_revision: None,
         coco_document,
         track_selections: None,
@@ -203,7 +203,7 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
     let cancel = |session| ReviewCancelRequest {
         context: context(session),
         review_id: restored.review.review_id.clone(),
-        expected_revision: restored.review.row_revision.clone(),
+        expected_revision: restored.review.row_revision,
     };
     assert_eq!(
         commands.cancel_review(cancel(session)).unwrap_err().code,
@@ -264,7 +264,10 @@ fn desktop_review_checks_baselines_and_restores_validated_draft() {
     assert_eq!(fs::read(&formal_path).unwrap(), formal);
     let mut ungranted = commit(true);
     ungranted.annotation_write_grant_id = None;
-    assert_eq!(commands.commit_review(ungranted).unwrap_err().code, "PERMISSION_DENIED");
+    assert_eq!(
+        commands.commit_review(ungranted).unwrap_err().code,
+        "PERMISSION_DENIED"
+    );
     let accepted = commands.commit_review(commit(true)).unwrap();
     assert_eq!(accepted.status, "QUEUED");
     let deadline = Instant::now() + Duration::from_secs(20);

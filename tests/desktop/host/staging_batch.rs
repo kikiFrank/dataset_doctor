@@ -9,9 +9,7 @@ use dd_ui_contracts::staging::{
 
 use super::*;
 
-#[path = "../../integration/rpc/support/staged_sample.rs"]
-#[allow(dead_code)]
-mod staged_sample;
+use super::shared_video_fixture as staged_sample;
 
 #[test]
 fn desktop_prepares_and_confirms_an_exact_batch_of_real_staging_frames() {

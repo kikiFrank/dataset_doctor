@@ -21,8 +21,7 @@ use tauri::http::Request;
 
 use super::{video::VideoRunner, *};
 
-#[path = "../../integration/rpc/support/video_fixture.rs"]
-mod video_fixture;
+use super::shared_video_fixture::video_fixture;
 
 #[test]
 fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_result() {
@@ -569,6 +568,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         .commit_review(ReviewCommitRequest {
             context: context(reopened),
             review_id: review.review_id,
+            annotation_write_grant_id: None,
             expected_review_revision: saved.review_revision,
             base_image_digest: review.base_image_digest,
             base_annotation_digest: review.base_annotation_digest,
@@ -663,7 +663,10 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         ImportOperationKind::StagingCommit
     ));
     let receipt = result.staging_commit.unwrap();
-    assert_eq!(receipt.accepted_asset_ids, [staged.clone()]);
+    assert_eq!(
+        receipt.accepted_asset_ids.as_slice(),
+        std::slice::from_ref(&staged)
+    );
     assert_eq!(receipt.acknowledged_incomplete_checks[0].reason, reason);
     assert!(list(None).items.is_empty());
     let members = owner
@@ -714,10 +717,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
     let bundle = tracked.video_tracking.unwrap();
     assert_eq!(bundle.segment_id, reopened_segment_id);
     assert_eq!(bundle.processed_frame_count, 1);
-    assert_eq!(
-        String::from(bundle.observations[0].frame_index.clone()),
-        "3"
-    );
+    assert_eq!(String::from(bundle.observations[0].frame_index), "3");
     assert_eq!(bundle.observations[0].source, "HUMAN_SEED");
     assert_eq!(bundle.tracks_ref.kind, "VIDEO_TRACK_BUNDLE");
     let tracking_sample = |reference| {
@@ -994,6 +994,7 @@ fn desktop_resolves_and_displays_a_real_frame_and_reopens_the_verified_cached_re
         .commit_review(ReviewCommitRequest {
             context: context(reopened),
             review_id: editor.review.review_id,
+            annotation_write_grant_id: None,
             expected_review_revision: saved.review_revision,
             base_image_digest: editor.review.base_image_digest,
             base_annotation_digest: None,

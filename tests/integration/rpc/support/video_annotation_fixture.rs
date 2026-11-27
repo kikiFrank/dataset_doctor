@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use uuid::Uuid;
 #[path = "workspace_video.rs"]
-mod workspace_video;
+pub(crate) mod workspace_video;
 pub(crate) use workspace_video::Fixture;
 
 pub async fn prepared() -> (Fixture, Uuid, VideoFrameReference) {

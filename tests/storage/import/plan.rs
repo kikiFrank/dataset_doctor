@@ -470,10 +470,9 @@ fn confirmation_freezes_the_preview_and_registers_original_files_once() {
         let second = scope.spawn(confirm);
         (first.join().unwrap(), second.join().unwrap())
     });
-    let (receipt, other) = if left.is_ok() {
-        (left.unwrap(), right)
-    } else {
-        (right.unwrap(), left)
+    let (receipt, other) = match left {
+        Ok(receipt) => (receipt, right),
+        Err(error) => (right.unwrap(), Err(error)),
     };
     match other {
         Ok(replay) => assert_eq!(replay, receipt),

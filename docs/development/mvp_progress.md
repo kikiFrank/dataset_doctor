@@ -12,7 +12,7 @@
 | 范围 | Windows 实测与交付余项 |
 | --- | --- |
 | P00–P06 基础与图片闭环 | 已用合成数据在桌面 WebView2 创建工作区、导入逐图 JSON、运行真实检查、确认 Final、导出 COCO，并用 pycocotools 重新加载。剩余全量契约、系统选择器、鼠标画布和发布安装验证。 |
-| P07 体检与 Agent | 本地画像、几何、报告和暂停恢复已通过相应验收。Core 已验证人工确认和复检后完成体检。待补桌面完成入口、自动触发复检、异常恢复与重试、三个模板及实际模型和 Agent 的端到端验收。 |
+| P07 体检与 Agent | 本地画像、几何、报告和暂停恢复已通过相应验收。Core 已验证人工确认和复检后完成体检。Core 自动复检、桌面完成入口及状态反馈已通过本轮 CLI/宿主验证，原生界面验收仍延后；三个模板及实际模型和 Agent 的端到端验收留待后续阶段。 |
 | P08–P09 视频与颜色 | 已通过视频探测、帧定位、片段、追踪、采样、批次接收，以及颜色预览、掩膜、明确采用和复检的对应 Windows 测试。待补部分可选质量检查、跨样本聚合及原生工作台验收。 |
 | P10 报告、备份与打包 | JSON/Markdown 报告、受管理备份恢复、搬移布局下随包 Worker/FFmpeg 已有通过证据。正式安装、干净 Windows 启动和卸载、随包 Agent 尚待验证。Linux 完整验收排在全部功能开发完成后。 |
 
@@ -203,15 +203,15 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 | P0-03 外部目录写授权 | `7ebb7a4`。Core 单次短期写授权与导入读取授权分离，外部 Final 新提交必须明确授权；已受理操作保持幂等恢复。Windows 合成 NTFS 的 7 项集成通过，覆盖读取授权拒绝、显式发布与重开、缺失 JSON 创建、只读、真实共享锁、真实 ACL 拒绝、授权后 Junction 重定向拒绝。保留原文件字节。Final 提交及中断恢复 3 项、命令宿主 1 项、页面授权状态 3 项、生成契约 22 项、TypeScript/Vite 与离线 Windows EXE 构建通过。红绿日志 `target/dev/logs/mvp11-review-write-authorization-{red,verified}.log`，直接回归 `mvp11-review-write-{final-regression,host-final,ui-green,wire,typescript-build,desktop-build}.log`。专项脚本 InfraTests 参数红绿 `mvp11-worker-target-selection-{red,green}.log`，绿测只运行指定的 7 项。真实原生选择器、页面交互和更新后的 WebView2 业务验收未执行，随桌面解锁补验。 |
 | P0-02 前端审核反馈 | `68df26e`。页面已接入明确确认、逐项缺项理由、真实复检任务状态、等待 Core 核验和完成报告。状态与请求构造 3 项 Node 测试通过，红绿 `target/dev/logs/mvp11-workflow-review-ui-{red,green}.log`。Core 拒绝完成会保存错误并结束 pending，真实 Worker/SQLite 的直接关联 5 项通过，包含几何 SUCCEEDED 后输入变化被拒，日志 `mvp11-workflow-review-feedback-{red,green,final}.log`。命令宿主 1 项复验、Rust/TS 生成契约、22 项契约测试及 TypeScript/Vite 构建通过。当前 Windows EXE 已离线重建，日志 `mvp11-workflow-review-{ui-host,ui-wire,ui-build,desktop-build}.log`。可见页面交互、完整 IPC 和鼠标操作尚待桌面空闲后的验收。 |
 | P0-02 Tauri 审核完成命令 | `27389ae`。新增版本化 DTO 和 workflow_complete_review 注册，受理返回复检任务引用，workflow_get/list 暴露当前批次状态。Windows 命令宿主 1 项通过，覆盖无 Final 和缺项拒绝、实际 Worker、重复提交、完成报告、旧会话拒绝及重开幂等。复检调度 4 项直接回归通过。重复请求的延迟派发先核对 Core 终态，已完成任务在 Worker 不可用时仍可重放，无新增计算进程。红绿见 `target/dev/logs/mvp11-workflow-review-host-{red,green,final}.log` 和 `mvp11-workflow-duplicate-worker-{red,green}.log`。Rust/TS 生成契约及 22 项 Node 契约通过，前端类型与 Vite 构建通过，日志 `mvp11-workflow-review-{wire,typescript-build}.log`。可见页面、IPC 实操和原生选择器仍延后。 |
-| P0-04 取消与中断 | 本节所在提交。Windows 合成真实 Core/Worker/SQLite 的取消 4 项和实际 FFmpeg 视频取消 1 项通过，覆盖排队、运行中、重复请求、终态成功/失败竞争、取消确认丢失重试、崩溃进程树回收、重开、源字节、一次 attempt、完整性与外键。Core 先持久取消，Worker 合作停止并回报 cancelled，公开状态兼容；Windows Job Object 等待全树停止，生命周期租约拒绝运行中提前关闭。重开协调遗留执行器 attempt，正式文件日志继续受保护恢复。证据 `target/dev/logs/mvp11-task-cancel-{verified,recovery-regression}.log`；其中直接相关旧 RPC 8 项通过，包含复检调度 5 项，Final 恢复另 3 项、Claim 1 项通过。追加审核复检的遗留 CANCELLING attempt 恢复 1 项通过，保留原 Final 和报告，显式新请求可完成真实复检，日志 mvp11-task-cancel-review-recovery.log。共用进程监督器的实际 Agent 启停 1 项通过（mvp11-task-cancel-agent-supervisor.log）。打开/创建 8 项、图片命令宿主和审核宿主各 1 项、Python 取消 2 项及直接修改的解码 9 项/追踪 6 项、既有异常边界 6 项、Node 取消状态 3 项、生成契约 22 项、TypeScript/Vite 与 Windows 离线 EXE 构建通过。其余未受影响模块复用既有证据。新增按钮和实际 IPC/原生交互、发行包重建尚未验收，其他平台仍延后。故障记录 DD-ISSUE-0002。 |
-| P0-05 产品 CI | 待开发与实际 CI 验收。 |
+| P0-04 取消与中断 | `7381a46`。Windows 合成真实 Core/Worker/SQLite 的取消 4 项和实际 FFmpeg 视频取消 1 项通过，覆盖排队、运行中、重复请求、终态成功/失败竞争、取消确认丢失重试、崩溃进程树回收、重开、源字节、一次 attempt、完整性与外键。Core 先持久取消，Worker 合作停止并回报 cancelled，公开状态兼容；Windows Job Object 等待全树停止，生命周期租约拒绝运行中提前关闭。重开协调遗留执行器 attempt，正式文件日志继续受保护恢复。证据 `target/dev/logs/mvp11-task-cancel-{verified,recovery-regression}.log`；其中直接相关旧 RPC 8 项通过，包含复检调度 5 项，Final 恢复另 3 项、Claim 1 项通过。追加审核复检的遗留 CANCELLING attempt 恢复 1 项通过，保留原 Final 和报告，显式新请求可完成真实复检，日志 mvp11-task-cancel-review-recovery.log。共用进程监督器的实际 Agent 启停 1 项通过（mvp11-task-cancel-agent-supervisor.log）。打开/创建 8 项、图片命令宿主和审核宿主各 1 项、Python 取消 2 项及直接修改的解码 9 项/追踪 6 项、既有异常边界 6 项、Node 取消状态 3 项、生成契约 22 项、TypeScript/Vite 与 Windows 离线 EXE 构建通过。其余未受影响模块复用既有证据。新增按钮和实际 IPC/原生交互、发行包重建尚未验收，其他平台仍延后。故障记录 DD-ISSUE-0002。 |
+| P0-05 产品 CI | 本节所在提交，尚未推送或运行 GitHub Actions。已实现 Windows 七组矩阵、按 Git diff 选择、锁定版本/依赖缓存、工具归档摘要、离线验收及日志保留。选择器红绿 7 项、缺失工具负测 1 项通过，配置在负测后按原字节恢复；PowerShell/YAML 最终静态解析通过。本机同一入口 Rust 的 Core/领域 19 项、严格 Clippy（含全部 feature/桌面）、TypeScript/Vite 与 Node 31 项、Worker Python 43 项、JSON Schema 10 项、Protobuf 脚本、Rust/TS 2+22 项和生成物漂移、关键 RPC 25 项与其异常边界 6 项均通过。SQLite 子套件共 27 项与 P00 独立锁分别通过，首轮组脚本曾因旧恢复断言失败而退出，按用户策略只复跑受影响的 TaskStore 5 项与尚未运行的独立锁，未重复其余已通过子套件。默认 desktop 入口的构建、严格检查和 3 项宿主通过，因未授权本机桌面操作而明确返回未完成，未执行最后的 WebView2 冒烟；追加受影响的视频宿主 3 项通过。对静态整改涉及的独立哈希向量 2 项、Staging 分页 1 项和导入计划 8 项均按影响专项验证通过。最后的 Windows EXE 已更新，mvp11-product-ci-final-desktop-build.log；所有记录在 target/dev/logs/mvp11-product-ci-*.log，复跑方法见 [产品 CI](product_ci.md)。冷缓存下载、托管 Windows NTFS 快照目录、实际远程矩阵与新增原生交互仍未验证。 |
 | P1-01 原生桌面 | 按用户当前要求延后，待用户再次授权桌面控制。 |
 
 P0-01 复跑入口为 README 中的 Windows `check-worker-rpc.ps1`（带真实 FFmpeg、ffprobe 和 COCO 读取器参数）、`check-workspace-sqlite.ps1`、`check-command-handlers.ps1`、`check-ui-wire.ps1` 和 `build-desktop.ps1`。异常边界独立入口为 `target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/execution -v`。红测 `target/dev/logs/mvp11-worker-failures-red.log`，专项绿测 `mvp11-worker-failures-{green,final,integration}.log`，累计 `mvp11-worker-{rpc-regression,headless-regression-final,python-regression,node-regression}.log`，路径均在 `target/dev/logs/`。首轮存储脚本受到当前 PowerShell 清理环境变量的差异影响而退出，保留 `mvp11-worker-headless-regression.log`，改用已验证的 `powershell.exe -NoProfile -NonInteractive -File` 入口后完整复跑通过。故障根因与长期回归见 [DD-ISSUE-0001](../troubleshooting/worker-terminal-failures.md)。正式发行的 Worker 重打包与安装验收仍待执行。
 
 ## 本轮接续检查点
 
-- 规划检查点 `205eea4` 已同步。P0-01 已本地提交 `8360d56`，P0-02 调度 `1d386a2`，Tauri 受理与查询 `27389ae`。前端审核反馈 `68df26e`。P0-03 外部目录写授权 `7ebb7a4`。P0-04 取消、中断恢复、直接影响边界和 Windows 离线构建通过，见本节所在提交。下一条可执行任务为 P0-05 产品 CI，准备按路径选择的可复跑检查、锁定缓存和 Windows 构建/冒烟；实际远程运行需在完成本地可审阅结果后另获推送授权。原生桌面控制继续按用户要求延后。2026-11-27 用户更新了测试策略，按改动影响选择当前功能、直接依赖和必要回归，未受影响模块沿用已有证据，已同步开发守则。
+- 规划检查点 `205eea4` 已同步。P0-01 已本地提交 `8360d56`，P0-02 调度 `1d386a2`，Tauri 受理与查询 `27389ae`。前端审核反馈 `68df26e`。P0-03 外部目录写授权 `7ebb7a4`。P0-04 取消与中断 `7381a46`。P0-04 后最后确认提交为 `7381a46`。P0-05 产品 CI 的本地入口、静态整改、影响回归与 Windows EXE 构建已完成，CI 切片见本节所在提交。收尾验证仅执行选择器 7 项、缺失工具负测和静态检查，复用其他已通过证据。下一条可执行任务为取得推送授权，推送当前开发分支并触发真实 Windows Actions，记录实际运行结果。未经明确授权不推送、不合并 main。原生桌面控制继续按用户要求延后。2026-11-27 用户更新了测试策略，按改动影响选择当前功能、直接依赖和必要回归，未受影响模块沿用已有证据，已同步开发守则。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。
@@ -235,3 +235,9 @@ WSL Ubuntu 已在同一挂载仓库准备 Rust/Cargo 1.97.1，官方 rustc、car
 ## 跨平台验收排期
 
 2026-11-27 用户明确 Linux 验收统一安排在全部功能开发成功后。日常开发切片执行 Windows 验收。已经启动的 WSL 存储及 Worker 验收已停止，未完成项保留未验证状态。已准备的工具链、缓存和未验收脚本保留在 Git 忽略的 target/wsl/，统一跨平台阶段接续。WSL 已有 19 项领域与 Core 测试结果保留为部分历史证据。Linux 桌面、安装器、存储累计回归和 Worker 验收均待最终跨平台阶段。
+
+## MVP1.1 后续门槛与 MVP1.2 接续拆分
+
+MVP1.1 仍未满足阶段退出条件。剩余远程 CI/冷缓存与 Windows 原生选择器、真实画布、写授权/取消按钮、完整闭环、备份和颜色交互验收。远程推送等待明确授权，本机桌面仍按用户当前要求延后；没有执行 WSL/Linux 验收。恢复条件为相应授权，独立结果沿用上表，不重跑无关模块。
+
+下一阶段按已批准计划接续，当前未提前实现。先为正式 Shell、主导航、Workspace/Dataset/Asset 页面层级及统一 Facade 写可执行验收，再复用既有业务组件组织质量检查与人工审核工作台；之后接入视频、颜色、Workflow/Task/Report/Staging 页面及统一 Loading/Empty/Error/Offline/Permission 状态。鼠标与键盘验收对齐已批准原型，CLI/状态用例和实际原生验收分别记录。阶段门槛通过后才评估创建 PR，当前未合并 main。

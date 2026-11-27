@@ -144,7 +144,7 @@ impl WorkspaceThread {
         let mut candidates = rows.into_iter().take(scan as usize).peekable();
         let mut items = Vec::new();
         let mut last_examined = None;
-        while let Some(candidate) = candidates.next() {
+        for candidate in candidates.by_ref() {
             last_examined = Some(candidate.row.asset);
             let item = candidate.view(&root);
             if query.status.is_none_or(|status| status == item.state) {

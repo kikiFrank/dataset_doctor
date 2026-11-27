@@ -210,10 +210,8 @@ impl DatasetImportCoordinator {
                 ).optional().map_err(database)?.ok_or(WorkspaceThreadError::Task(TaskStoreError::UnknownTask))?;
             let mut preview: Option<ImportPreviewResult> = encoded.as_deref().map(serde_json::from_str).transpose()
                 .map_err(|error| WorkspaceThreadError::Task(TaskStoreError::Receipt(error)))?;
-            if origin != session {
-                if let Some(preview) = &mut preview {
-                    preview.can_confirm = false;
-                }
+            if origin != session && let Some(preview) = &mut preview {
+                preview.can_confirm = false;
             }
             Ok(ImportInspectionSnapshot { task_id, status, accepted_at_ms, preview, error_code })
         }).map_err(DatasetImportError::Workspace)

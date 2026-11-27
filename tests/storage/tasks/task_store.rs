@@ -235,6 +235,70 @@ fn killed_owner_leaves_attempts_recoverable_without_rescheduling_queued_tasks() 
         workspace
             .recover_abandoned_session(old_session, 5000)
             .unwrap(),
+        0
+    );
+    assert_eq!(
+        workspace
+            .recover_abandoned_session(old_session, 6000)
+            .unwrap(),
+        0
+    );
+    drop(workspace);
+    let db = Connection::open(root.join("workspace.db")).unwrap();
+    let mut rows = db.prepare("SELECT operation_kind, status, finished_at_ms, json_extract(execution_metadata_json,'$.grant_state') FROM tasks ORDER BY operation_kind").unwrap();
+    let observed = rows
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let recovered_at = observed[0]
+        .2
+        .expect("automatic recovery persisted a terminal timestamp");
+    assert!(recovered_at > 400);
+    assert_eq!(
+        observed,
+        [
+            (
+                "DISPATCHING_FIXTURE".into(),
+                "INTERRUPTED".into(),
+                Some(recovered_at),
+                Some("REVOKED".into())
+            ),
+            ("QUEUED_FIXTURE".into(), "QUEUED".into(), None, None),
+            (
+                "RUNNING_FIXTURE".into(),
+                "INTERRUPTED".into(),
+                Some(recovered_at),
+                Some("REVOKED".into())
+            ),
+            (
+                "UNRELATED_SESSION".into(),
+                "INTERRUPTED".into(),
+                Some(recovered_at),
+                Some("REVOKED".into())
+            ),
+        ]
+    );
+}
+
+#[test]
+fn explicit_session_recovery_remains_scoped_and_idempotent() {
+    let old_session = Uuid::parse_str(OLD_SESSION).unwrap();
+    let root = support::workspace_root("Explicit scoped task recovery");
+    let contracts = JsonContracts::new().unwrap();
+    let mut workspace = create_workspace(&root, &contracts, 250, "Task", WORKSPACE_ID, 0).unwrap();
+    seed_attempts(&mut workspace, old_session);
+    assert_eq!(
+        workspace
+            .recover_abandoned_session(old_session, 5000)
+            .unwrap(),
         2
     );
     assert_eq!(
@@ -299,6 +363,14 @@ fn run_crash_fixture(root: &Path, session: Uuid) {
     );
     let contracts = JsonContracts::new().unwrap();
     let mut workspace = create_workspace(root, &contracts, 250, "Task", WORKSPACE_ID, 0).unwrap();
+    seed_attempts(&mut workspace, session);
+    fs::write(root.join("ready"), b"committed").unwrap();
+    loop {
+        std::thread::park();
+    }
+}
+
+fn seed_attempts(workspace: &mut dd_infra::workspace::OpenedWorkspace, session: Uuid) {
     for (operation, session) in [
         ("QUEUED_FIXTURE", session),
         ("DISPATCHING_FIXTURE", session),
@@ -337,10 +409,6 @@ fn run_crash_fixture(root: &Path, session: Uuid) {
                 .record_running(session, grant, receipt, 400)
                 .unwrap();
         }
-    }
-    fs::write(root.join("ready"), b"committed").unwrap();
-    loop {
-        std::thread::park();
     }
 }
 

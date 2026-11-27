@@ -220,42 +220,40 @@ impl WorkflowStore {
         } else {
             Some(serde_json::from_value(prior.clone()).map_err(WorkflowError::Json)?)
         };
-        if let Some(batch) = &existing {
-            if batch.fingerprint != fingerprint {
-                if batch.idempotency_key == review.idempotency_key {
-                    return Err(WorkflowError::IdempotencyConflict);
-                }
-                if row.status != "WAITING_REVIEW"
-                    || row.revision()? != request.expected_row_revision
-                {
-                    return Err(WorkflowError::RevisionConflict);
-                }
-                for entry in &batch.evidence {
-                    let task = self
-                        .owner
-                        .task_outcome(session, entry.geometry_task_id)
-                        .map_err(WorkflowError::Storage)?;
-                    if !matches!(
-                        task.status.as_str(),
-                        "SUCCEEDED" | "FAILED" | "INTERRUPTED" | "CANCELLED"
-                    ) {
-                        return Err(WorkflowError::UpstreamNotReady);
-                    }
-                }
-                let history = &mut states["control"]["review_recheck_history"];
-                if history.is_null() {
-                    *history = json!([]);
-                }
-                let history = history.as_array_mut().ok_or(WorkflowError::InvalidRecord)?;
-                if history
-                    .iter()
-                    .any(|batch| batch["idempotency_key"] == review.idempotency_key.to_string())
-                {
-                    return Err(WorkflowError::IdempotencyConflict);
-                }
-                history.push(prior);
-                existing = None;
+        if let Some(batch) = &existing
+            && batch.fingerprint != fingerprint
+        {
+            if batch.idempotency_key == review.idempotency_key {
+                return Err(WorkflowError::IdempotencyConflict);
             }
+            if row.status != "WAITING_REVIEW" || row.revision()? != request.expected_row_revision {
+                return Err(WorkflowError::RevisionConflict);
+            }
+            for entry in &batch.evidence {
+                let task = self
+                    .owner
+                    .task_outcome(session, entry.geometry_task_id)
+                    .map_err(WorkflowError::Storage)?;
+                if !matches!(
+                    task.status.as_str(),
+                    "SUCCEEDED" | "FAILED" | "INTERRUPTED" | "CANCELLED"
+                ) {
+                    return Err(WorkflowError::UpstreamNotReady);
+                }
+            }
+            let history = &mut states["control"]["review_recheck_history"];
+            if history.is_null() {
+                *history = json!([]);
+            }
+            let history = history.as_array_mut().ok_or(WorkflowError::InvalidRecord)?;
+            if history
+                .iter()
+                .any(|batch| batch["idempotency_key"] == review.idempotency_key.to_string())
+            {
+                return Err(WorkflowError::IdempotencyConflict);
+            }
+            history.push(prior);
+            existing = None;
         }
         if let Some(batch) = &existing {
             if batch.fingerprint != fingerprint {

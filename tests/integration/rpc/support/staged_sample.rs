@@ -19,8 +19,7 @@ mod video_annotation_fixture;
 pub(crate) use video_annotation_fixture::Fixture;
 use video_annotation_fixture::{document, prepared};
 
-#[path = "video_fixture.rs"]
-mod video_fixture;
+pub(crate) use video_annotation_fixture::workspace_video::video_fixture;
 
 #[allow(dead_code)]
 pub async fn ready_pair_in(

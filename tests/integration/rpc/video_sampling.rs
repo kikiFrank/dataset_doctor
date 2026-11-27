@@ -81,7 +81,10 @@ async fn saved_segments_select_distinct_real_frames_for_tracking_and_training() 
         )
         .unwrap();
     assert_eq!(indices(&tracking.frames), [1, 3]);
-    assert_eq!(tracking.keyframes, [keyframe.clone()]);
+    assert_eq!(
+        tracking.keyframes.as_slice(),
+        std::slice::from_ref(&keyframe)
+    );
     assert_ne!(training.sampling_config_id, tracking.sampling_config_id);
     let dense = service
         .resolve_sampling(

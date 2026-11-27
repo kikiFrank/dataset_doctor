@@ -125,6 +125,11 @@ mod workflow_control_tests;
 mod workflow_review_tests;
 
 #[cfg(all(test, feature = "video-acceptance"))]
+#[path = "../../../../tests/integration/rpc/support/staged_sample.rs"]
+#[allow(dead_code)]
+mod shared_video_fixture;
+
+#[cfg(all(test, feature = "video-acceptance"))]
 #[path = "../../../../tests/desktop/host/video_frame.rs"]
 mod video_frame_tests;
 
