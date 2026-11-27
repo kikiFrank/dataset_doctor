@@ -1,6 +1,6 @@
 # DD-ISSUE-0003 Windows CI 冷缓存引导
 
-状态：整改已本机专项验证，远程复验中。2026-11-27。
+状态：Resolved。2026-11-27，cc0a961 首次远程全绿，7a9c30d 在 30 秒场景预算下再次全绿。实际运行和本机原始日志索引见进度检查点。
 
 环境：Windows Server 2025 GitHub runner，Rust 1.97.1、uv 0.9.26、CPython 3.12.12 x64、pnpm 10.18.3。实际失败运行：[45988980817](https://github.com/kikiFrank/dataset_doctor/actions/runs/45988980817)、[45989499120](https://github.com/kikiFrank/dataset_doctor/actions/runs/45989499120)。未涉及真实媒体、密钥或本机桌面控制。
 
@@ -16,3 +16,5 @@
 本机证据：target/dev/logs/mvp11-ci-python-bootstrap-{red,green}.log、mvp11-ci-schema-default-{prepare,green}.log、mvp11-ci-archive-{red,green}.log。归档验收从有 .git 的 checkout 执行：`node tests/ci/verify-source-archive.mjs <实际源码 tar 路径>`；不在提取后的无 Git 目录执行。
 
 冷缓存准备通过不等于业务通过。远程测试最终结果和提交号只以 [进度检查点](../development/mvp_progress.md) 为准。保持专项脚本、固定锁、归档摘要和失败拒绝；不以更新预期摘要或跳过测试掩盖引导问题。
+
+限时器集成还复现了 Python 桥接 PowerShell 7 到 Windows PowerShell 5 时的 Utility 模块加载失败：继承的 PSModulePath 可指向不兼容的 bundled PowerShell 7 模块，Get-FileHash 不可用。仅在启动 powershell.exe 子进程时按大小写不敏感的键排除该继承值，让其初始化系统默认路径；不修改调用者环境。Windows 的 Python 环境键会大写，普通 dict 的大小写敏感 pop 不足以排除它。真实 Get-FileHash 红绿及原 P00 通过，回归归 tests/testing/windows，日志 test-deadline-powershell-red.log、test-deadline-final-unit.log、test-deadline-p00-green.log。最终远程七组通过，所有实际测试执行均在预算内。

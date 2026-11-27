@@ -48,3 +48,5 @@ CPython 3.12.12 在 setup-python 的 Windows 构建列表中不可用。远程�
 源码归档显式使用 `git -c core.autocrlf=false archive`，因为 Git archive 也会受 runner 的换行转换设置影响。提取后、准备前，在原 checkout 用 `verify-source-archive.mjs` 比较实际归档与 Git blob 字节，保护独立 P00 锁的固定摘要与生成桩。详细复现见 [DD-ISSUE-0003](../troubleshooting/windows-ci-bootstrap.md)。
 
 SQLite 组通过 `tests/ci/verify-sqlite-file-lock-encoding.ps1` 执行原独立 P00 验收：强制模拟托管 UTF-8 BOM 控制台，再由薄调用器临时使用无 BOM stdin 并恢复编码，避免改变 broker 的精确握手。该入口仍实际核验锁摘要、bundled SQLite、NTFS/WAL 和两进程锁，不替换或跳过 P00。
+
+已实跑：提交 7a9c30d 的 [Windows Actions 45994705843](https://github.com/kikiFrank/dataset_doctor/actions/runs/45994705843) 七组全绿，106 条限时执行记录最长 13.641 秒，实际两个桌面冒烟 8.953/2.078 秒。完整环境、分组和本机日志位置见进度检查点。`preparation_seconds`、`command-durations.jsonl` 与 `test-durations.jsonl` 区分准备、构建/命令和测试场景；不得把整个 CI 作业时长当成单个测试时长。原生鼠标、选择器及复杂业务场景仍需另外验收。

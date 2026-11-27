@@ -204,14 +204,14 @@ Windows 2026-11-27 追加复跑了独立 P00 SQLite 双进程 NTFS/WAL、P01 JSO
 | P0-02 前端审核反馈 | `68df26e`。页面已接入明确确认、逐项缺项理由、真实复检任务状态、等待 Core 核验和完成报告。状态与请求构造 3 项 Node 测试通过，红绿 `target/dev/logs/mvp11-workflow-review-ui-{red,green}.log`。Core 拒绝完成会保存错误并结束 pending，真实 Worker/SQLite 的直接关联 5 项通过，包含几何 SUCCEEDED 后输入变化被拒，日志 `mvp11-workflow-review-feedback-{red,green,final}.log`。命令宿主 1 项复验、Rust/TS 生成契约、22 项契约测试及 TypeScript/Vite 构建通过。当前 Windows EXE 已离线重建，日志 `mvp11-workflow-review-{ui-host,ui-wire,ui-build,desktop-build}.log`。可见页面交互、完整 IPC 和鼠标操作尚待桌面空闲后的验收。 |
 | P0-02 Tauri 审核完成命令 | `27389ae`。新增版本化 DTO 和 workflow_complete_review 注册，受理返回复检任务引用，workflow_get/list 暴露当前批次状态。Windows 命令宿主 1 项通过，覆盖无 Final 和缺项拒绝、实际 Worker、重复提交、完成报告、旧会话拒绝及重开幂等。复检调度 4 项直接回归通过。重复请求的延迟派发先核对 Core 终态，已完成任务在 Worker 不可用时仍可重放，无新增计算进程。红绿见 `target/dev/logs/mvp11-workflow-review-host-{red,green,final}.log` 和 `mvp11-workflow-duplicate-worker-{red,green}.log`。Rust/TS 生成契约及 22 项 Node 契约通过，前端类型与 Vite 构建通过，日志 `mvp11-workflow-review-{wire,typescript-build}.log`。可见页面、IPC 实操和原生选择器仍延后。 |
 | P0-04 取消与中断 | `7381a46`。Windows 合成真实 Core/Worker/SQLite 的取消 4 项和实际 FFmpeg 视频取消 1 项通过，覆盖排队、运行中、重复请求、终态成功/失败竞争、取消确认丢失重试、崩溃进程树回收、重开、源字节、一次 attempt、完整性与外键。Core 先持久取消，Worker 合作停止并回报 cancelled，公开状态兼容；Windows Job Object 等待全树停止，生命周期租约拒绝运行中提前关闭。重开协调遗留执行器 attempt，正式文件日志继续受保护恢复。证据 `target/dev/logs/mvp11-task-cancel-{verified,recovery-regression}.log`；其中直接相关旧 RPC 8 项通过，包含复检调度 5 项，Final 恢复另 3 项、Claim 1 项通过。追加审核复检的遗留 CANCELLING attempt 恢复 1 项通过，保留原 Final 和报告，显式新请求可完成真实复检，日志 mvp11-task-cancel-review-recovery.log。共用进程监督器的实际 Agent 启停 1 项通过（mvp11-task-cancel-agent-supervisor.log）。打开/创建 8 项、图片命令宿主和审核宿主各 1 项、Python 取消 2 项及直接修改的解码 9 项/追踪 6 项、既有异常边界 6 项、Node 取消状态 3 项、生成契约 22 项、TypeScript/Vite 与 Windows 离线 EXE 构建通过。其余未受影响模块复用既有证据。新增按钮和实际 IPC/原生交互、发行包重建尚未验收，其他平台仍延后。故障记录 DD-ISSUE-0002。 |
-| P0-05 产品 CI | `cc0a961` 的 [Actions 45992250798](https://github.com/kikiFrank/dataset_doctor/actions/runs/45992250798) 首次七组全绿：Rust 19 项与严格 Clippy，TypeScript/Vite 与 Node 31 项，Python 43 项，JSON Schema 10 项、Protobuf、Rust/TS 2+22 项及桩漂移，实际 RPC 25 项与异常边界 6 项，SQLite 27 项及独立 NTFS/WAL 锁，桌面构建、3 项宿主及真实 WebView2 Runtime/WorkspaceCreate。冷缓存差异见 DD-ISSUE-0003。用户随后追加单测试/冒烟 30 秒预算；新入口已本机专项验证，远程限时矩阵待接续，不把首次绿测当作新预算的桌面证明。原生选择器/画布和其他平台未验收。 |
+| P0-05 产品 CI | `7a9c30d` 的 [Actions 45994705843](https://github.com/kikiFrank/dataset_doctor/actions/runs/45994705843) 在新增 30 秒场景预算下七组全绿。106 条限时执行记录全部成功且残留进程为 0，最长 13.641 秒；实际 Runtime/WorkspaceCreate 冒烟为 8.953/2.078 秒。Rust/TS/Python/契约/SQLite/RPC/桌面构建与宿主范围沿用产品 CI 定义，原 P00 锁断言保持不变。原始远程日志及 summary.json 已保存 target/ci/remote/45994705843/，分组数据见下文。本机原生交互与其他平台未验收。 |
 | P1-01 原生桌面 | 按用户当前要求延后，待用户再次授权桌面控制。 |
 
 P0-01 复跑入口为 README 中的 Windows `check-worker-rpc.ps1`（带真实 FFmpeg、ffprobe 和 COCO 读取器参数）、`check-workspace-sqlite.ps1`、`check-command-handlers.ps1`、`check-ui-wire.ps1` 和 `build-desktop.ps1`。异常边界独立入口为 `target/dev/worker-venv/Scripts/python.exe -I -B -m unittest discover -s tests/worker/execution -v`。红测 `target/dev/logs/mvp11-worker-failures-red.log`，专项绿测 `mvp11-worker-failures-{green,final,integration}.log`，累计 `mvp11-worker-{rpc-regression,headless-regression-final,python-regression,node-regression}.log`，路径均在 `target/dev/logs/`。首轮存储脚本受到当前 PowerShell 清理环境变量的差异影响而退出，保留 `mvp11-worker-headless-regression.log`，改用已验证的 `powershell.exe -NoProfile -NonInteractive -File` 入口后完整复跑通过。故障根因与长期回归见 [DD-ISSUE-0001](../troubleshooting/worker-terminal-failures.md)。正式发行的 Worker 重打包与安装验收仍待执行。
 
 ## 本轮接续检查点
 
-- 仍在原工作区与 dot/mvp1-foundation，未合并 main。P0-01..04 的通过提交为 8360d56、1d386a2/27389ae/68df26e、7ebb7a4、7381a46；CI 212d6e6 及引导整改 543f9fe、55e5840、cc0a961 已获授权并推送。cc0a961 首次远程七组全绿。用户新增每场景 30 秒要求，当前继续验收限时入口，完成后再安排本机原生操作。未受影响模块沿用原证据，不重跑无关内部用例。
+- 原工作区 H:/DEV_self/dataset_doctor，dot/mvp1-foundation，未合并 main。P0-01..04 的通过提交为 8360d56、1d386a2/27389ae/68df26e、7ebb7a4、7381a46；产品 CI 及引导整改已授权推送。cc0a961 首次七组全绿，7a9c30d 在每场景 30 秒新要求下再次七组全绿。当前只剩 MVP1.1 的本机桌面验收需要用户安排桌面；通过后才进入 MVP1.2。CLI 基础设施与结果已落盘，未重跑无关算法内部用例。本次文档提交只更新证据索引，验收代码基线为 7a9c30d。
 - 当前 Windows 开发 EXE 在 `target/dev/cargo-target/x86_64-pc-windows-msvc/debug/dd-desktop.exe`，离线构建见 README。本轮继续使用命令行。
 - P08 已验证视频定位、关键帧、片段、追踪、采样、单样本报告和批次接收，仍需可选检查与原生视频工作台验收。P10 备份恢复已验收数据、回执和损坏拒绝，待桌面选择器、完整 Windows 安装以及逐平台验收。
 - 桌面解锁后，验收系统选择器、真实画布鼠标坐标和可见业务反馈。继续补 Worker 异常退出、取消与重试，以及正式随包启动。
@@ -238,7 +238,7 @@ WSL Ubuntu 已在同一挂载仓库准备 Rust/Cargo 1.97.1，官方 rustc、car
 
 ## MVP1.1 后续门槛与 MVP1.2 接续拆分
 
-MVP1.1 尚未满足阶段退出条件。产品 CI 已首次七组全绿，新追加的每场景 30 秒限时入口本机通过、远程复验中；本机 Windows 原生选择器、真实画布、写授权/取消按钮、完整闭环、备份和颜色交互仍按用户要求延后。恢复原生验收需要用户安排桌面，完成后才进入 MVP1.2。Linux/WSL 没有在本轮执行。
+MVP1.1 尚未满足阶段退出条件。产品 CI（含每场景 30 秒预算）七组已通过。本机 Windows 原生选择器、画布及缩放坐标、写授权/取消按钮、完整图片业务的可见操作、视频、备份与颜色交互仍待用户安排桌面。通过本阶段原生门槛后再进入 MVP1.2；完整 MVP 的后续正式前端、真实 Agent、算法扩展和发行工作尚未完成。Linux/WSL 没有在本轮执行。
 
 下一阶段按已批准计划接续，当前未提前实现。先为正式 Shell、主导航、Workspace/Dataset/Asset 页面层级及统一 Facade 写可执行验收，再复用既有业务组件组织质量检查与人工审核工作台；之后接入视频、颜色、Workflow/Task/Report/Staging 页面及统一 Loading/Empty/Error/Offline/Permission 状态。鼠标与键盘验收对齐已批准原型，CLI/状态用例和实际原生验收分别记录。阶段门槛通过后才评估创建 PR，当前未合并 main。
 
@@ -254,4 +254,24 @@ MVP1.1 尚未满足阶段退出条件。产品 CI 已首次七组全绿，新追
 
 提交 cc0a961 的 [Actions 45992250798](https://github.com/kikiFrank/dataset_doctor/actions/runs/45992250798) 已完成 success：选择器与七个 Windows 组均通过，包含 SQLite 27 项和真实 P00 NTFS/WAL 双进程锁、实际 WebView2 Runtime/WorkspaceCreate。Windows Server 2025 / MSVC 14.52 为远程环境；本机 Windows 11 / MSVC 14.50 的原生操作仍按用户要求延后。此记录不代表 MVP1.1 原生桌面门槛通过。
 
-用户随后要求每个测试/冒烟不超过 30 秒。新增 Windows 真实进程树限时入口，按 Rust 单场景运行，Node/Python 短批次和 WebView2 单 Suite 限时，编译/准备单独计时。7 项基础设施验收通过，含真实超时与孤儿回收、普通 Cargo 工具及 PowerShell 模块边界；红绿日志 target/dev/logs/test-deadline-*.log。2 项 Rust 契约、22 项 Node 契约、31 项页面/选择器、10 项实际取消和审核 RPC、5 项 TaskStore，以及真实 P00 在新限时入口下通过；未重复无关算法内部测试。新策略下的远程矩阵和桌面冒烟仍待下一轮 CI。本机复杂业务/颜色/视频及原生鼠标等历史场景尚未按新预算实测。下一条任务是推送限时改动并跟踪实际结果，之后只剩本阶段的原生桌面验收。
+用户随后要求每个测试/冒烟不超过 30 秒。新增 Windows 真实进程树限时入口，按 Rust 单场景运行，Node/Python 短批次和 WebView2 单 Suite 限时，编译/准备单独计时。7 项基础设施验收通过，含真实超时与孤儿回收、普通 Cargo 工具及 PowerShell 模块边界；红绿日志 target/dev/logs/test-deadline-*.log。2 项 Rust 契约、22 项 Node 契约、31 项页面/选择器、10 项实际取消和审核 RPC、5 项 TaskStore，以及真实 P00 在新限时入口下通过；未重复无关算法内部测试。新策略下的远程矩阵和两个桌面冒烟随后在 7a9c30d 通过，见最终检查点。本机复杂业务/颜色/视频及原生鼠标等历史场景尚未按新预算实测。限时改动已推送并通过；当前接续任务为本阶段的原生桌面验收。
+
+## 最终 CLI 检查点：等待本机桌面
+
+2026-11-27，验收提交 `7a9c30dea730e44ac47d4528a84a82051a28e551` 已推送。实际 [Windows CI 45994705843](https://github.com/kikiFrank/dataset_doctor/actions/runs/45994705843) completed/success；选择器和七组均通过。以下为限时执行记录数，含引导验收、部分短批次与零用例测试二进制，不冒充同等数量的业务用例。编译和准备单独记录。
+
+| 组 | 限时执行记录数 | 最长秒数 | 超时 / 失败 / 残留进程 |
+| --- | ---: | ---: | --- |
+| rust | 22 | 3.282 | 0 / 0 / 0 |
+| typescript | 3 | 4.031 | 0 / 0 / 0 |
+| python | 11 | 5.265 | 0 / 0 / 0 |
+| contracts | 8 | 3.843 | 0 / 0 / 0 |
+| sqlite | 29 | 13.641 | 0 / 0 / 0 |
+| integration | 27 | 9.156 | 0 / 0 / 0 |
+| desktop | 6 | 8.953 | 0 / 0 / 0 |
+
+真实桌面冒烟 Runtime 为 8.953 秒，WorkspaceCreate 为 2.078 秒，均含启动、IPC、独立核验与进程树回收。它们在托管 Windows Server 2025 x64 / MSVC 14.52 实测。本机 Windows 11 / MSVC 14.50 仍未使用桌面控制；完整业务、颜色、视频等历史 WebView2 场景未自动视作新 30 秒预算通过。
+
+复跑命令为 `scripts/ci/prepare-windows.ps1 -Check <组> ...` 后执行 `scripts/ci/run-windows-check.ps1 -Check <组>`；仅在获准使用桌面的机器传 `-LaunchDesktop`。详见产品 CI 与测试预算文档。7 项限时器自身测试、直接影响的 Rust/TS 契约、RPC/存储及原 P00 本机红绿日志为 `target/dev/logs/test-deadline-*.log`。七份实际远程日志与汇总已在本机忽略目录保留一份 `target/ci/remote/45994705843/`；Actions 上传七组日志和耗时证据保留七天。
+
+下一条可执行任务需用户安排本机桌面：按功能独立验收系统选择器/图片导入，画布绘制、选择、移动、删除与缩放坐标，写授权/草稿/Final/复检/COCO 读取，取消/停止/关闭反馈，以及视频、颜色和备份恢复。每项准备起始状态后独立执行并记录不超过 30 秒；整体业务链与单项证据分别保留。CLI 合成夹具已准备于 `target/desktop-business/runs/7d9d8bf6eee241c1b5797a9ba10fcfcf/native-plan.json`（图片、逐图 JSON、2 秒视频及空目标目录），状态 PREPARED_NOT_DESKTOP_TESTED。未使用或上传私有 Andon/S1 数据。当前不提前实现 MVP1.2，不创建 PR、不合并 main，不进行 Linux 验收。
