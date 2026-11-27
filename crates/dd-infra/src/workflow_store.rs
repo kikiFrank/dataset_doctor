@@ -18,6 +18,8 @@ mod report;
 #[cfg(feature = "execution-rpc")]
 mod resume;
 #[cfg(feature = "execution-rpc")]
+mod review_gate;
+#[cfg(feature = "execution-rpc")]
 pub use geometry::{WorkflowGeometryAcceptance, WorkflowGeometryRequest};
 #[cfg(feature = "execution-rpc")]
 pub use local_runner::{
@@ -30,6 +32,10 @@ pub use profile::{WorkflowProfileAcceptance, WorkflowProfileRequest};
 pub use report::{WorkflowReport, WorkflowReportData, WorkflowReportRequest, WorkflowReportScope};
 #[cfg(feature = "execution-rpc")]
 pub use resume::WorkflowResumeRequest;
+#[cfg(feature = "execution-rpc")]
+pub use review_gate::{
+    WorkflowReviewCheckAcknowledgment, WorkflowReviewEvidence, WorkflowReviewRequest,
+};
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -88,6 +94,7 @@ pub enum WorkflowStatus {
     Paused,
     Interrupted,
     WaitingReview,
+    Completed,
     Failed,
 }
 
@@ -502,6 +509,7 @@ impl WorkflowStore {
             ("WAITING_REVIEW", revision, true, true, true) if revision > 0 => {
                 WorkflowStatus::WaitingReview
             }
+            ("COMPLETED", revision, true, true, true) if revision > 0 => WorkflowStatus::Completed,
             ("FAILED", revision, true, true, false) if revision > 0 => WorkflowStatus::Failed,
             _ => return Err(WorkflowError::InvalidRecord),
         };
@@ -648,6 +656,17 @@ impl WorkflowStore {
         path: &str,
         proof: &InputProof,
     ) -> Result<(WorkflowInput, serde_json::Value), WorkflowError> {
+        self.verify_current_scope(session, dataset, path, proof, &BTreeMap::new())
+    }
+
+    fn verify_current_scope(
+        &self,
+        session: Uuid,
+        dataset: Uuid,
+        path: &str,
+        proof: &InputProof,
+        approved_annotations: &BTreeMap<Uuid, String>,
+    ) -> Result<(WorkflowInput, serde_json::Value), WorkflowError> {
         let path = Path::new(path);
         path_text(path)?;
         let root = self
@@ -664,7 +683,7 @@ impl WorkflowStore {
         {
             return Err(WorkflowError::InputChanged);
         }
-        let parsed = self
+        let mut parsed = self
             .contracts
             .validate(JsonProfile::InputManifest, &bytes)
             .map_err(|_| WorkflowError::InputChanged)?;
@@ -698,8 +717,9 @@ impl WorkflowStore {
         if parsed["label_schema_digest"] != format!("{:x}", Sha256::digest(categories.as_bytes())) {
             return Err(WorkflowError::InputChanged);
         }
+        let mut applied = 0;
         for entry in parsed["assets"]
-            .as_array()
+            .as_array_mut()
             .ok_or(WorkflowError::InputChanged)?
         {
             let asset = entry["asset_id"]
@@ -713,8 +733,12 @@ impl WorkflowStore {
                     WorkspaceThreadError::Dataset(_) => WorkflowError::InputChanged,
                     other => WorkflowError::Storage(other),
                 })?;
+            let approved = approved_annotations.get(&asset);
+            let expected = approved
+                .map(String::as_str)
+                .or_else(|| entry["annotation_digest"].as_str());
             if entry["media_digest"] != registered.image.sha256
-                || entry["annotation_digest"].as_str()
+                || expected
                     != registered
                         .annotation
                         .as_ref()
@@ -730,6 +754,13 @@ impl WorkflowStore {
             {
                 return Err(WorkflowError::InputChanged);
             }
+            if let Some(digest) = approved {
+                entry["annotation_digest"] = serde_json::Value::String(digest.clone());
+                applied += 1;
+            }
+        }
+        if applied != approved_annotations.len() {
+            return Err(WorkflowError::InputChanged);
         }
         Ok((
             WorkflowInput {

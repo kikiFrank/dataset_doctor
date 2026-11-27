@@ -287,7 +287,8 @@ impl ReportExportService {
                 .optional()
                 .map_err(database)
         })?;
-        let (status, error_code, metadata, accepted_at_ms) = row.ok_or(ReportExportError::InvalidTask)?;
+        let (status, error_code, metadata, accepted_at_ms) =
+            row.ok_or(ReportExportError::InvalidTask)?;
         let receipt = if status == "SUCCEEDED" {
             Some(serde_json::from_str(&metadata)?)
         } else {
@@ -366,7 +367,7 @@ impl ReportExportService {
             Some(run) => {
                 let report = self
                     .workflows
-                    .read_report(session, run.parse().map_err(evidence)?)
+                    .read_report_by_task(session, run.parse().map_err(evidence)?, task)
                     .map_err(evidence)?;
                 (report.data.scope.dataset_id, report.reference)
             }

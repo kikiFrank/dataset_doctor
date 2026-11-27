@@ -8,6 +8,7 @@ import { reportCheckLabel } from "./staging-report-view";
 const statusNames: Record<WorkflowStatusView, string> = {
   DRAFT: "准备体检", READY: "计划就绪", RUNNING: "正在检查",
   PAUSED: "体检已暂停",
+  COMPLETED: "体检已完成",
   INTERRUPTED: "体检已中断", WAITING_REVIEW: "等待人工审核", FAILED: "体检失败",
 };
 const activeStatuses = new Set<WorkflowStatusView>(["DRAFT", "READY", "RUNNING"]);

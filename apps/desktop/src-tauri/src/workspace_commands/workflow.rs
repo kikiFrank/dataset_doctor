@@ -369,6 +369,7 @@ fn workflow_status(status: WorkflowStatus) -> WorkflowStatusView {
         WorkflowStatus::Paused => WorkflowStatusView::Paused,
         WorkflowStatus::Interrupted => WorkflowStatusView::Interrupted,
         WorkflowStatus::WaitingReview => WorkflowStatusView::WaitingReview,
+        WorkflowStatus::Completed => WorkflowStatusView::Completed,
         WorkflowStatus::Failed => WorkflowStatusView::Failed,
     }
 }

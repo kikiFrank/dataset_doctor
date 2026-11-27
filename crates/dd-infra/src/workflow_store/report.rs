@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::profile::verified_replay;
+use super::review_gate::CAPABILITY as REVIEW_CAPABILITY;
 use super::{GEOMETRY_NODE, PlanRef, REPORT_NODE, WorkflowError, WorkflowStore, database};
 use crate::artifact_reference::{ArtifactOwner, ArtifactReference};
 use crate::input_fingerprint::freeze_input_manifest;
@@ -24,7 +25,7 @@ use crate::staging_report::ReportCheck;
 use crate::task_store::{TaskSubmission, enqueue_task_in, format_digest};
 use crate::workspace_thread::WorkspaceThreadError;
 
-const KIND: &str = "BUILD_REPORT";
+pub(super) const KIND: &str = "BUILD_REPORT";
 const CAPABILITY: &str = "workflow_report.v1";
 const ARTIFACT_KIND: &str = "WORKFLOW_CHECK_REPORT";
 const LIMIT: u64 = 16 * 1024 * 1024;
@@ -85,13 +86,14 @@ impl WorkflowStore {
         let key = request.idempotency_key.to_string();
         if row.report_task_id.is_some() {
             let key = key.clone();
-            self.owner
+            let original = self
+                .owner
                 .workspace_action(session, move |owner| {
                     let receipt = report_command(&owner.connection, run)?;
-                    Ok(verified_replay(receipt, &key, &fingerprint))
+                    Ok(verify_report_replay(receipt, &key, &fingerprint))
                 })
                 .map_err(WorkflowError::Storage)??;
-            return self.read_report(session, run);
+            return self.read_report_by_task(session, run, original);
         }
         if super::control::pause_requested(&row.status, &row.node_states_json)? {
             return Err(WorkflowError::Paused);
@@ -172,33 +174,16 @@ impl WorkflowStore {
             format_digest(&manifest.input_fingerprint),
             checks,
         );
-        let bytes = serde_json::to_vec(&report).map_err(WorkflowError::Json)?;
-        if bytes.len() as u64 > LIMIT {
-            return Err(WorkflowError::InvalidRecord);
-        }
-        self.owner.workspace_action(session, move |owner| {
+        let original = self.owner.workspace_action(session, move |owner| {
             let transaction = owner.connection.transaction().map_err(database)?;
             if let Some(receipt) = report_command(&transaction, run)? {
-                return Ok(verified_replay(Some(receipt), &key, &fingerprint));
+                return Ok(verify_report_replay(Some(receipt), &key, &fingerprint));
             }
             let task = enqueue_task_in(&transaction, &submission, now_ms).map_err(WorkspaceThreadError::Task)?;
-            let output = report_path(task.task_id);
-            if let Err(error) = publish_immutable(&root, Path::new(&output), &bytes) {
-                return Ok(Err(evidence(error)));
-            }
-            let reference = ArtifactReference {
-                artifact_id:report.report_id, owner:ArtifactOwner::Task(task.task_id), kind:ARTIFACT_KIND.into(),
-                media_type:"application/json".into(), sha256:format!("{:x}", Sha256::digest(&bytes)),
-                size_bytes:bytes.len().to_string(), schema_id:None,
+            let output = match seal_report_task(&transaction, &root, task.task_id, run, &report, now_ms) {
+                Ok(output) => output,
+                Err(error) => return Ok(Err(error)),
             };
-            let metadata = json!({"terminal_receipt":{"result_manifest_ref":reference}}).to_string();
-            let completed = transaction.execute(
-                "UPDATE tasks SET status='SUCCEEDED',workflow_run_id=?2,node_id=?3,output_manifest_path=?4,
-                    execution_metadata_json=?5,started_at_ms=?6,finished_at_ms=?6,updated_at_ms=?6,
-                    row_revision=row_revision+1
-                 WHERE task_id=?1 AND status='QUEUED' AND workflow_run_id IS NULL",
-                params![task.task_id.to_string(),run.to_string(),REPORT_NODE,&output,metadata,now_ms],
-            ).map_err(database)?;
             let Some(bindings) = nodes["nodes"].as_array_mut() else { return Ok(Err(WorkflowError::InvalidRecord)); };
             bindings.push(json!({"node_id":REPORT_NODE,"stage_id":"report","task_id":task.task_id}));
             bindings.push(json!({"node_id":"final_annotation","stage_id":"review","status":"WAITING_REVIEW"}));
@@ -208,24 +193,43 @@ impl WorkflowStore {
                  WHERE workflow_run_id=?1 AND status='RUNNING' AND row_revision=?2 AND workspace_session_id=?3",
                 params![run.to_string(),row.row_revision,session.to_string(),&output,nodes.to_string(),now_ms],
             ).map_err(database)?;
-            if completed != 1 || waiting != 1 {
+            if waiting != 1 {
                 return Ok(Err(WorkflowError::RevisionConflict));
             }
             transaction.commit().map_err(database)?;
-            Ok(Ok(()))
+            Ok(Ok(task.task_id))
         }).map_err(WorkflowError::Storage)??;
-        self.read_report(session, run)
+        self.read_report_by_task(session, run, original)
     }
 
     pub fn read_report(&self, session: Uuid, run: Uuid) -> Result<WorkflowReport, WorkflowError> {
+        self.read_selected_report(session, run, None)
+    }
+
+    pub(crate) fn read_report_by_task(
+        &self,
+        session: Uuid,
+        run: Uuid,
+        task: Uuid,
+    ) -> Result<WorkflowReport, WorkflowError> {
+        self.read_selected_report(session, run, Some(task))
+    }
+
+    fn read_selected_report(
+        &self,
+        session: Uuid,
+        run: Uuid,
+        task: Option<Uuid>,
+    ) -> Result<WorkflowReport, WorkflowError> {
         let accepted = self.owner.workspace_action(session, move |owner| {
             owner.connection.query_row(
                 "SELECT t.task_id,w.dataset_id,t.input_fingerprint,t.output_manifest_path,
                         json_extract(t.execution_metadata_json,'$.terminal_receipt.result_manifest_ref')
                  FROM workflow_runs w JOIN tasks t ON t.workflow_run_id=w.workflow_run_id
-                 WHERE w.workflow_run_id=?1 AND t.node_id=?2 AND t.operation_kind=?3 AND t.capability_id=?4
-                   AND t.status='SUCCEEDED' AND w.result_manifest_path=t.output_manifest_path",
-                params![run.to_string(), REPORT_NODE, KIND, CAPABILITY],
+                 WHERE w.workflow_run_id=?1 AND t.node_id=?2 AND t.operation_kind=?3 AND t.capability_id IN (?4,?5)
+                   AND t.status='SUCCEEDED'
+                   AND ((?6 IS NULL AND w.result_manifest_path=t.output_manifest_path) OR t.task_id=?6)",
+                params![run.to_string(), REPORT_NODE, KIND, CAPABILITY, REVIEW_CAPABILITY, task.map(|id| id.to_string())],
                 |row| Ok((owner.root().to_owned(),row_uuid(row,0)?,row_uuid(row,1)?,
                     row.get::<_,String>(2)?,row.get::<_,String>(3)?,row.get::<_,String>(4)?)),
             ).optional().map_err(database)
@@ -271,6 +275,43 @@ impl WorkflowStore {
     }
 }
 
+pub(super) fn seal_report_task(
+    transaction: &Connection,
+    root: &Path,
+    task: Uuid,
+    run: Uuid,
+    data: &WorkflowReportData,
+    now_ms: i64,
+) -> Result<String, WorkflowError> {
+    let bytes = serde_json::to_vec(data).map_err(WorkflowError::Json)?;
+    if bytes.len() as u64 > LIMIT {
+        return Err(WorkflowError::InvalidRecord);
+    }
+    let output = report_path(task);
+    publish_immutable(root, Path::new(&output), &bytes).map_err(evidence)?;
+    let reference = ArtifactReference {
+        artifact_id: data.report_id,
+        owner: ArtifactOwner::Task(task),
+        kind: ARTIFACT_KIND.into(),
+        media_type: "application/json".into(),
+        sha256: format!("{:x}", Sha256::digest(&bytes)),
+        size_bytes: bytes.len().to_string(),
+        schema_id: None,
+    };
+    let metadata = json!({"terminal_receipt":{"result_manifest_ref":reference}}).to_string();
+    let changed = transaction.execute(
+        "UPDATE tasks SET status='SUCCEEDED',workflow_run_id=?2,node_id=?3,output_manifest_path=?4,
+            execution_metadata_json=?5,started_at_ms=?6,finished_at_ms=?6,updated_at_ms=?6,
+            row_revision=row_revision+1
+         WHERE task_id=?1 AND status='QUEUED' AND workflow_run_id IS NULL",
+        params![task.to_string(), run.to_string(), REPORT_NODE, &output, metadata, now_ms],
+    ).map_err(database).map_err(WorkflowError::Storage)?;
+    if changed != 1 {
+        return Err(WorkflowError::RevisionConflict);
+    }
+    Ok(output)
+}
+
 fn summarize(
     run: Uuid,
     dataset: Uuid,
@@ -310,7 +351,7 @@ fn summarize(
     }
 }
 
-fn report_path(task: Uuid) -> String {
+pub(super) fn report_path(task: Uuid) -> String {
     format!("artifacts/tasks/{task}/report.json")
 }
 
@@ -327,11 +368,21 @@ fn digest_request(request: &WorkflowReportRequest) -> [u8; 32] {
 fn report_command(
     connection: &Connection,
     run: Uuid,
-) -> Result<Option<(String, String)>, WorkspaceThreadError> {
+) -> Result<Option<(Uuid, String, String)>, WorkspaceThreadError> {
     connection.query_row(
-        "SELECT idempotency_key,request_fingerprint FROM tasks WHERE workflow_run_id=?1 AND node_id=?2 AND capability_id=?3",
-        params![run.to_string(),REPORT_NODE,CAPABILITY], |row| Ok((row.get(0)?,row.get(1)?)),
+        "SELECT task_id,idempotency_key,request_fingerprint FROM tasks WHERE workflow_run_id=?1 AND node_id=?2 AND capability_id=?3",
+        params![run.to_string(),REPORT_NODE,CAPABILITY], |row| Ok((row_uuid(row,0)?,row.get(1)?,row.get(2)?)),
     ).optional().map_err(database)
+}
+
+fn verify_report_replay(
+    receipt: Option<(Uuid, String, String)>,
+    key: &str,
+    fingerprint: &str,
+) -> Result<Uuid, WorkflowError> {
+    let (task, stored_key, stored_fingerprint) = receipt.ok_or(WorkflowError::RevisionConflict)?;
+    verified_replay(Some((stored_key, stored_fingerprint)), key, fingerprint)?;
+    Ok(task)
 }
 
 fn evidence(error: impl std::error::Error + Send + Sync + 'static) -> WorkflowError {

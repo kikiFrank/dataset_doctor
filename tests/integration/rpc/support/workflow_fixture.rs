@@ -38,6 +38,10 @@ impl WorkflowFixture {
     }
 
     pub fn with_config(case: &str, annotation: &[u8], config: Value) -> Self {
+        Self::with_samples(case, annotation, config, &["signal.png", "unannotated.png"])
+    }
+
+    pub fn with_samples(case: &str, annotation: &[u8], config: Value, names: &[&str]) -> Self {
         let run = PathBuf::from(std::env::var_os("DD_CORE_CLAIM_RUN_DIR").unwrap())
             .canonicalize()
             .unwrap();
@@ -53,7 +57,7 @@ impl WorkflowFixture {
         let source = run.join(format!("{case} Sources"));
         fs::create_dir(&root).unwrap();
         fs::create_dir(&source).unwrap();
-        for name in ["signal.png", "unannotated.png"] {
+        for name in names {
             fs::write(source.join(name), PNG).unwrap();
         }
         fs::write(source.join("signal.json"), annotation).unwrap();
@@ -78,7 +82,7 @@ impl WorkflowFixture {
             .list_assets(session, dataset, None, 10)
             .unwrap()
             .items;
-        assert_eq!(members.len(), 2);
+        assert_eq!(members.len(), names.len());
         let assets: Vec<_> = members
             .iter()
             .map(|member| {
@@ -132,7 +136,14 @@ impl WorkflowFixture {
             max_output_tokens: 0,
         };
         let ready = store
-            .accept_default(session, draft.run_id, draft.row_revision, &policy, 2, 4)
+            .accept_default(
+                session,
+                draft.run_id,
+                draft.row_revision,
+                &policy,
+                names.len() as u32,
+                4,
+            )
             .unwrap();
         let interpreter = PathBuf::from(std::env::var_os("DD_WORKER_PYTHON").unwrap());
         let entrypoint = repo.join("services/python-worker/src/dd_worker/entrypoint.py");
